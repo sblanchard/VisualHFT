@@ -1,18 +1,17 @@
 ﻿using System.Windows.Controls;
+using VisualHFT.Helpers;
+using VisualHFT.ViewModel;
 
-namespace VisualHFT.View
+namespace VisualHFT.View;
+
+/// <summary>
+///     Interaction logic for ucProviderConnectivity.xaml
+/// </summary>
+public partial class ucProviderConnectivity : UserControl
 {
-    /// <summary>
-    /// Interaction logic for ucProviderConnectivity.xaml
-    /// </summary>
-    public partial class ucProviderConnectivity : UserControl
+    public ucProviderConnectivity()
     {
-
-
-        public ucProviderConnectivity()
-        {
-            InitializeComponent();
-            this.DataContext = new VisualHFT.ViewModel.vmProvider(Helpers.HelperCommon.GLOBAL_DIALOGS);
-        }
+        InitializeComponent();
+        DataContext = new vmProvider(HelperCommon.GLOBAL_DIALOGS);
     }
 }

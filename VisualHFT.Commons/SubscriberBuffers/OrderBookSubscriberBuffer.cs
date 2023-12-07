@@ -1,30 +1,28 @@
 ﻿using System.Collections.Concurrent;
 using VisualHFT.Model;
 
-namespace VisualHFT.Commons.SubscriberBuffers
+namespace VisualHFT.Commons.SubscriberBuffers;
+
+public class OrderBookSubscriberBuffer
 {
-    public class OrderBookSubscriberBuffer
+    public OrderBookSubscriberBuffer(Action<OrderBook> processor)
     {
-        public BlockingCollection<OrderBook> Buffer { get; } = new BlockingCollection<OrderBook>();
-        public Action<OrderBook> Processor => _processor;
+        Processor = processor;
+        Task.Run(Process);
+    }
 
-        private Action<OrderBook> _processor;
-        public OrderBookSubscriberBuffer(Action<OrderBook> processor)
-        {
-            _processor = processor;
-            Task.Run(Process);
-        }
+    public BlockingCollection<OrderBook> Buffer { get; } = new();
+    public Action<OrderBook> Processor { get; }
 
-        private void Process()
-        {
-            foreach (var book in Buffer.GetConsumingEnumerable())
-            {
-                _processor(book);
-            }
-        }
+    public int Count => Buffer.Count;
 
-        public void Add(OrderBook book) => Buffer.Add(book);
+    private void Process()
+    {
+        foreach (var book in Buffer.GetConsumingEnumerable()) Processor(book);
+    }
 
-        public int Count => Buffer.Count;
+    public void Add(OrderBook book)
+    {
+        Buffer.Add(book);
     }
 }

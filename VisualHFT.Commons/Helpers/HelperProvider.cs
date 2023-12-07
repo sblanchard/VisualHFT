@@ -1,94 +1,92 @@
-﻿using VisualHFT.Model;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
+using System.Reflection;
+using System.Timers;
+using log4net;
+using VisualHFT.Model;
+using Timer = System.Timers.Timer;
 
-namespace VisualHFT.Helpers
+namespace VisualHFT.Helpers;
+
+public class HelperProvider : ConcurrentDictionary<int, Provider>, IDisposable
 {
-    public class HelperProvider: ConcurrentDictionary<int, Model.Provider>, IDisposable
+    private static readonly ILog log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+    private readonly Timer _timer_check_heartbeat;
+    private readonly int _MILLISECONDS_HEART_BEAT = 5000;
+
+    public HelperProvider()
     {
-        private int _MILLISECONDS_HEART_BEAT = 5000;
-        private readonly System.Timers.Timer _timer_check_heartbeat;
+        _timer_check_heartbeat = new Timer(_MILLISECONDS_HEART_BEAT);
+        _timer_check_heartbeat.Elapsed += _timer_check_heartbeat_Elapsed;
+        _timer_check_heartbeat.Start();
+    }
 
-        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-        private static readonly HelperProvider instance = new HelperProvider();
-        public static HelperProvider Instance => instance;
+    public static HelperProvider Instance { get; } = new();
+
+    public void Dispose()
+    {
+        _timer_check_heartbeat?.Stop();
+        _timer_check_heartbeat?.Dispose();
+    }
 
 
-        public event EventHandler<Provider> OnDataReceived;
-        public event EventHandler<Provider> OnHeartBeatFail;
+    public event EventHandler<Provider> OnDataReceived;
+    public event EventHandler<Provider> OnHeartBeatFail;
 
-        public HelperProvider()
-        {
-            _timer_check_heartbeat = new System.Timers.Timer(_MILLISECONDS_HEART_BEAT);
-            _timer_check_heartbeat.Elapsed += _timer_check_heartbeat_Elapsed;
-            _timer_check_heartbeat.Start();
-        }
-        private void _timer_check_heartbeat_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
-        {
-            foreach (var x in this)
+    private void _timer_check_heartbeat_Elapsed(object sender, ElapsedEventArgs e)
+    {
+        foreach (var x in this)
+            if (DateTime.Now.Subtract(x.Value.LastUpdated).TotalMilliseconds > _MILLISECONDS_HEART_BEAT)
             {
-                if (DateTime.Now.Subtract(x.Value.LastUpdated).TotalMilliseconds > _MILLISECONDS_HEART_BEAT)
-                {
-                    x.Value.Status = eSESSIONSTATUS.BOTH_DISCONNECTED;
-                    OnHeartBeatFail?.Invoke(this, x.Value);
-                }
+                x.Value.Status = eSESSIONSTATUS.BOTH_DISCONNECTED;
+                OnHeartBeatFail?.Invoke(this, x.Value);
             }
-        }
-        public List<Model.Provider> ToList()
-        {
-            return this.Values.ToList();
-        }
+    }
 
-        protected virtual void RaiseOnDataReceived(Provider provider)
+    public List<Provider> ToList()
+    {
+        return Values.ToList();
+    }
+
+    protected virtual void RaiseOnDataReceived(Provider provider)
+    {
+        var _handler = OnDataReceived;
+        if (_handler != null) _handler(this, provider);
+    }
+
+    public void HeartbeatFailed(Provider provider)
+    {
+        this[provider.ProviderID].Status = provider.Status;
+        OnHeartBeatFail?.Invoke(this, provider);
+    }
+
+    public void UpdateData(IEnumerable<Provider> providers)
+    {
+        foreach (var provider in providers)
+            if (UpdateData(provider))
+                RaiseOnDataReceived(provider); //Raise all provs allways
+    }
+
+    private bool UpdateData(Provider provider)
+    {
+        if (provider != null)
         {
-            EventHandler<Provider> _handler = OnDataReceived;
-            if (_handler != null)
+            //Check provider
+            if (!ContainsKey(provider.ProviderCode))
             {
-                _handler(this, provider);
+                provider.LastUpdated = DateTime.Now;
+                return TryAdd(provider.ProviderCode, provider);
             }
-        }
-        public void HeartbeatFailed(Provider provider)
-        {
-            this[provider.ProviderID].Status = provider.Status;
-            OnHeartBeatFail?.Invoke(this, provider);
-        }
-        public void UpdateData(IEnumerable<VisualHFT.Model.Provider> providers)
-        {
-            foreach (var provider in providers)
-            {
-                if (UpdateData(provider))
-                    RaiseOnDataReceived(provider);//Raise all provs allways
-            }
-            
-        }
-        private bool UpdateData(VisualHFT.Model.Provider provider)
-        {
 
-            if (provider != null)
-            {
-                //Check provider
-                if (!this.ContainsKey(provider.ProviderCode))
-                {
-                    provider.LastUpdated = DateTime.Now;
-                    return this.TryAdd(provider.ProviderCode, provider);
-                }
-                else
-                {
-                    this[provider.ProviderCode].LastUpdated = DateTime.Now;
-                    this[provider.ProviderCode].Status = provider.Status;
-                    this[provider.ProviderCode].Plugin = provider.Plugin;
-                    if (provider.Status == eSESSIONSTATUS.BOTH_DISCONNECTED || provider.Status == eSESSIONSTATUS.PRICE_DSICONNECTED_ORDER_CONNECTED)
-                        OnHeartBeatFail?.Invoke(this, provider);
+            this[provider.ProviderCode].LastUpdated = DateTime.Now;
+            this[provider.ProviderCode].Status = provider.Status;
+            this[provider.ProviderCode].Plugin = provider.Plugin;
+            if (provider.Status == eSESSIONSTATUS.BOTH_DISCONNECTED ||
+                provider.Status == eSESSIONSTATUS.PRICE_DSICONNECTED_ORDER_CONNECTED)
+                OnHeartBeatFail?.Invoke(this, provider);
 
-                    return true;
-                }
-            }
-            return false;
-        }
-        public void Dispose()
-        {
-            _timer_check_heartbeat?.Stop();
-            _timer_check_heartbeat?.Dispose();
+            return true;
         }
 
+        return false;
     }
 }

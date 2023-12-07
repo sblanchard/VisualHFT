@@ -1,53 +1,50 @@
-﻿using demoTradingCore.Models;
-using ExchangeSharp;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.WebSockets;
-using System.Text;
-using System.Threading.Tasks;
-using WatsonWebsocket;
-using System.Timers;
-using Microsoft.Win32;
+using demoTradingCore.Models;
+using ExchangeSharp;
 
 namespace demoTradingCore
 {
     public class StrategyHeartBeatEventArgs : EventArgs
     {
         public string StrategyName;
-
     }
+
     public class StrategyExposureEventArgs : EventArgs
     {
-        public string Symbol;
-        public string StrategyName;
         public decimal SizeExposed;
+        public string StrategyName;
+        public string Symbol;
         public decimal UnrealizedPL;
     }
 
 
     public class Strategy
     {
-        const string _STRATEGY_NAME = "FirmMM";
+        private const string _STRATEGY_NAME = "FirmMM";
 
-        List<Exchange> _EXCHANGES = null;
-        string _SYMBOL = "";
-        Queue<decimal> _QUEUE_DELTA_ASKS = new Queue<decimal>();
-        Queue<decimal> _QUEUE_DELTA_BIDS = new Queue<decimal>();
-        int MAX_QUEUE_SIZE = 1000;
-        decimal _EXPOSED_SIZE = 0;
-        decimal _UNREALIZEDPL = 0;
+        private readonly List<Exchange> _EXCHANGES;
+        private decimal _EXPOSED_SIZE;
+        private readonly Queue<decimal> _QUEUE_DELTA_ASKS = new Queue<decimal>();
+        private readonly Queue<decimal> _QUEUE_DELTA_BIDS = new Queue<decimal>();
+        private readonly string _SYMBOL = "";
+        private decimal _UNREALIZEDPL;
+        private readonly int MAX_QUEUE_SIZE = 1000;
 
-        public event EventHandler<StrategyExposureEventArgs> OnStrategyExposure;
         public Strategy(List<Exchange> exchanges, string symbol)
         {
             _EXCHANGES = exchanges;
             _SYMBOL = symbol;
         }
+
+        public event EventHandler<StrategyExposureEventArgs> OnStrategyExposure;
+
         public string GetStrategyName()
         {
             return _STRATEGY_NAME;
         }
+
         public void UpdateSnapshot(ExchangeOrderBook ob)
         {
             lock (_EXCHANGES)
@@ -70,40 +67,53 @@ namespace demoTradingCore
                 var tob_Exch1 = _EXCHANGES[1].GetTopOfBook(_SYMBOL);
                 if (tob_Exch0 != null && tob_Exch1 != null)
                 {
-
                     var diffBid = tob_Exch0.First().Price - tob_Exch1.First().Price;
                     var diffAsk = tob_Exch0.Last().Price - tob_Exch1.Last().Price;
-                    var highestBid = (tob_Exch0.First().Price > tob_Exch1.First().Price ? tob_Exch0.First() : tob_Exch1.First());
-                    var lowestAsk = (tob_Exch0.Last().Price < tob_Exch1.Last().Price ? tob_Exch0.Last() : tob_Exch1.Last());
-                    if (_QUEUE_DELTA_ASKS.Count > MAX_QUEUE_SIZE * 0.8 && _QUEUE_DELTA_BIDS.Count > MAX_QUEUE_SIZE * 0.8)
+                    var highestBid = tob_Exch0.First().Price > tob_Exch1.First().Price
+                        ? tob_Exch0.First()
+                        : tob_Exch1.First();
+                    var lowestAsk = tob_Exch0.Last().Price < tob_Exch1.Last().Price
+                        ? tob_Exch0.Last()
+                        : tob_Exch1.Last();
+                    if (_QUEUE_DELTA_ASKS.Count > MAX_QUEUE_SIZE * 0.8 &&
+                        _QUEUE_DELTA_BIDS.Count > MAX_QUEUE_SIZE * 0.8)
                     {
                         var avgAskDiff = CalculateAverage(_QUEUE_DELTA_ASKS);
                         var avgBidDiff = CalculateAverage(_QUEUE_DELTA_BIDS);
 
 
-                        if ((Math.Abs(diffBid) + CalculateStandardDeviation(_QUEUE_DELTA_BIDS) * 3 > Math.Abs(avgBidDiff)
-                            || Math.Abs(diffAsk) + CalculateStandardDeviation(_QUEUE_DELTA_ASKS) * 3 > Math.Abs(avgAskDiff))
+                        if ((Math.Abs(diffBid) + CalculateStandardDeviation(_QUEUE_DELTA_BIDS) * 3 >
+                             Math.Abs(avgBidDiff)
+                             || Math.Abs(diffAsk) + CalculateStandardDeviation(_QUEUE_DELTA_ASKS) * 3 >
+                             Math.Abs(avgAskDiff))
                             && highestBid.Price > lowestAsk.Price
-                            )
+                           )
                         {
                             //we want to sell on the higher bid 
                             // and sell on the lower ask
                             var profit = highestBid.Price - lowestAsk.Price;
 
 
-                            string openExchange = (tob_Exch0.First().Price > tob_Exch1.First().Price ? _EXCHANGES[0].ExchangeName : _EXCHANGES[1].ExchangeName);
-                            string closeExchange = (tob_Exch0.Last().Price < tob_Exch1.Last().Price ? _EXCHANGES[0].ExchangeName : _EXCHANGES[1].ExchangeName);
+                            var openExchange = tob_Exch0.First().Price > tob_Exch1.First().Price
+                                ? _EXCHANGES[0].ExchangeName
+                                : _EXCHANGES[1].ExchangeName;
+                            var closeExchange = tob_Exch0.Last().Price < tob_Exch1.Last().Price
+                                ? _EXCHANGES[0].ExchangeName
+                                : _EXCHANGES[1].ExchangeName;
                             CreateNewPosition(openExchange, closeExchange, highestBid.Price, lowestAsk.Price);
-
-
 
 
                             Console.WriteLine($"Profit: {profit.ToString("c2")}");
                             _UNREALIZEDPL += profit;
-                            _EXPOSED_SIZE += 0; //since we are doing arb, we are always closing the position. Hence, no exposure.
+                            _EXPOSED_SIZE +=
+                                0; //since we are doing arb, we are always closing the position. Hence, no exposure.
 
                             //Trigger event
-                            var args = new StrategyExposureEventArgs { SizeExposed = _EXPOSED_SIZE, StrategyName = _STRATEGY_NAME, Symbol = _SYMBOL, UnrealizedPL = _UNREALIZEDPL };
+                            var args = new StrategyExposureEventArgs
+                            {
+                                SizeExposed = _EXPOSED_SIZE, StrategyName = _STRATEGY_NAME, Symbol = _SYMBOL,
+                                UnrealizedPL = _UNREALIZEDPL
+                            };
                             OnStrategyExposure?.Invoke(this, args);
 
 
@@ -113,14 +123,13 @@ namespace demoTradingCore
                     }
 
 
-
-
                     //add current deltas
                     AddToDeltaQueues(diffBid, true);
                     AddToDeltaQueues(diffAsk, false);
                 }
             }
         }
+
         private void AddToDeltaQueues(decimal diffPrice, bool isBid) //keep the price difference in a queue
         {
             //do not add if the same
@@ -133,7 +142,7 @@ namespace demoTradingCore
                 if (!_QUEUE_DELTA_BIDS.Any() || peekValue != diffPrice)
                 {
                     _QUEUE_DELTA_BIDS.Enqueue(diffPrice);
-                    if (_QUEUE_DELTA_BIDS.Count > MAX_QUEUE_SIZE) { _QUEUE_DELTA_BIDS.Dequeue(); }
+                    if (_QUEUE_DELTA_BIDS.Count > MAX_QUEUE_SIZE) _QUEUE_DELTA_BIDS.Dequeue();
                 }
             }
             else
@@ -145,59 +154,69 @@ namespace demoTradingCore
                 if (!_QUEUE_DELTA_ASKS.Any() || peekValue != diffPrice)
                 {
                     _QUEUE_DELTA_ASKS.Enqueue(diffPrice);
-                    if (_QUEUE_DELTA_ASKS.Count > MAX_QUEUE_SIZE) { _QUEUE_DELTA_ASKS.Dequeue(); }
+                    if (_QUEUE_DELTA_ASKS.Count > MAX_QUEUE_SIZE) _QUEUE_DELTA_ASKS.Dequeue();
                 }
             }
         }
+
         private decimal CalculateAverage(Queue<decimal> values)
         {
             if (values.Count == 0)
                 return 0;
 
             decimal sum = 0;
-            foreach (decimal value in values)
-            {
-                sum += value;
-            }
-            decimal average = sum / values.Count;
+            foreach (var value in values) sum += value;
+            var average = sum / values.Count;
 
             return average;
         }
+
         private decimal CalculateStandardDeviation(Queue<decimal> values)
         {
             if (values.Count == 0)
                 return 0;
 
-            decimal average = CalculateAverage(values);
+            var average = CalculateAverage(values);
 
             decimal squaredDifferencesSum = 0;
-            foreach (decimal value in values)
+            foreach (var value in values)
             {
-                decimal difference = value - average;
+                var difference = value - average;
                 squaredDifferencesSum += difference * difference;
             }
-            double variance = (double)squaredDifferencesSum / values.Count;
-            double standardDeviation = Math.Sqrt(variance);
+
+            var variance = (double)squaredDifferencesSum / values.Count;
+            var standardDeviation = Math.Sqrt(variance);
 
             return (decimal)standardDeviation;
         }
 
 
-        private void CreateNewPosition(string openExchange, string closingExchange, decimal openPrice, decimal closePrice)
+        private void CreateNewPosition(string openExchange, string closingExchange, decimal openPrice,
+            decimal closePrice)
         {
-            int openingProviderID = openExchange.ToUpper() == "COINBASE" ? 14 : 23; //ID's took from the database
-            int closingProviderID = openExchange.ToUpper() == "COINBASE" ? 14 : 23; // This is hardcoded and for demostration only
-            
-            
+            var openingProviderID = openExchange.ToUpper() == "COINBASE" ? 14 : 23; //ID's took from the database
+            var closingProviderID =
+                openExchange.ToUpper() == "COINBASE" ? 14 : 23; // This is hardcoded and for demostration only
 
-            using (var db = new Models.dbEntities())
+
+            using (var db = new dbEntities())
             {
-                var openP = new OpenExecution() { ExecID = Guid.NewGuid().ToString(), ClOrdId = Guid.NewGuid().ToString(), IsOpen = true, LocalTimeStamp = DateTime.Now, Price = openPrice, ProviderID = openingProviderID, QtyFilled = 1, ServerTimeStamp = DateTime.Now, Side = 1, Status = 6 };
-                var closeP = new CloseExecution() { ExecID = Guid.NewGuid().ToString(), ClOrdId = Guid.NewGuid().ToString(), IsOpen = false, LocalTimeStamp = DateTime.Now, Price = closePrice, ProviderID = closingProviderID, QtyFilled = 1, ServerTimeStamp = DateTime.Now, Side = 0, Status = 6 };
+                var openP = new OpenExecution
+                {
+                    ExecID = Guid.NewGuid().ToString(), ClOrdId = Guid.NewGuid().ToString(), IsOpen = true,
+                    LocalTimeStamp = DateTime.Now, Price = openPrice, ProviderID = openingProviderID, QtyFilled = 1,
+                    ServerTimeStamp = DateTime.Now, Side = 1, Status = 6
+                };
+                var closeP = new CloseExecution
+                {
+                    ExecID = Guid.NewGuid().ToString(), ClOrdId = Guid.NewGuid().ToString(), IsOpen = false,
+                    LocalTimeStamp = DateTime.Now, Price = closePrice, ProviderID = closingProviderID, QtyFilled = 1,
+                    ServerTimeStamp = DateTime.Now, Side = 0, Status = 6
+                };
 
 
-
-                var newPos = db.Positions.Add(new Position()
+                var newPos = db.Positions.Add(new Position
                 {
                     CreationTimeStamp = openP.LocalTimeStamp,
                     CloseTimeStamp = closeP.LocalTimeStamp,
@@ -223,7 +242,7 @@ namespace demoTradingCore
                 db.SaveChanges();
                 openP.PositionID = newPos.ID;
                 closeP.PositionID = newPos.ID;
-                
+
 
                 db.OpenExecutions.Add(openP);
                 db.CloseExecutions.Add(closeP);

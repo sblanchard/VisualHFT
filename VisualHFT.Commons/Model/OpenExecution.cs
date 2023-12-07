@@ -1,25 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace VisualHFT.Model;
 
-namespace VisualHFT.Model
+public class OpenExecution
 {
-    public partial class OpenExecution
-    {
-        public int ExecutionID { get; set; }
-        public long PositionID { get; set; }
-        public string ClOrdId { get; set; }
-        public string ExecID { get; set; }
-        public System.DateTime LocalTimeStamp { get; set; }
-        public System.DateTime ServerTimeStamp { get; set; }
-        public Nullable<decimal> Price { get; set; }
-        public int ProviderID { get; set; }
-        public Nullable<decimal> QtyFilled { get; set; }
-        public Nullable<int> Side { get; set; }
-        public Nullable<int> Status { get; set; }
-        public bool IsOpen { get; set; }
-
-    }
+    public int ExecutionID { get; set; }
+    public long PositionID { get; set; }
+    public string ClOrdId { get; set; }
+    public string ExecID { get; set; }
+    public DateTime LocalTimeStamp { get; set; }
+    public DateTime ServerTimeStamp { get; set; }
+    public decimal? Price { get; set; }
+    public int ProviderID { get; set; }
+    public decimal? QtyFilled { get; set; }
+    public int? Side { get; set; }
+    public int? Status { get; set; }
+    public bool IsOpen { get; set; }
 }

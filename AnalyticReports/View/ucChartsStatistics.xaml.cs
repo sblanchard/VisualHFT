@@ -1,16 +1,16 @@
 ﻿using System.Windows.Controls;
+using VisualHFT.AnalyticReports.ViewModel;
 
-namespace VisualHFT.AnalyticReports.View
+namespace VisualHFT.AnalyticReports.View;
+
+/// <summary>
+///     Interaction logic for ucChartsStatistics.xaml
+/// </summary>
+public partial class ucChartsStatistics : UserControl
 {
-    /// <summary>
-    /// Interaction logic for ucChartsStatistics.xaml
-    /// </summary>
-    public partial class ucChartsStatistics : UserControl
+    public ucChartsStatistics()
     {
-        public ucChartsStatistics()
-        {
-            InitializeComponent();
-            this.DataContext = new VisualHFT.AnalyticReports.ViewModel.vmChartsStatistics();
-        }
+        InitializeComponent();
+        DataContext = new vmChartsStatistics();
     }
 }

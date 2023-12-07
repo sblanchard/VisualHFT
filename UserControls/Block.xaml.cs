@@ -1,15 +1,14 @@
 ﻿using System.Windows.Controls;
 
-namespace LoadingControl.Control
+namespace LoadingControl.Control;
+
+/// <summary>
+///     Interaction logic for Block.xaml
+/// </summary>
+public partial class Block : UserControl
 {
-    /// <summary>
-    /// Interaction logic for Block.xaml
-    /// </summary>
-    public partial class Block : UserControl
+    public Block()
     {
-        public Block()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
     }
 }

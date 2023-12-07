@@ -1,35 +1,12 @@
-﻿using System;
+﻿namespace VisualHFT.Model;
 
-namespace VisualHFT.Model
+public class OrderBookLevel
 {
-    public class OrderBookLevel
-    {
-        private DateTime _date;
-        public DateTime Date
-        {
-            get => _date;
-            set => _date = value;
-        }
+    public DateTime Date { get; set; }
 
-        private double _dateIndex;
-        public double DateIndex
-        {
-            get => _dateIndex;
-            set => _dateIndex = value;
-        }
+    public double DateIndex { get; set; }
 
-        private double _price;
-        public double Price
-        {
-            get => _price;
-            set => _price = value;
-        }
+    public double Price { get; set; }
 
-        private double _size;
-        public double Size
-        {
-            get => _size;
-            set => _size = value;
-        }
-    }
+    public double Size { get; set; }
 }

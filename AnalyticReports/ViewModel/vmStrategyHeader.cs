@@ -1,30 +1,31 @@
-﻿using Prism.Mvvm;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using Prism.Mvvm;
 using VisualHFT.Model;
 
-namespace VisualHFT.AnalyticReports.ViewModel
+namespace VisualHFT.AnalyticReports.ViewModel;
+
+public class vmStrategyHeader : BindableBase
 {
-    public class vmStrategyHeader : BindableBase
+    public List<Position> Signals { get; set; }
+    public string StrategyName { get; private set; }
+    public string StrategyText { get; private set; }
+
+    public void LoadData(List<Position> signals)
     {
-        public List<VisualHFT.Model.Position> Signals { get; set; }
-        public string StrategyName { get; private set; }
-        public string StrategyText { get; private set; }
+        Signals = signals;
+        if (Signals == null || Signals.Count == 0)
+            throw new Exception("No signals found.");
 
-        public void LoadData(List<VisualHFT.Model.Position> signals)
+        try
         {
-            this.Signals = signals;
-            if (this.Signals == null || this.Signals.Count == 0)
-                    throw new Exception("No signals found.");
-            
-            try
-            {
-                //StrategyName = "Strategies: " + string.Join(", ", this.Signals.Select(x => x.StrategyUsed.StrategyCode).Distinct().ToArray());
-                //StrategyText = " ----- ";
-            }
-            catch { }
-
-            RaisePropertyChanged(String.Empty);
+            //StrategyName = "Strategies: " + string.Join(", ", this.Signals.Select(x => x.StrategyUsed.StrategyCode).Distinct().ToArray());
+            //StrategyText = " ----- ";
         }
+        catch
+        {
+        }
+
+        RaisePropertyChanged(string.Empty);
     }
 }

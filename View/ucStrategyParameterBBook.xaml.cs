@@ -1,84 +1,96 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using VisualHFT.Helpers;
+using VisualHFT.ViewModel;
 
-namespace VisualHFT.View
+namespace VisualHFT.View;
+
+/// <summary>
+///     Interaction logic for ucStrategyParameterFirmMM.xaml
+/// </summary>
+public partial class ucStrategyParameterBBook : UserControl
 {
-    /// <summary>
-    /// Interaction logic for ucStrategyParameterFirmMM.xaml
-    /// </summary>
-    public partial class ucStrategyParameterBBook : UserControl
-    {
-        //Dependency property
-        public static readonly DependencyProperty ucStrategyParameterBBookSymbolProperty = DependencyProperty.Register(
-            "SelectedSymbol", 
-            typeof(string), typeof(ucStrategyParameterBBook),
-            new UIPropertyMetadata("", new PropertyChangedCallback(symbolChangedCallBack))
-            );
-        public static readonly DependencyProperty ucStrategyParameterBBookLayerProperty = DependencyProperty.Register(
-            "SelectedLayer",
-            typeof(string), typeof(ucStrategyParameterBBook),
-            new UIPropertyMetadata("", new PropertyChangedCallback(layerChangedCallBack))
-            );
-        public static readonly DependencyProperty ucStrategyParameterBBookSelectedStrategyProperty = DependencyProperty.Register(
+    //Dependency property
+    public static readonly DependencyProperty ucStrategyParameterBBookSymbolProperty = DependencyProperty.Register(
+        "SelectedSymbol",
+        typeof(string), typeof(ucStrategyParameterBBook),
+        new UIPropertyMetadata("", symbolChangedCallBack)
+    );
+
+    public static readonly DependencyProperty ucStrategyParameterBBookLayerProperty = DependencyProperty.Register(
+        "SelectedLayer",
+        typeof(string), typeof(ucStrategyParameterBBook),
+        new UIPropertyMetadata("", layerChangedCallBack)
+    );
+
+    public static readonly DependencyProperty ucStrategyParameterBBookSelectedStrategyProperty =
+        DependencyProperty.Register(
             "SelectedStrategy",
             typeof(string), typeof(ucStrategyParameterBBook),
-            new UIPropertyMetadata("", new PropertyChangedCallback(strategyChangedCallBack))
-            );
+            new UIPropertyMetadata("", strategyChangedCallBack)
+        );
 
-        public ucStrategyParameterBBook()
+    private string _selectedLayer;
+
+
+    private string _selectedStrategy;
+
+
+    private string _selectedSymbol;
+
+    public ucStrategyParameterBBook()
+    {
+        InitializeComponent();
+        DataContext = new vmStrategyParameterBBook(HelperCommon.GLOBAL_DIALOGS);
+        ((vmStrategyParameterBBook)DataContext).IsActive = Visibility.Hidden;
+    }
+
+    public string SelectedSymbol
+    {
+        get => _selectedSymbol;
+        set
         {
-            InitializeComponent();
-            this.DataContext = new VisualHFT.ViewModel.vmStrategyParameterBBook(Helpers.HelperCommon.GLOBAL_DIALOGS);
-            ((VisualHFT.ViewModel.vmStrategyParameterBBook)this.DataContext).IsActive = Visibility.Hidden;
+            _selectedSymbol = value;
+            ((vmStrategyParameterBBook)DataContext).SelectedSymbol = value;
         }
+    }
 
-
-		private string _selectedSymbol;
-
-		public string SelectedSymbol
+    public string SelectedLayer
+    {
+        get => _selectedLayer;
+        set
         {
-            get { return _selectedSymbol; }
-            set { _selectedSymbol = value; ((VisualHFT.ViewModel.vmStrategyParameterBBook)this.DataContext).SelectedSymbol = value; }
+            _selectedLayer = value;
+            ((vmStrategyParameterBBook)DataContext).SelectedLayer = value;
         }
+    }
 
-		private string _selectedLayer;
-		public string SelectedLayer
+    public string SelectedStrategy
+    {
+        get => _selectedStrategy;
+        set
         {
-            get { return _selectedLayer; }
-            set {
-				_selectedLayer = value;
-				((VisualHFT.ViewModel.vmStrategyParameterBBook)this.DataContext).SelectedLayer = value;
-			}
+            _selectedStrategy = value;
+            ((vmStrategyParameterBBook)DataContext).SelectedStrategy = value;
         }
-
-		
-		private string _selectedStrategy;
-		public string SelectedStrategy
-		{
-			get { return _selectedStrategy; }
-			set
-			{
-				_selectedStrategy = value;
-				((VisualHFT.ViewModel.vmStrategyParameterBBook)this.DataContext).SelectedStrategy = value;
-			}
-		}
+    }
 
 
-		static void symbolChangedCallBack(DependencyObject property, DependencyPropertyChangedEventArgs args)
-        {
-			ucStrategyParameterBBook ucSelf = (ucStrategyParameterBBook)property;
-            ucSelf.SelectedSymbol = (string)args.NewValue;
-        }
-        static void layerChangedCallBack(DependencyObject property, DependencyPropertyChangedEventArgs args)
-        {
-			ucStrategyParameterBBook ucSelf = (ucStrategyParameterBBook)property;
-            ucSelf.SelectedLayer = (string)args.NewValue;
-        }
-        static void strategyChangedCallBack(DependencyObject property, DependencyPropertyChangedEventArgs args)
-        {
-            ucStrategyParameterBBook ucSelf = (ucStrategyParameterBBook)property;
-            ucSelf.SelectedStrategy = (string)args.NewValue;
-        }
-		
+    private static void symbolChangedCallBack(DependencyObject property, DependencyPropertyChangedEventArgs args)
+    {
+        var ucSelf = (ucStrategyParameterBBook)property;
+        ucSelf.SelectedSymbol = (string)args.NewValue;
+    }
+
+    private static void layerChangedCallBack(DependencyObject property, DependencyPropertyChangedEventArgs args)
+    {
+        var ucSelf = (ucStrategyParameterBBook)property;
+        ucSelf.SelectedLayer = (string)args.NewValue;
+    }
+
+    private static void strategyChangedCallBack(DependencyObject property, DependencyPropertyChangedEventArgs args)
+    {
+        var ucSelf = (ucStrategyParameterBBook)property;
+        ucSelf.SelectedStrategy = (string)args.NewValue;
     }
 }

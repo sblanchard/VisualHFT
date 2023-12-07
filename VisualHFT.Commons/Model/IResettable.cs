@@ -1,13 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace VisualHFT.Commons.Model;
 
-namespace VisualHFT.Commons.Model
+public interface IResettable
 {
-    public interface IResettable
-    {
-        void Reset();
-    }
+    void Reset();
 }

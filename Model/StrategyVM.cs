@@ -1,15 +1,14 @@
 ﻿using Prism.Mvvm;
-using System.ComponentModel;
 
-namespace VisualHFT.Model
+namespace VisualHFT.Model;
+
+public class StrategyVM : BindableBase
 {
-    public class StrategyVM : BindableBase
+    private string _strategyCode;
+
+    public string StrategyCode
     {
-        private string _strategyCode;
-        public string StrategyCode 
-        {
-            get => _strategyCode;
-            set => SetProperty(ref _strategyCode, value);
-        }
+        get => _strategyCode;
+        set => SetProperty(ref _strategyCode, value);
     }
 }

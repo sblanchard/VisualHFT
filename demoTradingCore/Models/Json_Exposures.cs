@@ -1,9 +1,5 @@
-﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace demoTradingCore.Models
 {
@@ -17,28 +13,26 @@ namespace demoTradingCore.Models
 
     public class JsonExposures : Json_BaseData
     {
-        protected JsonSerializerSettings jsonSettings;
         protected string _data;
         protected List<Json_Exposure> _dataObj;
+        protected JsonSerializerSettings jsonSettings;
 
         public JsonExposures()
         {
             jsonSettings = new JsonSerializerSettings();
             jsonSettings.DateFormatString = "yyyy.MM.dd-hh.mm.ss.ffffff";
-            this.type = "Exposures";
+            type = "Exposures";
+        }
 
-        }
-        public string data
-        {
-            get { return _data; }
-        }
+        public string data => _data;
+
         public List<Json_Exposure> dataObj
         {
-            get { return _dataObj; }
+            get => _dataObj;
             set
             {
                 _dataObj = value;
-                _data = Newtonsoft.Json.JsonConvert.SerializeObject(_dataObj, jsonSettings);
+                _data = JsonConvert.SerializeObject(_dataObj, jsonSettings);
             }
         }
     }

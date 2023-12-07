@@ -1,16 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using VisualHFT.Model;
+﻿using VisualHFT.Model;
 
-namespace VisualHFT.Helpers
+namespace VisualHFT.Helpers;
+
+public interface IOrderBookHelper
 {
-    public interface IOrderBookHelper
-    {
-        //event EventHandler<OrderBook> OnDataReceived;
-        void Subscribe(Action<OrderBook> processor);
-        void UpdateData(IEnumerable<OrderBook> data);
-    }
+    //event EventHandler<OrderBook> OnDataReceived;
+    void Subscribe(Action<OrderBook> processor);
+    void UpdateData(IEnumerable<OrderBook> data);
 }

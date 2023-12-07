@@ -1,31 +1,21 @@
-﻿using VisualHFT.Model;
-using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Windows;
-using System.Windows.Threading;
+using VisualHFT.Model;
 
-namespace VisualHFT.Helpers
+namespace VisualHFT.Helpers;
+
+public class HelperStrategy : ObservableCollection<string>
 {
-    public class HelperStrategy: ObservableCollection<string>
-    {
-        protected object _LOCK = new object();
-        public HelperStrategy()
-        {}
+    protected object _LOCK = new();
 
-        public void UpdateData(List<StrategyVM> data)
+    public void UpdateData(List<StrategyVM> data)
+    {
+        lock (_LOCK)
         {
-            lock (_LOCK)
-            {
-                foreach (StrategyVM vm in data)
-                {
-                    if (!this.Any(x => x == vm.StrategyCode))
-                    {
-                        this.Add(vm.StrategyCode);
-                    }
-                }
-            }
+            foreach (var vm in data)
+                if (!this.Any(x => x == vm.StrategyCode))
+                    Add(vm.StrategyCode);
         }
     }
 }

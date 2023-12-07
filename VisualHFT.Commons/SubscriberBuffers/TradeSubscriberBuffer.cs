@@ -1,30 +1,28 @@
 ﻿using System.Collections.Concurrent;
 using VisualHFT.Model;
 
-namespace VisualHFT.Commons.SubscriberBuffers
+namespace VisualHFT.Commons.SubscriberBuffers;
+
+public class TradeSubscriberBuffer
 {
-    public class TradeSubscriberBuffer
+    public TradeSubscriberBuffer(Action<Trade> processor)
     {
-        public BlockingCollection<Trade> Buffer { get; } = new BlockingCollection<Trade>();
-        public Action<Trade> Processor => _processor;
+        Processor = processor;
+        Task.Run(Process);
+    }
 
-        private Action<Trade> _processor;
-        public TradeSubscriberBuffer(Action<Trade> processor)
-        {
-            _processor = processor;
-            Task.Run(Process);
-        }
+    public BlockingCollection<Trade> Buffer { get; } = new();
+    public Action<Trade> Processor { get; }
 
-        private void Process()
-        {
-            foreach (var trade in Buffer.GetConsumingEnumerable())
-            {
-                _processor(trade);
-            }
-        }
+    public int Count => Buffer.Count;
 
-        public void Add(Trade book) => Buffer.Add(book);
+    private void Process()
+    {
+        foreach (var trade in Buffer.GetConsumingEnumerable()) Processor(trade);
+    }
 
-        public int Count => Buffer.Count;
+    public void Add(Trade book)
+    {
+        Buffer.Add(book);
     }
 }

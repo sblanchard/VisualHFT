@@ -7,396 +7,399 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
+using QuickFix.Fields;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
-using QuickFix.Fields;
-using QuickFix.DataDictionary;
-using System.Windows.Shapes;
-using System.Windows;
+using Timer = System.Timers.Timer;
 
-namespace VisualHFT.DataTradeRetriever
+namespace VisualHFT.DataTradeRetriever;
+
+public class FIXTradesRetriever : IDataTradeRetriever, IDisposable
 {
-    public class FIXTradesRetriever : IDataTradeRetriever, IDisposable
+    private const int POLLING_INTERVAL = 5000;
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
+    private readonly string _logFilePath; // path to the QuickFIX log file
+    private readonly Timer _timer;
+
+    private bool _disposed;
+    private long _lastReadPosition; // to keep track of where we left off reading the file
+    private readonly List<Order> _orders;
+    private readonly List<Position> _positions;
+    private readonly int _providerId;
+    private readonly string _providerName;
+    private DateTime? _sessionDate;
+
+    public FIXTradesRetriever(string logFilePath, int providerId, string providerName)
     {
-        private const int POLLING_INTERVAL = 5000;
-        private readonly System.Timers.Timer _timer;
-        private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
-        private long _lastReadPosition = 0; // to keep track of where we left off reading the file
-        private readonly string _logFilePath; // path to the QuickFIX log file
-        private List<VisualHFT.Model.Position> _positions;
-        private List<VisualHFT.Model.Order> _orders;
-        int _providerId;
-        string _providerName;
-        DateTime? _sessionDate = null;
+        _positions = new List<Position>();
+        _orders = new List<Order>();
+        _logFilePath = logFilePath;
+        _providerId = providerId;
+        _providerName = providerName;
+        _timer = new Timer(POLLING_INTERVAL);
+        _timer.Elapsed += _timer_Elapsed;
+        _timer.Start();
+        _timer_Elapsed(null, null);
+    }
 
-        private bool _disposed = false;
+    public event EventHandler<IEnumerable<Order>> OnInitialLoad;
+    public event EventHandler<IEnumerable<Order>> OnDataReceived;
 
-        public event EventHandler<IEnumerable<VisualHFT.Model.Order>> OnInitialLoad;
-        public event EventHandler<IEnumerable<VisualHFT.Model.Order>> OnDataReceived;
-        protected virtual void RaiseOnInitialLoad(IEnumerable<VisualHFT.Model.Order> ord) => OnInitialLoad?.Invoke(this, ord);
-        protected virtual void RaiseOnDataReceived(IEnumerable<VisualHFT.Model.Order> ord) => OnDataReceived?.Invoke(this, ord);
-        public FIXTradesRetriever(string logFilePath, int providerId, string providerName)
+    public DateTime? SessionDate
+    {
+        get => _sessionDate;
+        set
         {
-            _positions = new List<VisualHFT.Model.Position>();
-            _orders = new List<VisualHFT.Model.Order>();
-            _logFilePath = logFilePath;
-            _providerId = providerId;
-            _providerName = providerName;
-            _timer = new System.Timers.Timer(POLLING_INTERVAL);
-            _timer.Elapsed += _timer_Elapsed;
-            _timer.Start();
-            _timer_Elapsed(null, null);
-        }
-        ~FIXTradesRetriever()
-        {
-            Dispose(false);
-        }
-        private async void _timer_Elapsed(object sender, ElapsedEventArgs e)
-        {
-            _timer.Stop(); // Stop the timer while the operation is running
-            if (_cancellationTokenSource.IsCancellationRequested) return; // Check for cancellation
-
-            try
+            if (value != _sessionDate)
             {
-                // Efficiently read new lines from the log file since the last read
-                var newLines = await ReadNewLinesFromFileAsync(_logFilePath);
-                if (newLines.Any())
+                _sessionDate = value;
+                _orders.Clear();
+                _lastReadPosition = 0;
+                RaiseOnInitialLoad(Orders);
+            }
+        }
+    }
+
+    public ReadOnlyCollection<Order> Orders => _orders.AsReadOnly();
+
+    public ReadOnlyCollection<Position> Positions => _positions.AsReadOnly();
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void RaiseOnInitialLoad(IEnumerable<Order> ord)
+    {
+        OnInitialLoad?.Invoke(this, ord);
+    }
+
+    protected virtual void RaiseOnDataReceived(IEnumerable<Order> ord)
+    {
+        OnDataReceived?.Invoke(this, ord);
+    }
+
+    ~FIXTradesRetriever()
+    {
+        Dispose(false);
+    }
+
+    private async void _timer_Elapsed(object sender, ElapsedEventArgs e)
+    {
+        _timer.Stop(); // Stop the timer while the operation is running
+        if (_cancellationTokenSource.IsCancellationRequested) return; // Check for cancellation
+
+        try
+        {
+            // Efficiently read new lines from the log file since the last read
+            var newLines = await ReadNewLinesFromFileAsync(_logFilePath);
+            if (newLines.Any())
+            {
+                var parsedTrades = ParseTradesFromLogLines(newLines);
+                var symbols = parsedTrades.Select(x => x.Symbol).Distinct().ToList();
+                if (symbols.Any())
+                    foreach (var symbol in symbols)
+                        HelperSymbol.Instance.UpdateData(symbol);
+
+                if (Orders == null || !Orders.Any())
                 {
-                    var parsedTrades = ParseTradesFromLogLines(newLines);
-                    var symbols = parsedTrades.Select(x => x.Symbol).Distinct().ToList();
-                    if (symbols.Any())
-                    {
-                        foreach( var symbol in symbols)
-                        {
-                            HelperSymbol.Instance.UpdateData(symbol);
-                        }
-                    }
+                    _orders.AddRange(parsedTrades);
+                    RaiseOnInitialLoad(_orders);
+                }
+                else
+                {
+                    _orders.AddRange(parsedTrades);
+                    RaiseOnDataReceived(parsedTrades);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await Console.Out.WriteLineAsync(ex.Message);
+        }
 
-                    if (this.Orders == null || !this.Orders.Any())
-                    {
+        _timer.Start(); // Restart the timer once the operation is complete
+    }
 
-                        _orders.AddRange(parsedTrades);
-                        RaiseOnInitialLoad(_orders);
-                    }
+    private IEnumerable<Order> ParseTradesFromLogLines(IEnumerable<string> logLines)
+    {
+        var _symbolBuilder = new StringBuilder(30);
+        var parsedOrders = new Dictionary<string, Order>();
+        var _arr = new List<Dictionary<int, string>>();
+
+        try
+        {
+            foreach (var line in logLines)
+            {
+                if (line.IndexOf("35=A") > -1
+                    || line.IndexOf("35=5") > -1
+                    || line.IndexOf("35=G") > -1
+                    || line.IndexOf("35=9") > -1
+                    || line.IndexOf("35=0") > -1)
+                    continue;
+
+                // Extract the actual FIX message (remove the "OUT" prefix and timestamp if they are not part of the message)
+                var actualFixMsg = line.Substring(line.IndexOf("8=FIX."));
+                _arr.Add(ParseFixMessage(actualFixMsg));
+            }
+
+
+            foreach (var dicFIX in _arr)
+                if (dicFIX[Tags.MsgType] == MsgType.NEWORDERSINGLE) // New Order
+                {
+                    var order = new Order();
+
+                    order.CreationTimeStamp = dicFIX[Tags.SendingTime].ToDateTime();
+                    order.ClOrdId = dicFIX[Tags.ClOrdID];
+                    if (dicFIX.ContainsKey(Tags.OrdStatus))
+                        order.Status = ParseOrderStatus(dicFIX[Tags.OrdStatus]);
                     else
+                        order.Status = eORDERSTATUS.SENT; // ParseOrderStatus(dicFIX[Tags.OrdStatus));
+
+                    _symbolBuilder.Clear();
+                    if (dicFIX.ContainsKey(Tags.SecurityExchange) && dicFIX[Tags.SecurityExchange] == "CME")
                     {
-                        _orders.AddRange(parsedTrades);
-                        RaiseOnDataReceived(parsedTrades);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-
-                await Console.Out.WriteLineAsync(ex.Message);
-            }
-            _timer.Start(); // Restart the timer once the operation is complete
-        }
-        public DateTime? SessionDate
-        {
-            get { return _sessionDate; }
-            set
-            {
-                if (value != _sessionDate)
-                {
-                    _sessionDate = value;
-                    _orders.Clear();
-                    _lastReadPosition = 0;
-                    RaiseOnInitialLoad(this.Orders);
-                }
-            }
-        }
-        public ReadOnlyCollection<VisualHFT.Model.Order> Orders
-        {
-            get { return _orders.AsReadOnly(); }
-        }
-        public ReadOnlyCollection<VisualHFT.Model.Position> Positions
-        {
-            get { return _positions.AsReadOnly(); }
-        }
-
-        private IEnumerable<VisualHFT.Model.Order> ParseTradesFromLogLines(IEnumerable<string> logLines)
-        {
-            StringBuilder _symbolBuilder = new StringBuilder(30);
-            var parsedOrders = new Dictionary<string, VisualHFT.Model.Order>();
-            List<Dictionary<int, string>> _arr = new List<Dictionary<int, string>>();
-
-            try
-            {
-                foreach (var line in logLines)
-                {
-                    if (line.IndexOf("35=A") > -1
-                        || line.IndexOf("35=5") > -1
-                        || line.IndexOf("35=G") > -1
-                        || line.IndexOf("35=9") > -1
-                        || line.IndexOf("35=0") > -1)
-                        continue;
-
-                    // Extract the actual FIX message (remove the "OUT" prefix and timestamp if they are not part of the message)
-                    string actualFixMsg = line.Substring(line.IndexOf("8=FIX."));
-                    _arr.Add(ParseFixMessage(actualFixMsg));
-                }
-
-
-                foreach (var dicFIX in _arr)
-                {
-                    if (dicFIX[Tags.MsgType] == MsgType.NEWORDERSINGLE)  // New Order
-                    {
-                        var order = new VisualHFT.Model.Order();
-
-                        order.CreationTimeStamp = dicFIX[Tags.SendingTime].ToDateTime();
-                        order.ClOrdId = dicFIX[Tags.ClOrdID];
-                        if (dicFIX.ContainsKey(Tags.OrdStatus))
-                            order.Status = ParseOrderStatus(dicFIX[Tags.OrdStatus]);
-                        else
-                            order.Status = eORDERSTATUS.SENT; // ParseOrderStatus(dicFIX[Tags.OrdStatus));
-
-                        _symbolBuilder.Clear();
-                        if (dicFIX.ContainsKey(Tags.SecurityExchange) && dicFIX[Tags.SecurityExchange] == "CME")
+                        //"CME;FUT;ES;201812" (normalization)
+                        _symbolBuilder.Insert(0, dicFIX[Tags.SecurityExchange]);
+                        if (dicFIX.ContainsKey(Tags.SecurityType))
                         {
-                            //"CME;FUT;ES;201812" (normalization)
-                            _symbolBuilder.Insert(0, dicFIX[Tags.SecurityExchange]);
-                            if (dicFIX.ContainsKey(Tags.SecurityType))
-                            {
-                                _symbolBuilder.Append(";");
-                                _symbolBuilder.Append(dicFIX[Tags.SecurityType]);
-                            }
                             _symbolBuilder.Append(";");
-                            _symbolBuilder.Append(dicFIX[Tags.Symbol]);
-
-                            if (dicFIX.ContainsKey(Tags.MaturityMonthYear))
-                            {
-                                _symbolBuilder.Append(";");
-                                _symbolBuilder.Append(dicFIX[Tags.MaturityMonthYear]);
-                            }
+                            _symbolBuilder.Append(dicFIX[Tags.SecurityType]);
                         }
-                        order.Symbol = _symbolBuilder.ToString();
 
-                        order.Side = dicFIX[Tags.Side] == "2" ? eORDERSIDE.Sell : eORDERSIDE.Buy;
-                        order.Quantity = dicFIX[Tags.OrderQty].ToDouble();
-                        order.PricePlaced = (double)dicFIX[Tags.Price].ToDouble();
-                        order.TimeInForce = ParseOrderTIF(dicFIX[Tags.TimeInForce]);
-                        order.OrderType = ParseOrderType(dicFIX[Tags.OrdType]);
-                        order.ProviderId = _providerId;
-                        order.ProviderName = _providerName;
-                        order.Executions = new List<VisualHFT.Model.Execution>();
-                        order.LastUpdated = System.DateTime.Now;
-                        parsedOrders.Add(order.ClOrdId, order);
-                    }
-                    else if (dicFIX[Tags.MsgType] == MsgType.ORDER_CANCEL_REPLACE_REQUEST)
-                    {
-                        //REPLACE/CANCEL SENT
-                        string _clordId = dicFIX[Tags.ClOrdID];
-                        string _orig_clordId = dicFIX[Tags.OrigClOrdID];
+                        _symbolBuilder.Append(";");
+                        _symbolBuilder.Append(dicFIX[Tags.Symbol]);
 
-                        VisualHFT.Model.Order order = null;
-                        if (parsedOrders.TryGetValue(_orig_clordId, out order))
+                        if (dicFIX.ContainsKey(Tags.MaturityMonthYear))
                         {
-                            var exec = new OpenExecution() { Price = 0, QtyFilled = 0 };
-                            if (dicFIX.ContainsKey(Tags.ExecID))
-                                exec.ExecID = dicFIX[Tags.ExecID];
-                            exec.ClOrdId = _clordId;
-                            exec.LocalTimeStamp = dicFIX[Tags.SendingTime].ToDateTime();
-                            exec.ServerTimeStamp = exec.LocalTimeStamp;
-                            exec.ProviderID = _providerId;
-                            exec.Status = (int)eORDERSTATUS.REPLACESENT;
-                            exec.Side = (int)order.Side;
-                            exec.Price = 0;
-                            exec.QtyFilled = 0;
-                            order.LastUpdated = System.DateTime.Now;
-                            order.Executions.Add(new VisualHFT.Model.Execution(exec, order.Symbol));
-                        }
-                        else
-                        {
-                            throw new Exception("Order not found = " + _clordId);
+                            _symbolBuilder.Append(";");
+                            _symbolBuilder.Append(dicFIX[Tags.MaturityMonthYear]);
                         }
                     }
-                    else if (dicFIX[Tags.MsgType] == MsgType.EXECUTION_REPORT)  // Execution Report
+
+                    order.Symbol = _symbolBuilder.ToString();
+
+                    order.Side = dicFIX[Tags.Side] == "2" ? eORDERSIDE.Sell : eORDERSIDE.Buy;
+                    order.Quantity = dicFIX[Tags.OrderQty].ToDouble();
+                    order.PricePlaced = dicFIX[Tags.Price].ToDouble();
+                    order.TimeInForce = ParseOrderTIF(dicFIX[Tags.TimeInForce]);
+                    order.OrderType = ParseOrderType(dicFIX[Tags.OrdType]);
+                    order.ProviderId = _providerId;
+                    order.ProviderName = _providerName;
+                    order.Executions = new List<Execution>();
+                    order.LastUpdated = DateTime.Now;
+                    parsedOrders.Add(order.ClOrdId, order);
+                }
+                else if (dicFIX[Tags.MsgType] == MsgType.ORDER_CANCEL_REPLACE_REQUEST)
+                {
+                    //REPLACE/CANCEL SENT
+                    var _clordId = dicFIX[Tags.ClOrdID];
+                    var _orig_clordId = dicFIX[Tags.OrigClOrdID];
+
+                    Order order = null;
+                    if (parsedOrders.TryGetValue(_orig_clordId, out order))
                     {
-                        string _clordId = dicFIX[Tags.ClOrdID];
-                        string _orig_clordId = "";
-                        if (dicFIX.ContainsKey(Tags.OrigClOrdID))
-                            _orig_clordId = dicFIX[Tags.OrigClOrdID];
+                        var exec = new OpenExecution { Price = 0, QtyFilled = 0 };
+                        if (dicFIX.ContainsKey(Tags.ExecID))
+                            exec.ExecID = dicFIX[Tags.ExecID];
+                        exec.ClOrdId = _clordId;
+                        exec.LocalTimeStamp = dicFIX[Tags.SendingTime].ToDateTime();
+                        exec.ServerTimeStamp = exec.LocalTimeStamp;
+                        exec.ProviderID = _providerId;
+                        exec.Status = (int)eORDERSTATUS.REPLACESENT;
+                        exec.Side = (int)order.Side;
+                        exec.Price = 0;
+                        exec.QtyFilled = 0;
+                        order.LastUpdated = DateTime.Now;
+                        order.Executions.Add(new Execution(exec, order.Symbol));
+                    }
+                    else
+                    {
+                        throw new Exception("Order not found = " + _clordId);
+                    }
+                }
+                else if (dicFIX[Tags.MsgType] == MsgType.EXECUTION_REPORT) // Execution Report
+                {
+                    var _clordId = dicFIX[Tags.ClOrdID];
+                    var _orig_clordId = "";
+                    if (dicFIX.ContainsKey(Tags.OrigClOrdID))
+                        _orig_clordId = dicFIX[Tags.OrigClOrdID];
 
-                        VisualHFT.Model.Order order = null;
-                        if (parsedOrders.TryGetValue(_orig_clordId == "" ? _clordId : _orig_clordId, out order))
+                    Order order = null;
+                    if (parsedOrders.TryGetValue(_orig_clordId == "" ? _clordId : _orig_clordId, out order))
+                    {
+                        var exec = new OpenExecution { Price = 0, QtyFilled = 0 };
+                        if (dicFIX.ContainsKey(Tags.ExecID))
+                            exec.ExecID = dicFIX[Tags.ExecID];
+                        exec.ClOrdId = _clordId;
+                        exec.LocalTimeStamp = dicFIX[Tags.SendingTime].ToDateTime();
+                        exec.ServerTimeStamp = exec.LocalTimeStamp;
+                        exec.ProviderID = _providerId;
+                        if (dicFIX.ContainsKey(Tags.LastPx))
+                            exec.Price = dicFIX[Tags.LastPx].ToDecimal();
+                        if (dicFIX.ContainsKey(Tags.LastShares))
+                            exec.QtyFilled = dicFIX[Tags.LastShares].ToDecimal();
+                        exec.Side = (int)order.Side;
+                        exec.Status = (int)ParseOrderStatus(dicFIX[Tags.OrdStatus]);
+
+                        order.Executions.Add(new Execution(exec, order.Symbol));
+
+                        order.Status = ParseOrderStatus(dicFIX[Tags.OrdStatus]);
+                        order.LastUpdated = DateTime.Now;
+
+                        if (order.Status == eORDERSTATUS.REPLACED)
                         {
-                            var exec = new OpenExecution() { Price = 0, QtyFilled = 0 };
-                            if (dicFIX.ContainsKey(Tags.ExecID))
-                                exec.ExecID = dicFIX[Tags.ExecID];
-                            exec.ClOrdId = _clordId;
-                            exec.LocalTimeStamp = dicFIX[Tags.SendingTime].ToDateTime();
-                            exec.ServerTimeStamp = exec.LocalTimeStamp;
-                            exec.ProviderID = _providerId;
-                            if (dicFIX.ContainsKey(Tags.LastPx))
-                                exec.Price = dicFIX[Tags.LastPx].ToDecimal();
-                            if (dicFIX.ContainsKey(Tags.LastShares))
-                                exec.QtyFilled = dicFIX[Tags.LastShares].ToDecimal();
-                            exec.Side = (int)order.Side;
-                            exec.Status = (int)ParseOrderStatus(dicFIX[Tags.OrdStatus]);
-
-                            order.Executions.Add(new Execution(exec, order.Symbol));
-
-                            order.Status = ParseOrderStatus(dicFIX[Tags.OrdStatus]);
-                            order.LastUpdated = System.DateTime.Now;
-
-                            if (order.Status == eORDERSTATUS.REPLACED)
-                            {                                
-                                order.ClOrdId = _clordId;
-                                parsedOrders.Add(_clordId, order);
-                                parsedOrders.Remove(_orig_clordId);
-                            }
-                            else if (exec.Status == (int)eORDERSTATUS.FILLED || exec.Status == (int)eORDERSTATUS.CANCELED)
-                            {
-                                var execFilled = order.Executions.Where(x => x.Status == ePOSITIONSTATUS.FILLED || x.Status == ePOSITIONSTATUS.PARTIALFILLED);
-                                if (execFilled != null && execFilled.Any())
-                                {
-                                    order.GetAvgPrice = (double)execFilled.Average(x => x.Price);
-                                    order.FilledQuantity = (double)execFilled.Average(x => x.QtyFilled);
-                                    order.GetQuantity = order.FilledQuantity;
-                                    order.FilledPercentage = 100 * (order.FilledQuantity / order.Quantity);
-                                }
-                            }
+                            order.ClOrdId = _clordId;
+                            parsedOrders.Add(_clordId, order);
+                            parsedOrders.Remove(_orig_clordId);
                         }
-                        else
+                        else if (exec.Status == (int)eORDERSTATUS.FILLED || exec.Status == (int)eORDERSTATUS.CANCELED)
                         {
-                            throw new Exception("Order not found = " + _clordId);
+                            var execFilled = order.Executions.Where(x =>
+                                x.Status == ePOSITIONSTATUS.FILLED || x.Status == ePOSITIONSTATUS.PARTIALFILLED);
+                            if (execFilled != null && execFilled.Any())
+                            {
+                                order.GetAvgPrice = (double)execFilled.Average(x => x.Price);
+                                order.FilledQuantity = (double)execFilled.Average(x => x.QtyFilled);
+                                order.GetQuantity = order.FilledQuantity;
+                                order.FilledPercentage = 100 * (order.FilledQuantity / order.Quantity);
+                            }
                         }
                     }
                     else
                     {
-                        throw new Exception("Message not implemented = " + dicFIX[Tags.MsgType]);
+                        throw new Exception("Order not found = " + _clordId);
                     }
-                    // Handle other message types (e.g., cancels, rejects) similarly...
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error parsing Error: {ex.Message}");
-            }
-
-            return parsedOrders.Select(x => x.Value).ToList();
+                else
+                {
+                    throw new Exception("Message not implemented = " + dicFIX[Tags.MsgType]);
+                }
+            // Handle other message types (e.g., cancels, rejects) similarly...
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error parsing Error: {ex.Message}");
         }
 
-        private async Task<List<string>> ReadNewLinesFromFileAsync(string filePath)
+        return parsedOrders.Select(x => x.Value).ToList();
+    }
+
+    private async Task<List<string>> ReadNewLinesFromFileAsync(string filePath)
+    {
+        const int bufferSize = 8192; // 8 KB
+        var buffer = new char[bufferSize];
+        var sb = new StringBuilder();
+        var newLines = new List<string>();
+
+        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var sr = new StreamReader(fs, Encoding.Default))
         {
-            const int bufferSize = 8192; // 8 KB
-            char[] buffer = new char[bufferSize];
-            StringBuilder sb = new StringBuilder();
-            List<string> newLines = new List<string>();  
+            fs.Seek(_lastReadPosition, SeekOrigin.Begin);
 
-            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (var sr = new StreamReader(fs, Encoding.Default))
+            while (!sr.EndOfStream)
             {
-                fs.Seek(_lastReadPosition, SeekOrigin.Begin);
+                var bytesRead = await sr.ReadAsync(buffer, 0, bufferSize).ConfigureAwait(false);
 
-                while (!sr.EndOfStream)
-                {
-                    int bytesRead = await sr.ReadAsync(buffer, 0, bufferSize).ConfigureAwait(false);
-
-                    for (int i = 0; i < bytesRead; i++)
+                for (var i = 0; i < bytesRead; i++)
+                    if (buffer[i] == '\n')
                     {
-                        if (buffer[i] == '\n')
-                        {
-                            newLines.Add(sb.ToString());
-                            sb.Clear();
-                        }
-                        else if (buffer[i] != '\r') // Skip '\r'
-                        {
-                            sb.Append(buffer[i]);
-                        }
+                        newLines.Add(sb.ToString());
+                        sb.Clear();
                     }
-                }
-
-                _lastReadPosition = fs.Position;
+                    else if (buffer[i] != '\r') // Skip '\r'
+                    {
+                        sb.Append(buffer[i]);
+                    }
             }
 
-            // Add any remaining text
-            if (sb.Length > 0)
-            {
-                newLines.Add(sb.ToString());
-            }
-
-            return newLines;
+            _lastReadPosition = fs.Position;
         }
 
-        private eORDERSTATUS ParseOrderStatus(string fixStatus)
-        {
-            // Convert the FIX status to your application's order status
-            switch (fixStatus[0])
-            {
-                case OrdStatus.NEW:                 return eORDERSTATUS.NEW;
-                case OrdStatus.PARTIALLY_FILLED:    return eORDERSTATUS.PARTIALFILLED;
-                case OrdStatus.FILLED:              return eORDERSTATUS.FILLED;
-                case OrdStatus.CANCELED:            return eORDERSTATUS.CANCELED;
-                case OrdStatus.REJECTED:            return eORDERSTATUS.REJECTED;
-                case OrdStatus.REPLACED:            return eORDERSTATUS.REPLACED;
-                case OrdStatus.EXPIRED:             return eORDERSTATUS.REJECTED;
-                case OrdStatus.PENDING_REPLACE:     return eORDERSTATUS.REPLACESENT;
-                case OrdStatus.PENDING_CANCEL:      return eORDERSTATUS.CANCELEDSENT;
-                default:
-                    return eORDERSTATUS.NONE;
-            }
-        }
-        private eORDERTYPE ParseOrderType(string fixOrdType)
-        {
-            switch(fixOrdType[0])
-            {
-                case OrdType.MARKET: return eORDERTYPE.MARKET;
-                case OrdType.LIMIT: return eORDERTYPE.LIMIT;
-                default: return eORDERTYPE.NONE;
-            }
-        }
-        private eORDERTIMEINFORCE ParseOrderTIF(string fixTIF)
-        {
-            switch(fixTIF[0])
-            {
-                case QuickFix.Fields.TimeInForce.IMMEDIATE_OR_CANCEL: return eORDERTIMEINFORCE.IOC;
-                case QuickFix.Fields.TimeInForce.FILL_OR_KILL: return eORDERTIMEINFORCE.FOK;
-                case QuickFix.Fields.TimeInForce.GOOD_TILL_DATE: return eORDERTIMEINFORCE.GTC;
-                default: return eORDERTIMEINFORCE.GTC;
-            }
-        }
-        private Dictionary<int, string> ParseFixMessage(string fixMessage)
-        {
-            Dictionary<int, string> parsedMessage = new Dictionary<int, string>();
-            int start = 0;
-            int end = 0;
+        // Add any remaining text
+        if (sb.Length > 0) newLines.Add(sb.ToString());
 
-            while ((end = fixMessage.IndexOf('\u0001', start)) >= 0)
+        return newLines;
+    }
+
+    private eORDERSTATUS ParseOrderStatus(string fixStatus)
+    {
+        // Convert the FIX status to your application's order status
+        switch (fixStatus[0])
+        {
+            case OrdStatus.NEW: return eORDERSTATUS.NEW;
+            case OrdStatus.PARTIALLY_FILLED: return eORDERSTATUS.PARTIALFILLED;
+            case OrdStatus.FILLED: return eORDERSTATUS.FILLED;
+            case OrdStatus.CANCELED: return eORDERSTATUS.CANCELED;
+            case OrdStatus.REJECTED: return eORDERSTATUS.REJECTED;
+            case OrdStatus.REPLACED: return eORDERSTATUS.REPLACED;
+            case OrdStatus.EXPIRED: return eORDERSTATUS.REJECTED;
+            case OrdStatus.PENDING_REPLACE: return eORDERSTATUS.REPLACESENT;
+            case OrdStatus.PENDING_CANCEL: return eORDERSTATUS.CANCELEDSENT;
+            default:
+                return eORDERSTATUS.NONE;
+        }
+    }
+
+    private eORDERTYPE ParseOrderType(string fixOrdType)
+    {
+        switch (fixOrdType[0])
+        {
+            case OrdType.MARKET: return eORDERTYPE.MARKET;
+            case OrdType.LIMIT: return eORDERTYPE.LIMIT;
+            default: return eORDERTYPE.NONE;
+        }
+    }
+
+    private eORDERTIMEINFORCE ParseOrderTIF(string fixTIF)
+    {
+        switch (fixTIF[0])
+        {
+            case TimeInForce.IMMEDIATE_OR_CANCEL: return eORDERTIMEINFORCE.IOC;
+            case TimeInForce.FILL_OR_KILL: return eORDERTIMEINFORCE.FOK;
+            case TimeInForce.GOOD_TILL_DATE: return eORDERTIMEINFORCE.GTC;
+            default: return eORDERTIMEINFORCE.GTC;
+        }
+    }
+
+    private Dictionary<int, string> ParseFixMessage(string fixMessage)
+    {
+        var parsedMessage = new Dictionary<int, string>();
+        var start = 0;
+        var end = 0;
+
+        while ((end = fixMessage.IndexOf('\u0001', start)) >= 0)
+        {
+            var field = fixMessage.Substring(start, end - start);
+            var equalsPos = field.IndexOf('=');
+            if (equalsPos > 0)
             {
-                string field = fixMessage.Substring(start, end - start);
-                int equalsPos = field.IndexOf('=');
-                if (equalsPos > 0)
-                {
-                    int tag = field.Substring(0, equalsPos).ToInt();
-                    string value = field.Substring(equalsPos + 1);
-                    parsedMessage[tag] = value;
-                }
-                start = end + 1;
+                var tag = field.Substring(0, equalsPos).ToInt();
+                var value = field.Substring(equalsPos + 1);
+                parsedMessage[tag] = value;
             }
 
-            return parsedMessage;
+            start = end + 1;
         }
-        protected virtual void Dispose(bool disposing)
+
+        return parsedMessage;
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
         {
-            if (!_disposed)
+            if (disposing)
             {
-                if (disposing)
-                {
-                    _timer.Elapsed -= _timer_Elapsed;
-                    _timer?.Stop();
-                    _timer?.Dispose();
-                    _cancellationTokenSource?.Cancel(); // Cancel any ongoing operations
-                    _cancellationTokenSource?.Dispose();
-                }
-                _disposed = true;
+                _timer.Elapsed -= _timer_Elapsed;
+                _timer?.Stop();
+                _timer?.Dispose();
+                _cancellationTokenSource?.Cancel(); // Cancel any ongoing operations
+                _cancellationTokenSource?.Dispose();
             }
-        }
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
+
+            _disposed = true;
         }
     }
 }

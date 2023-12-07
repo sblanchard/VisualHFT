@@ -1,9 +1,8 @@
-﻿namespace VisualHFT.Model
+﻿namespace VisualHFT.Model;
+
+public interface IStrategyParameters
 {
-    public interface IStrategyParameters
-	{
-		bool IsStrategyOn { get; set; }
-		string Symbol { get; set; }
-		string LayerName { get; set; }
-	}
+    bool IsStrategyOn { get; set; }
+    string Symbol { get; set; }
+    string LayerName { get; set; }
 }

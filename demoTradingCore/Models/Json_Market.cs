@@ -1,6 +1,6 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace demoTradingCore.Models
 {
@@ -17,6 +17,7 @@ namespace demoTradingCore.Models
         public decimal Size { get; set; }
         public string Symbol { get; set; }
     }
+
     public class jsonMarket
     {
         public List<jsonBookItem> Asks { get; set; }
@@ -29,31 +30,29 @@ namespace demoTradingCore.Models
         public int SymbolMultiplier { get; set; }
     }
 
-    public class jsonMarkets: Json_BaseData
+    public class jsonMarkets : Json_BaseData
     {
-        protected JsonSerializerSettings jsonSettings;
         protected string _data;
         protected List<jsonMarket> _dataObj;
+        protected JsonSerializerSettings jsonSettings;
 
         public jsonMarkets()
         {
             jsonSettings = new JsonSerializerSettings();
             jsonSettings.DateFormatString = "yyyy.MM.dd-hh.mm.ss.ffffff";
-            this.type = "Market";
-        }
-        public string data 
-        { 
-            get { return _data; }
-            //get {return Newtonsoft.Json.JsonConvert.SerializeObject(dataObj, jsonSettings); } 
-
+            type = "Market";
         }
 
-        public List<jsonMarket> dataObj { 
-            get { return _dataObj; }
-            set 
-            { 
+        public string data => _data;
+
+        //get {return Newtonsoft.Json.JsonConvert.SerializeObject(dataObj, jsonSettings); } 
+        public List<jsonMarket> dataObj
+        {
+            get => _dataObj;
+            set
+            {
                 _dataObj = value;
-                _data = Newtonsoft.Json.JsonConvert.SerializeObject(_dataObj, jsonSettings);
+                _data = JsonConvert.SerializeObject(_dataObj, jsonSettings);
             }
         }
     }

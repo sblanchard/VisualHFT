@@ -1,32 +1,26 @@
-﻿namespace VisualHFT.AnalyticReport
+﻿namespace VisualHFT.AnalyticReport;
+
+public class ScatterChartData
 {
-    public class ScatterChartData
+    public ScatterChartData(double x, double y, string toolTip)
     {
-        public ScatterChartData(double x, double y, string toolTip)
-        {
-            this.XValue = x;
-            this.YValue = y;
-            this.ToolTip = toolTip;
-        }
-
-        public double XValue { get; set; }
-        public double YValue { get; set; }
-
-        public string Brush
-        {
-            get
-            {
-                if (this.YValue < 0)
-                {
-                    return "Red";
-                }
-                else
-                {
-                    return "Green";
-                }
-            }
-        }
-        public string ToolTip { get; set; }
+        XValue = x;
+        YValue = y;
+        ToolTip = toolTip;
     }
 
+    public double XValue { get; set; }
+    public double YValue { get; set; }
+
+    public string Brush
+    {
+        get
+        {
+            if (YValue < 0)
+                return "Red";
+            return "Green";
+        }
+    }
+
+    public string ToolTip { get; set; }
 }

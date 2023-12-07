@@ -1,79 +1,76 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Timers;
-using VisualHFT.Helpers;
 using VisualHFT.Model;
-using QuickFix.Fields;
-using QuickFix.DataDictionary;
-using System.Windows.Shapes;
 
+namespace VisualHFT.DataTradeRetriever;
 
-namespace VisualHFT.DataTradeRetriever
+public class EmptyTradesRetriever : IDataTradeRetriever, IDisposable
 {
-    public class EmptyTradesRetriever : IDataTradeRetriever, IDisposable
+    private bool _disposed;
+    private readonly List<Order> _orders;
+    private readonly List<Position> _positions;
+    private int _providerId;
+    private string _providerName;
+    private DateTime? _sessionDate;
+
+    public EmptyTradesRetriever()
     {
-        private List<VisualHFT.Model.Position> _positions;
-        private List<VisualHFT.Model.Order> _orders;
-        int _providerId;
-        string _providerName;
-        DateTime? _sessionDate = null;
+        _positions = new List<Position>();
+        _orders = new List<Order>();
+    }
 
-        private bool _disposed = false;
+    public event EventHandler<IEnumerable<Order>> OnInitialLoad;
+    public event EventHandler<IEnumerable<Order>> OnDataReceived;
 
-        public event EventHandler<IEnumerable<VisualHFT.Model.Order>> OnInitialLoad;
-        public event EventHandler<IEnumerable<VisualHFT.Model.Order>> OnDataReceived;
-        protected virtual void RaiseOnInitialLoad(IEnumerable<VisualHFT.Model.Order> ord) => OnInitialLoad?.Invoke(this, ord);
-        protected virtual void RaiseOnDataReceived(IEnumerable<VisualHFT.Model.Order> ord) => OnDataReceived?.Invoke(this, ord);
-        public EmptyTradesRetriever()
+    public DateTime? SessionDate
+    {
+        get => _sessionDate;
+        set
         {
-            _positions = new List<VisualHFT.Model.Position>();
-            _orders = new List<VisualHFT.Model.Order>();
-        }
-        ~EmptyTradesRetriever()
-        {
-            Dispose(false);
-        }
-        public DateTime? SessionDate
-        {
-            get { return _sessionDate; }
-            set
+            if (value != _sessionDate)
             {
-                if (value != _sessionDate)
-                {
-                    _sessionDate = value;
-                    _orders.Clear();
-                    RaiseOnInitialLoad(this.Orders);
-                }
+                _sessionDate = value;
+                _orders.Clear();
+                RaiseOnInitialLoad(Orders);
             }
         }
-        public ReadOnlyCollection<VisualHFT.Model.Order> Orders
-        {
-            get { return _orders.AsReadOnly(); }
-        }
-        public ReadOnlyCollection<VisualHFT.Model.Position> Positions
-        {
-            get { return _positions.AsReadOnly(); }
-        }
+    }
 
-        protected virtual void Dispose(bool disposing)
+    public ReadOnlyCollection<Order> Orders => _orders.AsReadOnly();
+
+    public ReadOnlyCollection<Position> Positions => _positions.AsReadOnly();
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void RaiseOnInitialLoad(IEnumerable<Order> ord)
+    {
+        OnInitialLoad?.Invoke(this, ord);
+    }
+
+    protected virtual void RaiseOnDataReceived(IEnumerable<Order> ord)
+    {
+        OnDataReceived?.Invoke(this, ord);
+    }
+
+    ~EmptyTradesRetriever()
+    {
+        Dispose(false);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
         {
-            if (!_disposed)
+            if (disposing)
             {
-                if (disposing)
-                {}
-                _disposed = true;
             }
-        }
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
+
+            _disposed = true;
         }
     }
 }

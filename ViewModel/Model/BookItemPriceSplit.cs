@@ -1,113 +1,98 @@
-﻿using Prism.Mvvm;
-using System;
-using System.ComponentModel;
+﻿using System;
 using System.Globalization;
-using System.Linq;
+using Prism.Mvvm;
+using VisualHFT.Helpers;
 
-namespace VisualHFT.ViewModel.Model
+namespace VisualHFT.ViewModel.Model;
+
+public class BookItemPriceSplit : BindableBase, ICloneable
 {
-    public class BookItemPriceSplit : BindableBase, ICloneable
+    private readonly object _locker = new();
+    private readonly string decimalSeparator = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+    private readonly string thousandsSeparator = CultureInfo.CurrentCulture.NumberFormat.NumberGroupSeparator;
+
+    public string LastDecimal { get; private set; } = "";
+
+    public string NextTwoDecimals { get; private set; } = "";
+
+    public string Rest { get; private set; } = "";
+
+    public string Size { get; private set; } = "";
+
+    public double Price { get; private set; }
+
+    public object Clone()
     {
-        private double _price;
-        private string _lastDecimal = "";
-        private string _nextTwoDecimals = "";
-        private string _rest = "";
-        private string _size = "";
-        private object _locker = new object();
-        private string decimalSeparator = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
-        private string thousandsSeparator = CultureInfo.CurrentCulture.NumberFormat.NumberGroupSeparator;
+        return MemberwiseClone();
+    }
 
-        public void SetNumber(double price, double size, int symbolDecimalPlaces)
+    public void SetNumber(double price, double size, int symbolDecimalPlaces)
+    {
+        lock (_locker)
         {
-            lock (_locker)
-            {
-                _price = price;
-                if (price != 0)
+            Price = price;
+            if (price != 0)
+                try
                 {
-                    try
+                    var sPrice = string.Format("{0:N" + symbolDecimalPlaces + "}", price);
+                    if (symbolDecimalPlaces > 0)
                     {
-                        string sPrice = string.Format("{0:N" + symbolDecimalPlaces + "}", price);
-                        if (symbolDecimalPlaces > 0)
-                        {
-                            /*LastDecimal = sPrice.Last().ToString();
-                            NextTwoDecimals = sPrice.Substring(sPrice.Length - 3, 2);
-                            Rest = sPrice.Substring(0, sPrice.Length - 3);*/
-
-                            _rest = sPrice.Split(decimalSeparator)[0];
-                            _nextTwoDecimals = (sPrice.Split(decimalSeparator)[1] + "00").Substring(0, symbolDecimalPlaces);
-                            _lastDecimal = "";
-                        }
-                        else
-                        {
-                            _rest = sPrice.Split(thousandsSeparator)[0];
-                            _nextTwoDecimals = sPrice.Split(thousandsSeparator)[1];
-                        }
-                        _size = Helpers.HelperCommon.GetKiloFormatter(size);
-
+                        /*LastDecimal = sPrice.Last().ToString();
+                        NextTwoDecimals = sPrice.Substring(sPrice.Length - 3, 2);
+                        Rest = sPrice.Substring(0, sPrice.Length - 3);*/
+                        Rest = sPrice.Split(decimalSeparator)[0];
+                        NextTwoDecimals = (sPrice.Split(decimalSeparator)[1] + "00").Substring(0, symbolDecimalPlaces);
+                        LastDecimal = "";
                     }
-                    catch
+                    else
                     {
-                        _lastDecimal = "-";
-                        _nextTwoDecimals = "-";
-                        _rest = "-";
-                        _size = "-";
+                        Rest = sPrice.Split(thousandsSeparator)[0];
+                        NextTwoDecimals = sPrice.Split(thousandsSeparator)[1];
                     }
+
+                    Size = HelperCommon.GetKiloFormatter(size);
+                }
+                catch
+                {
+                    LastDecimal = "-";
+                    NextTwoDecimals = "-";
+                    Rest = "-";
+                    Size = "-";
                 }
 
 
-                if (price == 0)
-                {
-                    _lastDecimal = "";
-                    _nextTwoDecimals = "";
-                    _rest = "";
-                    _size = "";
-                }
+            if (price == 0)
+            {
+                LastDecimal = "";
+                NextTwoDecimals = "";
+                Rest = "";
+                Size = "";
             }
         }
-        public void Clear()
+    }
+
+    public void Clear()
+    {
+        lock (_locker)
         {
-            lock (_locker)
-            {
-                _price = 0;
-                _lastDecimal = "";
-                _nextTwoDecimals = "";
-                _rest = "";
-                _size = "";
-            }
-            RaiseUIThread();
-        }
-        public void RaiseUIThread()
-        {
-            lock (_locker)
-            {
-                RaisePropertyChanged(nameof(LastDecimal));
-                RaisePropertyChanged(nameof(NextTwoDecimals));
-                RaisePropertyChanged(nameof(Rest));
-                RaisePropertyChanged(nameof(Size));
-            }
+            Price = 0;
+            LastDecimal = "";
+            NextTwoDecimals = "";
+            Rest = "";
+            Size = "";
         }
 
-        public object Clone() => MemberwiseClone();
+        RaiseUIThread();
+    }
 
-        public string LastDecimal
+    public void RaiseUIThread()
+    {
+        lock (_locker)
         {
-            get => _lastDecimal;
-        }
-        public string NextTwoDecimals
-        {
-            get => _nextTwoDecimals;
-        }
-        public string Rest
-        {
-            get => _rest;
-        }
-        public string Size
-        {
-            get => _size;
-        }
-        public double Price
-        {
-            get => _price;
+            RaisePropertyChanged(nameof(LastDecimal));
+            RaisePropertyChanged(nameof(NextTwoDecimals));
+            RaisePropertyChanged(nameof(Rest));
+            RaisePropertyChanged(nameof(Size));
         }
     }
 }

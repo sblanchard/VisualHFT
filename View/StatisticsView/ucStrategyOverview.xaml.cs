@@ -1,16 +1,14 @@
 ﻿using System.Windows.Controls;
 
-namespace VisualHFT.View.StatisticsView
-{
-    /// <summary>
-    /// Interaction logic for ucStrategyOverview.xaml
-    /// </summary>
-    public partial class ucStrategyOverview : UserControl
-    {
+namespace VisualHFT.View.StatisticsView;
 
-        public ucStrategyOverview()
-        {
-            InitializeComponent();            
-        }
+/// <summary>
+///     Interaction logic for ucStrategyOverview.xaml
+/// </summary>
+public partial class ucStrategyOverview : UserControl
+{
+    public ucStrategyOverview()
+    {
+        InitializeComponent();
     }
 }

@@ -1,134 +1,114 @@
-﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Reflection;
+using log4net;
+using Newtonsoft.Json;
 
-namespace VisualHFT.UserSettings
+namespace VisualHFT.UserSettings;
+/*
+ USAGE:
+        // To set a setting
+        SettingsManager.Instance.SetSetting(SettingKey.Theme, "Dark");
+
+        // To get a setting
+        object theme = SettingsManager.Instance.GetSetting(SettingKey.Theme);
+
+        // To save settings
+        SettingsManager.Instance.SaveSettings();     
+ */
+
+public class SettingsManager
 {
-    /*
-     USAGE:
-            // To set a setting
-            SettingsManager.Instance.SetSetting(SettingKey.Theme, "Dark");
+    private static readonly Lazy<SettingsManager> lazy = new(() => new SettingsManager());
+    private static readonly ILog log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+    private readonly string appDataPath;
+    private readonly string settingsFilePath;
 
-            // To get a setting
-            object theme = SettingsManager.Instance.GetSetting(SettingKey.Theme);
-
-            // To save settings
-            SettingsManager.Instance.SaveSettings();     
-     */
-
-
-    public class SettingsManager
+    private SettingsManager()
     {
-        private static readonly Lazy<SettingsManager> lazy = new Lazy<SettingsManager>(() => new SettingsManager());
-        private string appDataPath;
-        private string settingsFilePath;
-        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
-
-        public static SettingsManager Instance => lazy.Value;
-
-        public UserSettings UserSettings { get; set; }
-
-        public string GetAllSettings()
-        {
-            if (File.Exists(settingsFilePath))
-            {
-                string json = File.ReadAllText(settingsFilePath);
-                return json;
-            }
-            else
-                return null;
-        }
-        private SettingsManager()
-        {
-            appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            settingsFilePath = Path.Combine(appDataPath, "VisualHFT", "settings.json");
-            // Load settings from file or create new
-            LoadSettings();
-        }
-
-        private void LoadSettings()
-        {
-            // Deserialize from JSON file
-            if (File.Exists(settingsFilePath))
-            {
-                string json = File.ReadAllText(settingsFilePath);
-                UserSettings = JsonConvert.DeserializeObject<UserSettings>(json);
-            }
-            else
-            {
-                UserSettings = new UserSettings();
-            }
-        }        
-        private void SaveSettings()
-        {
-            try
-            {
-                // Ensure the directory exists
-                string directoryPath = Path.GetDirectoryName(settingsFilePath);
-                if (!Directory.Exists(directoryPath))
-                {
-                    Directory.CreateDirectory(directoryPath);
-                }
-
-                // Serialize to JSON file
-                string json = JsonConvert.SerializeObject(UserSettings);
-
-                // Write to file
-                File.WriteAllText(settingsFilePath, json);
-            }
-            catch (Exception ex)
-            {
-                // Log or handle the exception as needed
-                log.Error($"An error occurred while saving settings: {ex.ToString()}");
-            }
-        }
-
-        public T GetSetting<T>(SettingKey key, string id) where T : class
-        {
-            if (UserSettings.ComponentSettings.TryGetValue(key, out var idSettings))
-            {
-                if (idSettings.TryGetValue(id, out var value))
-                {
-                    try
-                    {
-                        if (value is T)
-                            return value as T;
-                        else
-                        {
-                            // Attempt to deserialize the object into the expected type
-                            T typedValue = JsonConvert.DeserializeObject<T>(value.ToString());
-                            if (typedValue != null)
-                            {
-                                return typedValue;
-                            }
-                        }
-                    }
-                    catch (JsonException ex)
-                    {
-                        return null;
-                    }
-                }
-            }
-            return null;
-        }
-        public void SetSetting(SettingKey key, string id, object value)
-        {
-            if (!UserSettings.ComponentSettings.ContainsKey(key))
-            {
-                UserSettings.ComponentSettings[key] = new Dictionary<string, object>();
-            }
-            UserSettings.ComponentSettings[key][id] = value;
-            SaveSettings();
-        }
-
-
-
+        appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        settingsFilePath = Path.Combine(appDataPath, "VisualHFT", "settings.json");
+        // Load settings from file or create new
+        LoadSettings();
     }
 
-}
 
+    public static SettingsManager Instance => lazy.Value;
+
+    public UserSettings UserSettings { get; set; }
+
+    public string GetAllSettings()
+    {
+        if (File.Exists(settingsFilePath))
+        {
+            var json = File.ReadAllText(settingsFilePath);
+            return json;
+        }
+
+        return null;
+    }
+
+    private void LoadSettings()
+    {
+        // Deserialize from JSON file
+        if (File.Exists(settingsFilePath))
+        {
+            var json = File.ReadAllText(settingsFilePath);
+            UserSettings = JsonConvert.DeserializeObject<UserSettings>(json);
+        }
+        else
+        {
+            UserSettings = new UserSettings();
+        }
+    }
+
+    private void SaveSettings()
+    {
+        try
+        {
+            // Ensure the directory exists
+            var directoryPath = Path.GetDirectoryName(settingsFilePath);
+            if (!Directory.Exists(directoryPath)) Directory.CreateDirectory(directoryPath);
+
+            // Serialize to JSON file
+            var json = JsonConvert.SerializeObject(UserSettings);
+
+            // Write to file
+            File.WriteAllText(settingsFilePath, json);
+        }
+        catch (Exception ex)
+        {
+            // Log or handle the exception as needed
+            log.Error($"An error occurred while saving settings: {ex}");
+        }
+    }
+
+    public T GetSetting<T>(SettingKey key, string id) where T : class
+    {
+        if (UserSettings.ComponentSettings.TryGetValue(key, out var idSettings))
+            if (idSettings.TryGetValue(id, out var value))
+                try
+                {
+                    if (value is T)
+                    {
+                        return value as T;
+                    }
+
+                    // Attempt to deserialize the object into the expected type
+                    var typedValue = JsonConvert.DeserializeObject<T>(value.ToString());
+                    if (typedValue != null) return typedValue;
+                }
+                catch (JsonException ex)
+                {
+                    return null;
+                }
+
+        return null;
+    }
+
+    public void SetSetting(SettingKey key, string id, object value)
+    {
+        if (!UserSettings.ComponentSettings.ContainsKey(key))
+            UserSettings.ComponentSettings[key] = new Dictionary<string, object>();
+        UserSettings.ComponentSettings[key][id] = value;
+        SaveSettings();
+    }
+}

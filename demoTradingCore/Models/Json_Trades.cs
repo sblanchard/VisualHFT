@@ -1,6 +1,6 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace demoTradingCore.Models
 {
@@ -16,31 +16,29 @@ namespace demoTradingCore.Models
         public string Flags { get; set; }
     }
 
-    public class jsonTrades: Json_BaseData
+    public class jsonTrades : Json_BaseData
     {
-        protected JsonSerializerSettings jsonSettings;
         protected string _data;
         protected List<jsonTrade> _dataObj;
+        protected JsonSerializerSettings jsonSettings;
 
         public jsonTrades()
         {
             jsonSettings = new JsonSerializerSettings();
             jsonSettings.DateFormatString = "yyyy.MM.dd-hh.mm.ss.ffffff";
-            this.type = "Trades";
-        }
-        public string data 
-        { 
-            get { return _data; }
-            //get {return Newtonsoft.Json.JsonConvert.SerializeObject(dataObj, jsonSettings); } 
-
+            type = "Trades";
         }
 
-        public List<jsonTrade> dataObj { 
-            get { return _dataObj; }
-            set 
-            { 
+        public string data => _data;
+
+        //get {return Newtonsoft.Json.JsonConvert.SerializeObject(dataObj, jsonSettings); } 
+        public List<jsonTrade> dataObj
+        {
+            get => _dataObj;
+            set
+            {
                 _dataObj = value;
-                _data = Newtonsoft.Json.JsonConvert.SerializeObject(_dataObj, jsonSettings);
+                _data = JsonConvert.SerializeObject(_dataObj, jsonSettings);
             }
         }
     }

@@ -3,74 +3,47 @@ using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
 
-namespace VisualHFT.Helpers
+namespace VisualHFT.Helpers;
+
+internal class ProgramPaginator : DocumentPaginator
 {
-    class ProgramPaginator : DocumentPaginator
+    private readonly FrameworkElement Element;
+
+    private ProgramPaginator()
     {
-        private FrameworkElement Element;
-        private ProgramPaginator()
-        {
-        }
+    }
 
-        public ProgramPaginator(FrameworkElement element)
-        {
-            Element = element;
-        }
+    public ProgramPaginator(FrameworkElement element)
+    {
+        Element = element;
+    }
 
-        public override DocumentPage GetPage(int pageNumber)
-        {
+    public override bool IsPageCountValid => true;
 
-            Element.RenderTransform = new TranslateTransform(-PageSize.Width * (pageNumber % Columns), -PageSize.Height * (pageNumber / Columns));
+    public int Columns => (int)Math.Ceiling(Element.ActualWidth / PageSize.Width);
 
-            Size elementSize = new Size(
-                Element.ActualWidth,
-                Element.ActualHeight);
-            Element.Measure(elementSize);
-            Element.Arrange(new Rect(new Point(0, 0), elementSize));
+    public int Rows => (int)Math.Ceiling(Element.ActualHeight / PageSize.Height);
 
-            var page = new DocumentPage(Element);
-            Element.RenderTransform = null;
+    public override int PageCount => Columns * Rows;
 
-            return page;
-        }
+    public override Size PageSize { set; get; }
 
-        public override bool IsPageCountValid
-        {
-            get { return true; }
-        }
+    public override IDocumentPaginatorSource Source => null;
 
-        public int Columns
-        {
-            get
-            {
-                return (int)Math.Ceiling(Element.ActualWidth / PageSize.Width);
-            }
-        }
-        public int Rows
-        {
-            get
-            {
-                return (int)Math.Ceiling(Element.ActualHeight / PageSize.Height);
-            }
-        }
+    public override DocumentPage GetPage(int pageNumber)
+    {
+        Element.RenderTransform = new TranslateTransform(-PageSize.Width * (pageNumber % Columns),
+            -PageSize.Height * (pageNumber / Columns));
 
-        public override int PageCount
-        {
-            get
-            {
-                return Columns * Rows;
-            }
-        }
+        var elementSize = new Size(
+            Element.ActualWidth,
+            Element.ActualHeight);
+        Element.Measure(elementSize);
+        Element.Arrange(new Rect(new Point(0, 0), elementSize));
 
-        public override Size PageSize
-        {
-            set;
-            get;
-        }
+        var page = new DocumentPage(Element);
+        Element.RenderTransform = null;
 
-        public override IDocumentPaginatorSource Source
-        {
-            get { return null; }
-        }
+        return page;
     }
 }

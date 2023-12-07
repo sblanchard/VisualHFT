@@ -1,87 +1,71 @@
-﻿using VisualHFT.Helpers;
-using VisualHFT.View;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Windows;
-using VisualHFT.DataRetriever;
-using VisualHFT.DataRetriever.DataParsers;
-using System.Diagnostics;
-using VisualHFT.ViewModels;
-using VisualHFT.Model;
-using System.Collections.ObjectModel;
-using System.Windows.Documents;
-using System.Collections.Generic;
-using VisualHFT.ViewModel;
-using VisualHFT.UserSettings;
-using System.Threading.Tasks;
+﻿using System;
 using System.Globalization;
+using System.Linq;
+using System.Windows;
 using System.Windows.Markup;
+using VisualHFT.Helpers;
+using VisualHFT.UserSettings;
+using VisualHFT.View;
+using VisualHFT.ViewModel;
 
-namespace VisualHFT
+namespace VisualHFT;
+
+/// <summary>
+///     Interaction logic for MainWindow.xaml
+/// </summary>
+public partial class Dashboard : Window
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
-    public partial class Dashboard : Window
+    public Dashboard()
     {
-        public Dashboard()
+        LanguageProperty.OverrideMetadata(typeof(FrameworkElement),
+            new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.Name)));
+
+        InitializeComponent();
+        DataContext = new vmDashboard(HelperCommon.GLOBAL_DIALOGS);
+    }
+
+    private void ButtonAnalyticsReport_Click(object sender, RoutedEventArgs e)
+    {
+        var oReport = new AnalyticReport.AnalyticReport();
+        try
         {
-            FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement),
-                new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.Name)));
-
-            InitializeComponent();
-            this.DataContext = new VisualHFT.ViewModel.vmDashboard(Helpers.HelperCommon.GLOBAL_DIALOGS);
-
+            if (cboSelectedSymbol.SelectedValue == null || cboSelectedSymbol.SelectedValue.ToString() == "")
+                oReport.Signals = HelperCommon.EXECUTEDORDERS.Positions.Where(x => x.PipsPnLInCurrency.HasValue)
+                    .OrderBy(x => x.CreationTimeStamp).ToList();
+            else
+                oReport.Signals = HelperCommon.EXECUTEDORDERS.Positions
+                    .Where(x => x.PipsPnLInCurrency.HasValue && cboSelectedSymbol.SelectedValue.ToString() == x.Symbol)
+                    .OrderBy(x => x.CreationTimeStamp).ToList();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.ToString(), "ERRROR", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
-        private void ButtonAnalyticsReport_Click(object sender, RoutedEventArgs e)
-        {
-            AnalyticReport.AnalyticReport oReport = new AnalyticReport.AnalyticReport();
-            try
-            {
-                if (cboSelectedSymbol.SelectedValue == null || cboSelectedSymbol.SelectedValue.ToString() == "")
-                {
-                    oReport.Signals = Helpers.HelperCommon.EXECUTEDORDERS.Positions.Where(x => x.PipsPnLInCurrency.HasValue).OrderBy(x => x.CreationTimeStamp).ToList();
-                }
-                else
-                {
-                    oReport.Signals = Helpers.HelperCommon.EXECUTEDORDERS.Positions.Where(x => x.PipsPnLInCurrency.HasValue && cboSelectedSymbol.SelectedValue.ToString() == x.Symbol).OrderBy(x => x.CreationTimeStamp).ToList();
-                }
+        oReport.Show();
+    }
 
-            }
-            catch (Exception ex)
-            {
+    private void ButtonAppSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = new vmUserSettings();
+        vm.LoadJson(SettingsManager.Instance.GetAllSettings());
 
-                MessageBox.Show(ex.ToString(), "ERRROR", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+        var form = new View.UserSettings();
+        form.DataContext = vm;
+        form.ShowDialog();
+    }
 
-            oReport.Show();
+    private void ButtonMultiVenuePrices_Click(object sender, RoutedEventArgs e)
+    {
+        var form = new MultiVenuePrices();
+        form.DataContext = new vmMultiVenuePrices();
+        form.Show();
+    }
 
-        }
-
-        private void ButtonAppSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var vm = new vmUserSettings();
-            vm.LoadJson(SettingsManager.Instance.GetAllSettings());
-
-            var form = new View.UserSettings();
-            form.DataContext = vm;
-            form.ShowDialog();
-        }
-
-        private void ButtonMultiVenuePrices_Click(object sender, RoutedEventArgs e)
-        {
-            var form = new View.MultiVenuePrices();
-            form.DataContext = new vmMultiVenuePrices();
-            form.Show();
-        }
-
-        private void ButtonPluginManagement_Click(object sender, RoutedEventArgs e)
-        {
-            var form = new View.PluginManagerWindow();
-            form.DataContext = new vmPluginManager();
-            form.Show();
-        }
+    private void ButtonPluginManagement_Click(object sender, RoutedEventArgs e)
+    {
+        var form = new PluginManagerWindow();
+        form.DataContext = new vmPluginManager();
+        form.Show();
     }
 }

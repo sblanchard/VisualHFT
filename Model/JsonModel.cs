@@ -1,15 +1,8 @@
 ﻿using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace VisualHFT.Model
+namespace VisualHFT.Model;
+
+public class JsonModel
 {
-    public class JsonModel
-    {
-        public JObject Data { get; set; }
-    }
-
+    public JObject Data { get; set; }
 }

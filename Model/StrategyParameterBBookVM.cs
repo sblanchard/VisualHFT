@@ -1,244 +1,250 @@
-﻿using System;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
-namespace VisualHFT.Model
-{
-    public partial class STRATEGY_PARAMETERS_BBOOK
-    {
-        public void CopyTo(StrategyParametersBBookVM item)
-        {
-            item.PositionSize = this.PositionSize;
-			item.PipsArb = this.PipsArb;
-			item.MillisecondsToWaitBeofreClosing = this.MillisecondsToWaitBeofreClosing;
-			item.PNLoverallPositionToClose = this.PNLoverallPositionToClose;
-			item.ClosingWaitingBBook = this.ClosingWaitingBBook;
-			item.ClosingWaitingTime = this.ClosingWaitingTime;
-			item.AfterCloseWaitForMillisec = this.AfterCloseWaitForMillisec;
 
-            item.PipsHedgeStopLoss = this.PipsHedgeStopLoss;
-            item.PipsHedgeTakeProf = this.PipsHedgeTakeProf;
-            item.PipsHedgeTrailing = this.PipsHedgeTrailing;
+namespace VisualHFT.Model;
+
+public partial class STRATEGY_PARAMETERS_BBOOK
+{
+    public void CopyTo(StrategyParametersBBookVM item)
+    {
+        item.PositionSize = PositionSize;
+        item.PipsArb = PipsArb;
+        item.MillisecondsToWaitBeofreClosing = MillisecondsToWaitBeofreClosing;
+        item.PNLoverallPositionToClose = PNLoverallPositionToClose;
+        item.ClosingWaitingBBook = ClosingWaitingBBook;
+        item.ClosingWaitingTime = ClosingWaitingTime;
+        item.AfterCloseWaitForMillisec = AfterCloseWaitForMillisec;
+
+        item.PipsHedgeStopLoss = PipsHedgeStopLoss;
+        item.PipsHedgeTakeProf = PipsHedgeTakeProf;
+        item.PipsHedgeTrailing = PipsHedgeTrailing;
+    }
+}
+
+public class StrategyParametersBBookVM : STRATEGY_PARAMETERS_BBOOK, INotifyPropertyChanged, IStrategyParameters
+{
+    private int _DecimalPlaces;
+
+
+    private bool _IsStrategyOn;
+
+    public StrategyParametersBBookVM()
+    {
+    }
+
+    public StrategyParametersBBookVM(STRATEGY_PARAMETERS_BBOOK item)
+    {
+        Symbol = item.Symbol;
+        LayerName = item.LayerName;
+        PositionSize = item.PositionSize;
+        PipsArb = item.PipsArb;
+        MillisecondsToWaitBeofreClosing = item.MillisecondsToWaitBeofreClosing;
+        PNLoverallPositionToClose = item.PNLoverallPositionToClose;
+        ClosingWaitingBBook = item.ClosingWaitingBBook;
+        ClosingWaitingTime = item.ClosingWaitingTime;
+        AfterCloseWaitForMillisec = item.AfterCloseWaitForMillisec;
+
+        PipsHedgeStopLoss = item.PipsHedgeStopLoss;
+        PipsHedgeTakeProf = item.PipsHedgeTakeProf;
+        PipsHedgeTrailing = item.PipsHedgeTrailing;
+    }
+
+    public new decimal PositionSize
+    {
+        get => base.PositionSize;
+        set
+        {
+            if (base.PositionSize != value)
+            {
+                base.PositionSize = value;
+                NotifyPropertyChanged();
+            }
         }
     }
-    public class StrategyParametersBBookVM : STRATEGY_PARAMETERS_BBOOK, INotifyPropertyChanged, IStrategyParameters
-	{
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        private void NotifyPropertyChanged([CallerMemberName] String propertyName = "")
+    public new decimal PipsArb
+    {
+        get => base.PipsArb;
+        set
         {
-            if (PropertyChanged != null)
+            if (base.PipsArb != value)
             {
-                PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+                base.PipsArb = value;
+                NotifyPropertyChanged();
             }
         }
+    }
 
-        public StrategyParametersBBookVM()
-        { }
-        public StrategyParametersBBookVM(STRATEGY_PARAMETERS_BBOOK item)
+    public new decimal MillisecondsToWaitBeofreClosing
+    {
+        get => base.MillisecondsToWaitBeofreClosing;
+        set
         {
-            this.Symbol = item.Symbol;
-            this.LayerName = item.LayerName;
-            this.PositionSize = item.PositionSize;
-			this.PipsArb = item.PipsArb;
-			this.MillisecondsToWaitBeofreClosing = item.MillisecondsToWaitBeofreClosing;
-			this.PNLoverallPositionToClose = item.PNLoverallPositionToClose;
-			this.ClosingWaitingBBook = item.ClosingWaitingBBook;
-			this.ClosingWaitingTime = item.ClosingWaitingTime;
-			this.AfterCloseWaitForMillisec = item.AfterCloseWaitForMillisec;
-
-			this.PipsHedgeStopLoss = item.PipsHedgeStopLoss;
-            this.PipsHedgeTakeProf = item.PipsHedgeTakeProf;
-            this.PipsHedgeTrailing = item.PipsHedgeTrailing;
-        }
-
-        public STRATEGY_PARAMETERS_BBOOK ThisToDBObject()
-        {
-            var item = new STRATEGY_PARAMETERS_BBOOK();
-            item.Symbol = this.Symbol;
-            item.LayerName = this.LayerName;
-            item.PositionSize = this.PositionSize;
-			item.PipsArb = this.PipsArb;
-			item.MillisecondsToWaitBeofreClosing = this.MillisecondsToWaitBeofreClosing;
-			item.PNLoverallPositionToClose = this.PNLoverallPositionToClose;
-			item.ClosingWaitingBBook = this.ClosingWaitingBBook;
-			item.ClosingWaitingTime = this.ClosingWaitingTime;
-			item.AfterCloseWaitForMillisec = this.AfterCloseWaitForMillisec;
-
-			item.PipsHedgeStopLoss = this.PipsHedgeStopLoss;
-            item.PipsHedgeTakeProf = this.PipsHedgeTakeProf;
-            item.PipsHedgeTrailing = this.PipsHedgeTrailing;
-            return item;
-        }
-
-
-
-		public new string Symbol
-        {
-            get { return base.Symbol; }
-            set
+            if (base.MillisecondsToWaitBeofreClosing != value)
             {
-                if (base.Symbol != value)
-                {
-                    base.Symbol = value;
-                    NotifyPropertyChanged();
-                }
+                base.MillisecondsToWaitBeofreClosing = value;
+                NotifyPropertyChanged();
             }
         }
-        public new decimal PositionSize
+    }
+
+    public new decimal PNLoverallPositionToClose
+    {
+        get => base.PNLoverallPositionToClose;
+        set
         {
-            get { return base.PositionSize; }
-            set
+            if (base.PNLoverallPositionToClose != value)
             {
-                if (base.PositionSize != value)
-                {
-                    base.PositionSize = value;
-                    NotifyPropertyChanged();
-                }
+                base.PNLoverallPositionToClose = value;
+                NotifyPropertyChanged();
             }
         }
-        public new decimal PipsArb
+    }
+
+    public new bool ClosingWaitingBBook
+    {
+        get => base.ClosingWaitingBBook;
+        set
         {
-            get { return base.PipsArb; }
-            set
+            if (base.ClosingWaitingBBook != value)
             {
-                if (base.PipsArb != value)
-                {
-                    base.PipsArb = value;
-                    NotifyPropertyChanged();
-                }
+                base.ClosingWaitingBBook = value;
+                NotifyPropertyChanged();
             }
         }
-        public new decimal MillisecondsToWaitBeofreClosing
-		{
-            get { return base.MillisecondsToWaitBeofreClosing; }
-            set
-            {
-                if (base.MillisecondsToWaitBeofreClosing != value)
-                {
-                    base.MillisecondsToWaitBeofreClosing = value;
-                    NotifyPropertyChanged();
-                }
-            }
-        }
-		public new decimal PNLoverallPositionToClose
-		{
-			get { return base.PNLoverallPositionToClose; }
-			set
-			{
-				if (base.PNLoverallPositionToClose != value)
-				{
-					base.PNLoverallPositionToClose = value;
-					NotifyPropertyChanged();
-				}
-			}
-		}
-		public new bool ClosingWaitingBBook
-		{
-			get { return base.ClosingWaitingBBook; }
-			set
-			{
-				if (base.ClosingWaitingBBook != value)
-				{
-					base.ClosingWaitingBBook = value;
-					NotifyPropertyChanged();
-				}
-			}
-		}
-		public new bool ClosingWaitingTime
-		{
-			get { return base.ClosingWaitingTime; }
-			set
-			{
-				if (base.ClosingWaitingTime != value)
-				{
-					base.ClosingWaitingTime = value;
-					NotifyPropertyChanged();
-				}
-			}
-		}
-		public new decimal AfterCloseWaitForMillisec
-		{
-			get { return base.AfterCloseWaitForMillisec; }
-			set
-			{
-				if (base.AfterCloseWaitForMillisec != value)
-				{
-					base.AfterCloseWaitForMillisec = value;
-					NotifyPropertyChanged();
-				}
-			}
-		}
+    }
 
-
-
-
-
-		public new decimal PipsHedgeStopLoss
+    public new bool ClosingWaitingTime
+    {
+        get => base.ClosingWaitingTime;
+        set
         {
-            get { return base.PipsHedgeStopLoss; }
-            set
+            if (base.ClosingWaitingTime != value)
             {
-                if (base.PipsHedgeStopLoss != value)
-                {
-                    base.PipsHedgeStopLoss = value;
-                    NotifyPropertyChanged();
-                }
+                base.ClosingWaitingTime = value;
+                NotifyPropertyChanged();
             }
         }
-        public new decimal PipsHedgeTakeProf
+    }
+
+    public new decimal AfterCloseWaitForMillisec
+    {
+        get => base.AfterCloseWaitForMillisec;
+        set
         {
-            get { return base.PipsHedgeTakeProf; }
-            set
+            if (base.AfterCloseWaitForMillisec != value)
             {
-                if (base.PipsHedgeTakeProf != value)
-                {
-                    base.PipsHedgeTakeProf = value;
-                    NotifyPropertyChanged();
-                }
+                base.AfterCloseWaitForMillisec = value;
+                NotifyPropertyChanged();
             }
         }
-        public new decimal PipsHedgeTrailing
-        {
-            get { return base.PipsHedgeTrailing; }
-            set
-            {
-                if (base.PipsHedgeTrailing != value)
-                {
-                    base.PipsHedgeTrailing = value;
-                    NotifyPropertyChanged();
-                }
-            }
-        }
+    }
 
 
-        private bool _IsStrategyOn;
-        private int _DecimalPlaces;
-
-
-        //INFORMATION
-        public bool IsStrategyOn
+    public new decimal PipsHedgeStopLoss
+    {
+        get => base.PipsHedgeStopLoss;
+        set
         {
-            get { return _IsStrategyOn; }
-            set
+            if (base.PipsHedgeStopLoss != value)
             {
-                if (_IsStrategyOn != value)
-                {
-                    _IsStrategyOn = value;
-                    NotifyPropertyChanged();
-                }
+                base.PipsHedgeStopLoss = value;
+                NotifyPropertyChanged();
             }
         }
-        public int DecimalPlaces
+    }
+
+    public new decimal PipsHedgeTakeProf
+    {
+        get => base.PipsHedgeTakeProf;
+        set
         {
-            get { return _DecimalPlaces; }
-            set
+            if (base.PipsHedgeTakeProf != value)
             {
-                if (_DecimalPlaces != value)
-                {
-                    _DecimalPlaces = value;
-                    NotifyPropertyChanged();
-                }
+                base.PipsHedgeTakeProf = value;
+                NotifyPropertyChanged();
             }
         }
+    }
+
+    public new decimal PipsHedgeTrailing
+    {
+        get => base.PipsHedgeTrailing;
+        set
+        {
+            if (base.PipsHedgeTrailing != value)
+            {
+                base.PipsHedgeTrailing = value;
+                NotifyPropertyChanged();
+            }
+        }
+    }
+
+    public int DecimalPlaces
+    {
+        get => _DecimalPlaces;
+        set
+        {
+            if (_DecimalPlaces != value)
+            {
+                _DecimalPlaces = value;
+                NotifyPropertyChanged();
+            }
+        }
+    }
+
+    public event PropertyChangedEventHandler PropertyChanged;
+
+
+    public new string Symbol
+    {
+        get => base.Symbol;
+        set
+        {
+            if (base.Symbol != value)
+            {
+                base.Symbol = value;
+                NotifyPropertyChanged();
+            }
+        }
+    }
+
+
+    //INFORMATION
+    public bool IsStrategyOn
+    {
+        get => _IsStrategyOn;
+        set
+        {
+            if (_IsStrategyOn != value)
+            {
+                _IsStrategyOn = value;
+                NotifyPropertyChanged();
+            }
+        }
+    }
+
+    private void NotifyPropertyChanged([CallerMemberName] string propertyName = "")
+    {
+        if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    public STRATEGY_PARAMETERS_BBOOK ThisToDBObject()
+    {
+        var item = new STRATEGY_PARAMETERS_BBOOK();
+        item.Symbol = Symbol;
+        item.LayerName = LayerName;
+        item.PositionSize = PositionSize;
+        item.PipsArb = PipsArb;
+        item.MillisecondsToWaitBeofreClosing = MillisecondsToWaitBeofreClosing;
+        item.PNLoverallPositionToClose = PNLoverallPositionToClose;
+        item.ClosingWaitingBBook = ClosingWaitingBBook;
+        item.ClosingWaitingTime = ClosingWaitingTime;
+        item.AfterCloseWaitForMillisec = AfterCloseWaitForMillisec;
+
+        item.PipsHedgeStopLoss = PipsHedgeStopLoss;
+        item.PipsHedgeTakeProf = PipsHedgeTakeProf;
+        item.PipsHedgeTrailing = PipsHedgeTrailing;
+        return item;
     }
 }

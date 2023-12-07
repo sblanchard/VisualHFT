@@ -1,29 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+﻿using System.Windows.Controls;
+using VisualHFT.AnalyticReports.ViewModel;
 
-namespace VisualHFT.AnalyticReports.View
+namespace VisualHFT.AnalyticReports.View;
+
+/// <summary>
+///     Interaction logic for ucOverviewR.xaml
+/// </summary>
+public partial class ucOverview : UserControl
 {
-    /// <summary>
-    /// Interaction logic for ucOverviewR.xaml
-    /// </summary>
-    public partial class ucOverview : UserControl
+    public ucOverview()
     {
-        public ucOverview()
-        {
-            InitializeComponent();
-            this.DataContext = new VisualHFT.AnalyticReports.ViewModel.vmOverview();
-        }
+        InitializeComponent();
+        DataContext = new vmOverview();
     }
 }
