@@ -448,6 +448,35 @@ namespace VisualHFT.Commons.PluginManager
 
             return Math.Max(1, maxDecimalPlaces);
         }
+        protected int RecognizeDecimalPlacesAutomatically(IEnumerable<double> values)
+        {
+            int maxDecimalPlaces = 0;
+            NumberFormatInfo nfi = CultureInfo.CurrentCulture.NumberFormat;
+
+            foreach (decimal value in values)
+            {
+                // Convert the value to a string using the current culture's number format
+                string valueAsString = value.ToString(CultureInfo.CurrentCulture);
+
+                // Find the decimal separator of the current culture
+                string decimalSeparator = nfi.NumberDecimalSeparator;
+                int indexOfDecimal = valueAsString.IndexOf(decimalSeparator);
+
+                if (indexOfDecimal != -1)
+                {
+                    // Count the decimal places after the decimal separator
+                    int decimalPlaces = valueAsString.Substring(indexOfDecimal + decimalSeparator.Length).TrimEnd('0').Length;
+
+                    // Update maxDecimalPlaces if this value has more decimal places
+                    if (decimalPlaces > maxDecimalPlaces)
+                    {
+                        maxDecimalPlaces = decimalPlaces;
+                    }
+                }
+            }
+
+            return Math.Max(1, maxDecimalPlaces);
+        }
 
 
 

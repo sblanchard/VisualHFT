@@ -72,7 +72,8 @@ namespace VisualHFT.Enums
         NONE,
         GTC,
         IOC,
-        FOK
+        FOK,
+        MOK
     };
 
     public enum eORDERTYPE
