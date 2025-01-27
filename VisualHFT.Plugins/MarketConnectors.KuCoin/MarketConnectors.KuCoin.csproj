@@ -12,8 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Kucoin.Net" Version="5.21.0" />
-    <PackageReference Include="log4net" Version="2.0.17" />
+    <PackageReference Include="Kucoin.Net" Version="5.23.5" />
+    <PackageReference Include="log4net" Version="3.0.3" />
   </ItemGroup>
 
   <ItemGroup>

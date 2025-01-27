@@ -12,8 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Bitfinex.Net" Version="7.4.3" />
-    <PackageReference Include="log4net" Version="2.0.17" />
+    <PackageReference Include="Bitfinex.Net" Version="8.0.0" />
+    <PackageReference Include="log4net" Version="3.0.3" />
   </ItemGroup>
 
   <ItemGroup>
