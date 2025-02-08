@@ -20,6 +20,8 @@ using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
 using MarketConnectors.Binance.UserControls;
+using Binance.Net.Enums;
+using Binance.Net.Objects.Models.Spot.Socket;
 
 namespace MarketConnectors.Binance
 {
@@ -38,12 +40,17 @@ namespace MarketConnectors.Binance
         private Dictionary<string, long> _localOrderBooks_LastUpdate = new Dictionary<string, long>();
         private int pingFailedAttempts = 0;
         private System.Timers.Timer _timerPing;
+        private System.Timers.Timer _timerListenKey;
+
         private CallResult<UpdateSubscription> deltaSubscription;
         private CallResult<UpdateSubscription> tradesSubscription;
 
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly CustomObjectPool<VisualHFT.Model.Trade> tradePool = new CustomObjectPool<VisualHFT.Model.Trade>();//pool of Trade objects
+
+        private Dictionary<long, VisualHFT.Model.Order> _localUserOrders = new Dictionary<long, VisualHFT.Model.Order>();
+        private string ListenKey = string.Empty; 
 
         public override string Name { get; set; } = "Binance Plugin";
         public override string Version { get; set; } = "1.0.0";
@@ -110,6 +117,7 @@ namespace MarketConnectors.Binance
             await InitializeSnapshotsAsync();
             await InitializeTradesAsync();
             await InitializePingTimerAsync();
+            await InitializeUserPrivateOrders();
 
             log.Info($"Plugin has successfully started.");
             RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
@@ -303,6 +311,299 @@ namespace MarketConnectors.Binance
             _eventBuffers.ResumeConsumer();
 
         }
+        private async Task InitializePingForPrivateListenKeys()
+        {
+            _timerListenKey?.Stop();
+            _timerListenKey?.Dispose();
+
+            _timerListenKey = new System.Timers.Timer(1000 * 60 * 30); // Set the interval to 30 minutes for Refreshing Listen Key
+            _timerListenKey.Elapsed += async (sender, e) => await DoRefreshListenKeysAsync();
+            _timerListenKey.AutoReset = true;
+            _timerListenKey.Enabled = true; // Start the timer
+        }
+        private async Task DoRefreshListenKeysAsync()
+        {
+            try
+            {
+                var data = await _socketClient.SpotApi.Account.KeepAliveUserStreamAsync(this.ListenKey);
+            }
+            catch (Exception ex)
+            {
+
+
+            } 
+        }
+        private async Task InitializeUserPrivateOrders()
+        {
+            if (!string.IsNullOrEmpty(this._settings.ApiKey) && !string.IsNullOrEmpty(this._settings.ApiSecret))
+            {
+                var listenKey = await _socketClient.SpotApi.Account.StartUserStreamAsync(CancellationToken.None);
+                if (!listenKey.Success)
+                {
+                    return;
+                }
+
+                this.ListenKey = listenKey.Data.Result;
+                await InitializePingForPrivateListenKeys();
+
+                var openOrders = await _socketClient.SpotApi.Trading.GetOpenOrdersAsync();
+                if (openOrders != null && openOrders.Success)
+                {
+                    if(openOrders==null || openOrders.Data==null || openOrders.Data.Result==null || openOrders.Data.Result.Count()==0)
+                    {
+                        
+                    }
+                    else
+                    {
+                        foreach (BinanceOrder item in openOrders.Data.Result)
+                        {
+                            InitialUserOrders(item);
+                        }
+                    }
+
+                }
+                await _socketClient.SpotApi.Account.SubscribeToUserDataUpdatesAsync(this.ListenKey, neworder =>
+                { 
+                    log.Info(neworder.Data);
+                    if (neworder.Data != null)
+                    {
+                        BinanceStreamOrderUpdate item = neworder.Data;
+                        UpdateUserOrderBook(item);
+                    }
+                });
+            }
+        }
+
+        private void InitialUserOrders(BinanceOrder item)
+        {
+            VisualHFT.Model.Order localuserOrder;
+            if (!this._localUserOrders.ContainsKey(item.Id))
+            {
+                localuserOrder = new VisualHFT.Model.Order();
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.ClOrdId = !string.IsNullOrEmpty(item.ClientOrderId) ? item.ClientOrderId : item.Id.ToString();
+                localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.QuoteServerTimeStamp = item.CreateTime;
+                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.Quantity = (double)item.Quantity;
+                localuserOrder.PricePlaced = (double)item.Price;
+                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+
+                if (item.TimeInForce == TimeInForce.ImmediateOrCancel)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                }
+                else if (item.TimeInForce == TimeInForce.FillOrKill)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                }
+                this._localUserOrders.Add(item.Id, localuserOrder);
+            }
+            else
+            {
+                localuserOrder = this._localUserOrders[item.Id];
+            }
+
+            if (item.Type == SpotOrderType.Market)
+            {
+                localuserOrder.OrderType = eORDERTYPE.MARKET;
+            }
+            else if (item.Type == SpotOrderType.LimitMaker || item.Type == SpotOrderType.Limit)
+            {
+                localuserOrder.OrderType = eORDERTYPE.LIMIT;
+            }
+            else
+            {
+                localuserOrder.OrderType = eORDERTYPE.PEGGED;
+            }
+
+
+            if (item.Side == OrderSide.Buy)
+            {
+                localuserOrder.Side = eORDERSIDE.Buy;
+            }
+            if (item.Side == OrderSide.Sell)
+            {
+                localuserOrder.Side = eORDERSIDE.Sell;
+            }
+
+            if (item.Status == OrderStatus.New || item.Status == OrderStatus.PendingNew)
+            {
+                if (item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.Side = eORDERSIDE.Buy;
+                }
+                if (item.Side == OrderSide.Sell)
+                {
+                    localuserOrder.Side = eORDERSIDE.Sell;
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.Quantity = (double)item.Quantity;
+                }
+                localuserOrder.Status = eORDERSTATUS.NEW;
+            }
+            if (item.Status == OrderStatus.Filled)
+            {
+
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.FilledQuantity = (double)(item.QuantityFilled);
+                localuserOrder.Status = eORDERSTATUS.FILLED;
+            }
+            if (item.Status == OrderStatus.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+
+            if (item.Status == OrderStatus.Rejected)
+            {
+                localuserOrder.Status = eORDERSTATUS.REJECTED;
+            }
+
+            if (item.Status == OrderStatus.PartiallyFilled)
+            {
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+            }
+
+
+            if (item.Status == OrderStatus.PendingCancel)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELEDSENT;
+            }
+
+            localuserOrder.LastUpdated = DateTime.Now;
+            localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
+            RaiseOnDataReceived(localuserOrder);
+        }
+
+        private void UpdateUserOrderBook(BinanceStreamOrderUpdate item )
+        {
+            VisualHFT.Model.Order localuserOrder;
+            if (!this._localUserOrders.ContainsKey(item.Id))
+            {
+                localuserOrder = new VisualHFT.Model.Order();
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.ClOrdId = !string.IsNullOrEmpty(item.ClientOrderId) ? item.ClientOrderId : item.Id.ToString();
+                localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.QuoteServerTimeStamp = item.CreateTime;
+                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.Quantity = (double)item.Quantity;
+                localuserOrder.PricePlaced = (double)item.Price;
+                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+
+                if (item.TimeInForce == TimeInForce.ImmediateOrCancel)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                }
+                else if (item.TimeInForce == TimeInForce.FillOrKill)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                }
+                this._localUserOrders.Add(item.Id, localuserOrder);
+            }
+            else
+            {
+                localuserOrder = this._localUserOrders[item.Id];
+            }
+
+            if (item.Type == SpotOrderType.Market)
+            {
+                localuserOrder.OrderType = eORDERTYPE.MARKET;
+            }
+            else if (item.Type == SpotOrderType.LimitMaker || item.Type == SpotOrderType.Limit)
+            {
+                localuserOrder.OrderType = eORDERTYPE.LIMIT;
+            }
+            else
+            {
+                localuserOrder.OrderType = eORDERTYPE.PEGGED;
+            }
+
+
+            if (item.Side == OrderSide.Buy)
+            {
+                localuserOrder.Side = eORDERSIDE.Buy;
+            }
+            if (item.Side == OrderSide.Sell)
+            {
+                localuserOrder.Side = eORDERSIDE.Sell;
+            }
+
+            if (item.Status == OrderStatus.New || item.Status == OrderStatus.PendingNew)
+            {
+                if (item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.Side = eORDERSIDE.Buy;
+                }
+                if (item.Side == OrderSide.Sell)
+                {
+                    localuserOrder.Side = eORDERSIDE.Sell;
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.Quantity = (double)item.Quantity;
+                }
+                localuserOrder.Status = eORDERSTATUS.NEW;
+            }
+            if (item.Status == OrderStatus.Filled)
+            {
+
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.FilledQuantity = (double)(item.QuantityFilled);
+                localuserOrder.Status = eORDERSTATUS.FILLED;
+            }
+            if (item.Status == OrderStatus.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+
+            if (item.Status == OrderStatus.Rejected)
+            {
+                localuserOrder.Status = eORDERSTATUS.REJECTED;
+            }
+
+            if (item.Status == OrderStatus.PartiallyFilled)
+            {
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+            }
+
+
+            if (item.Status == OrderStatus.PendingCancel)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELEDSENT;
+            }
+
+            localuserOrder.LastUpdated = DateTime.Now;
+            localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
+            RaiseOnDataReceived(localuserOrder);
+        }
+
         private async Task InitializePingTimerAsync()
         {
             _timerPing?.Stop();

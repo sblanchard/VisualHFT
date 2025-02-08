@@ -94,26 +94,24 @@ namespace MarketConnectors.Gemini
         {
             await base.StartAsync();//call the base first 
 
-            await InitializeSnapshotAsync();
+            await InitializeSnapshotAsync();  
+            
 
-            var symbols = GetAllNormalizedSymbols();
+            await InitializeDeltasAsync();
+            await InitializeUserPrivateOrders();
+             
+        }
 
-            geminiSubscription.subscriptions = new List<Subscription>();
-            geminiSubscription.subscriptions.Add(new Subscription()
-            {
-                symbols = GetAllNonNormalizedSymbols()
-            });
-
-            if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret))
-            {
-                await Task.Run(async () =>
-                {
-                    await StartUserOrderEvents();
-                });
-            }
-
+        private async Task InitializeDeltasAsync()
+        {
             try
             {
+                geminiSubscription.subscriptions = new List<Subscription>();
+                geminiSubscription.subscriptions.Add(new Subscription()
+                {
+                    symbols = GetAllNonNormalizedSymbols()
+                });
+
                 await Task.Run(async () =>
                 {
                     var exitEvent = new ManualResetEvent(false);
@@ -197,74 +195,77 @@ namespace MarketConnectors.Gemini
                 return BitConverter.ToString(hash).Replace("-", "").ToLower();
             }
         }
-        private async Task StartUserOrderEvents()
+        private async Task InitializeUserPrivateOrders()
         {
-            try
+            if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret))
             {
-                var payload = new
-                {
-                    request = "/v1/order/events",
-                    nonce = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 5
-                };
-
-                string payloadstring = JsonConvert.SerializeObject(payload);
-                var encodedPayload = Encoding.UTF8.GetBytes(payloadstring);
-                var b64 = Convert.ToBase64String(encodedPayload);
-                var signature = CreateSignature(b64);
-
-                var factory = new Func<ClientWebSocket>(() =>
-                {
-                    var client = new ClientWebSocket
-                    {
-                        Options =
-                    {
-                        KeepAliveInterval = TimeSpan.FromSeconds(30),
-                    }
-                    };
-                    client.Options.SetRequestHeader("X-GEMINI-APIKEY", _settings.ApiKey);
-                    client.Options.SetRequestHeader("X-GEMINI-PAYLOAD", b64);
-                    client.Options.SetRequestHeader("X-GEMINI-SIGNATURE", signature);
-
-                    return client;
-                });
-
-                var exitEvent = new ManualResetEvent(false);
-                _userOrderEvents = new WebsocketClient(new Uri(_settings.WebSocketHostName), factory);
-                _userOrderEvents.ReconnectTimeout = TimeSpan.FromSeconds(30);
-                _userOrderEvents.ReconnectionHappened.Subscribe(info =>
-                {
-
-
-                });
-                _userOrderEvents.DisconnectionHappened.Subscribe(disconnected =>
-                {
-
-                });
-                _userOrderEvents.MessageReceived.Subscribe(async msg =>
-                {
-                    string data = msg.ToString();
-                    HandleUserOrderMessage(data);
-                });
                 try
                 {
+                    var payload = new
+                    {
+                        request = "/v1/order/events",
+                        nonce = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 5
+                    };
 
-                    await _userOrderEvents.Start();
+                    string payloadstring = JsonConvert.SerializeObject(payload);
+                    var encodedPayload = Encoding.UTF8.GetBytes(payloadstring);
+                    var b64 = Convert.ToBase64String(encodedPayload);
+                    var signature = CreateSignature(b64);
 
-                    log.Info($"Plugin has successfully started.");
+                    var factory = new Func<ClientWebSocket>(() =>
+                    {
+                        var client = new ClientWebSocket
+                        {
+                            Options =
+                        {
+                        KeepAliveInterval = TimeSpan.FromSeconds(30),
+                        }
+                        };
+                        client.Options.SetRequestHeader("X-GEMINI-APIKEY", _settings.ApiKey);
+                        client.Options.SetRequestHeader("X-GEMINI-PAYLOAD", b64);
+                        client.Options.SetRequestHeader("X-GEMINI-SIGNATURE", signature);
+
+                        return client;
+                    });
+
+                    var exitEvent = new ManualResetEvent(false);
+                    _userOrderEvents = new WebsocketClient(new Uri(_settings.WebSocketHostName), factory);
+                    _userOrderEvents.ReconnectTimeout = TimeSpan.FromSeconds(30);
+                    _userOrderEvents.ReconnectionHappened.Subscribe(info =>
+                    {
+
+
+                    });
+                    _userOrderEvents.DisconnectionHappened.Subscribe(disconnected =>
+                    {
+
+                    });
+                    _userOrderEvents.MessageReceived.Subscribe(async msg =>
+                    {
+                        string data = msg.ToString();
+                        HandleUserOrderMessage(data);
+                    });
+                    try
+                    {
+
+                        await _userOrderEvents.Start();
+
+                        log.Info($"Plugin has successfully started.");
+                    }
+                    catch (Exception ex)
+                    {
+                        var _error = ex.Message;
+                        log.Error(_error, ex);
+                    }
                 }
+
                 catch (Exception ex)
                 {
                     var _error = ex.Message;
-                    log.Error(_error, ex);
+
                 }
+                CancellationTokenSource source = new CancellationTokenSource();
             }
-
-            catch (Exception ex)
-            {
-                var _error = ex.Message;
-
-            }
-            CancellationTokenSource source = new CancellationTokenSource();
         }
 
         public async Task InitializeSnapshotAsync()
@@ -713,12 +714,7 @@ namespace MarketConnectors.Gemini
             return view;
         }
         protected override void InitializeDefaultSettings()
-        {  /*
-             *   //https://api.gemini.com/v1/book/:symbol
-            //wss://api.gemini.com/v1/marketdata?heartbeat=true
-             * 
-             */
-
+        {   
             _settings = new PlugInSettings()
             {
                 ApiKey = "",

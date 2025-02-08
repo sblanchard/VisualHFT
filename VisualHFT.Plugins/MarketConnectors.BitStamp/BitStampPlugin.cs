@@ -136,11 +136,7 @@ namespace MarketConnectors.Gemini
 
                         _ws.MessageReceived.Subscribe(async msg =>
                         {
-                            string data = msg.ToString();
-                            if (data.Contains("trade"))
-                            {
-
-                            }
+                            string data = msg.ToString(); 
                             HandleMessage(data, DateTime.Now);
                             RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
                         });
@@ -264,9 +260,7 @@ namespace MarketConnectors.Gemini
 
         private void HandleMessage(string marketData, DateTime serverTime)
         {
-            string message = marketData;
-
-
+            string message = marketData; 
             dynamic data = JsonConvert.DeserializeObject<dynamic>(message);
             if (data.@event == "data")
             {

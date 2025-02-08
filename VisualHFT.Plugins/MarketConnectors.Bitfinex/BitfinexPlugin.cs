@@ -47,6 +47,7 @@ namespace MarketConnectors.Bitfinex
 
         private readonly CustomObjectPool<VisualHFT.Model.Trade> tradePool = new CustomObjectPool<VisualHFT.Model.Trade>();//pool of Trade objects
 
+        private Dictionary<long, VisualHFT.Model.Order> _localUserOrders = new Dictionary<long, VisualHFT.Model.Order>();
 
         public override string Name { get; set; } = "Bitfinex Plugin";
         public override string Version { get; set; } = "1.0.0";
@@ -83,6 +84,9 @@ namespace MarketConnectors.Bitfinex
                     options.ApiCredentials = new ApiCredentials(_settings.ApiKey, _settings.ApiSecret);
                 options.Environment = BitfinexEnvironment.Live;
             });
+
+            var account = await _restClient.SpotApi.Account.GetBalancesAsync(CancellationToken.None);
+
             try
             {
                 await InternalStartAsync();
@@ -114,6 +118,7 @@ namespace MarketConnectors.Bitfinex
 
             await InitializeSnapshotsAsync();
             await InitializeTradesAsync();
+            await InitializeUserPrivateOrders();
             await InitializeDeltasAsync();
             await InitializePingTimerAsync();
         }
@@ -205,6 +210,133 @@ namespace MarketConnectors.Bitfinex
                     throw new Exception(_error);
                 }
             }
+        }
+        private async Task InitializeUserPrivateOrders()
+        {
+            if (string.IsNullOrEmpty(this._settings.ApiKey) && !string.IsNullOrEmpty(this._settings.ApiSecret))
+            {
+                await _socketClient.SpotApi.SubscribeToUserUpdatesAsync(async neworder =>
+                {
+                    log.Info(neworder.Data);
+                    if (neworder.Data != null)
+                    {
+                        IEnumerable<BitfinexOrder> item = neworder.Data;
+
+                        foreach (var order in item)
+                        {
+                            await UpdateUserOrder(order);
+                        }
+                    }
+                });
+            }
+        }
+        private async Task UpdateUserOrder(BitfinexOrder item)
+        {
+            VisualHFT.Model.Order localuserOrder;
+            if (!this._localUserOrders.ContainsKey(item.Id))
+            {
+                localuserOrder = new VisualHFT.Model.Order();
+                localuserOrder.ClOrdId = item.ClientOrderId.HasValue ? item.ClientOrderId.Value.ToString() : item.Id.ToString();
+                localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.QuoteServerTimeStamp = item.CreateTime;
+                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.Quantity = (double)item.Quantity;
+                localuserOrder.PricePlaced = (double)item.Price;
+                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+
+                if (item.Type == OrderType.ImmediateOrCancel)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                }
+                else if (item.Type == OrderType.FillOrKill || item.Type == OrderType.ExchangeFillOrKill)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                }
+                this._localUserOrders.Add(item.Id, localuserOrder);
+            }
+            else
+            {
+                localuserOrder = this._localUserOrders[item.Id];
+            }
+
+
+            if (item.Type == OrderType.Market || item.Type == OrderType.ExchangeMarket)
+            {
+                localuserOrder.OrderType = eORDERTYPE.MARKET;
+            }
+            else if (item.Type == OrderType.Limit || item.Type == OrderType.ExchangeLimit)
+            {
+                localuserOrder.OrderType = eORDERTYPE.LIMIT;
+            }
+            else
+            {
+                localuserOrder.OrderType = eORDERTYPE.PEGGED;
+            }
+
+
+            if (item.Side == OrderSide.Buy)
+            {
+                localuserOrder.Side = eORDERSIDE.Buy;
+            }
+            if (item.Side == OrderSide.Sell)
+            {
+                localuserOrder.Side = eORDERSIDE.Sell;
+            }
+
+            if (item.Status == OrderStatus.Active || item.Status == OrderStatus.Unknown)
+            {
+                if (item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.Side = eORDERSIDE.Buy;
+                }
+                if (item.Side == OrderSide.Sell)
+                {
+                    localuserOrder.Side = eORDERSIDE.Sell;
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.Quantity = (double)item.Quantity;
+                }
+                localuserOrder.Status = eORDERSTATUS.NEW;
+            }
+            if (item.Status == OrderStatus.Executed)
+            {
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.FilledQuantity = (double)(item.Quantity - item.QuantityRemaining);
+                localuserOrder.Status = eORDERSTATUS.FILLED;
+            }
+            if (item.Status == OrderStatus.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+            if (item.Status == OrderStatus.PartiallyFilled)
+            {
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+            }
+
+            if (item.Status == OrderStatus.Unknown)
+            {
+                //localuserOrder.Status = eORDERSTATUS.;
+            }
+
+
+            localuserOrder.GetAvgPrice = item.PriceAverage.HasValue ? (double)item.PriceAverage.Value : 0;
+            localuserOrder.LastUpdated = DateTime.Now;
+            localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
+            RaiseOnDataReceived(localuserOrder);
         }
         private async Task InitializeDeltasAsync()
         {
@@ -390,31 +522,33 @@ namespace MarketConnectors.Bitfinex
 
             var local_lob = _localOrderBooks[symbol];
 
-            if (lob_update.Count > 0) //add or update level
+            if (local_lob != null)
             {
-                bool isBid = lob_update.Quantity > 0;
-                var delta = new DeltaBookItem()
+                if (lob_update.Count > 0) //add or update level
                 {
-                    //EntryID = lob_update.Price.ToString(),
-                    Price = (double)lob_update.Price,
-                    Size = (double)Math.Abs(lob_update.Quantity),
-                    IsBid = isBid,
-                    LocalTimeStamp = DateTime.Now,
-                    ServerTimeStamp = ts,
-                    Symbol = local_lob.Symbol,
-                    MDUpdateAction = eMDUpdateAction.None,
-                };
-                local_lob.AddOrUpdateLevel(delta);
-            }
-            else if (Math.Abs(lob_update.Quantity) == 1)
-            {
-                local_lob.DeleteLevel(new DeltaBookItem()
+                    bool isBid = lob_update.Quantity > 0;
+                    var delta = new DeltaBookItem()
+                    {
+                        //EntryID = lob_update.Price.ToString(),
+                        Price = (double)lob_update.Price,
+                        Size = (double)Math.Abs(lob_update.Quantity),
+                        IsBid = isBid,
+                        LocalTimeStamp = DateTime.Now,
+                        ServerTimeStamp = ts,
+                        Symbol = local_lob.Symbol,
+                        MDUpdateAction = eMDUpdateAction.None,
+                    };
+                    local_lob.AddOrUpdateLevel(delta);
+                }
+                else if (Math.Abs(lob_update.Quantity) == 1)
                 {
-                    IsBid = lob_update.Quantity == 1,
-                    Price = (double)lob_update.Price
-                });
+                    local_lob.DeleteLevel(new DeltaBookItem()
+                    {
+                        IsBid = lob_update.Quantity == 1,
+                        Price = (double)lob_update.Price
+                    });
+                }
             }
-
             RaiseOnDataReceived(local_lob);
         }
         private async Task DoPingAsync()
@@ -577,7 +711,7 @@ namespace MarketConnectors.Bitfinex
                 ApiSecret = "",
                 DepthLevels = 25,
                 Provider = new VisualHFT.Model.Provider() { ProviderID = 2, ProviderName = "Bitfinex" },
-                Symbols = new List<string>() { "tBTCUSD(BTC/USD)", "tETHUSD(ETH/USD)" } // Add more symbols as needed
+                Symbols = new List<string>() { "BTCUSD(BTC/USD)", "ETHUSD(ETH/USD)" } // Add more symbols as needed
             };
             SaveToUserSettings(_settings);
         }

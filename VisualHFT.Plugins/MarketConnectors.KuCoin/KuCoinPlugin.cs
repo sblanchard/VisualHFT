@@ -512,21 +512,20 @@ namespace MarketConnectors.KuCoin
         {
             if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) && !string.IsNullOrEmpty(_settings.APIPassPhrase))
             {
-                await _socketClient.SpotApi.SubscribeToOrderUpdatesAsync(neworder =>
+                await _socketClient.SpotApi.SubscribeToOrderUpdatesAsync(async neworder =>
             {
                 log.Info(neworder.Data);
                 if (neworder.Data != null)
                 {
                     KucoinStreamOrderNewUpdate item = neworder.Data;
-                    UpdateUserOrder(item);
+                    await UpdateUserOrder(item);
                 }
-            }, onOrderData =>
+            }, async onOrderData =>
             {
                 if (onOrderData.Data != null)
                 {
-
                     KucoinStreamOrderUpdate item = onOrderData.Data; 
-                    UpdateUserOrder(item);
+                    await UpdateUserOrder(item);
                 }
             },
 
