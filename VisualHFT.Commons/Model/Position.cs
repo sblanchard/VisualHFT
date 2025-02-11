@@ -1,231 +1,231 @@
-﻿namespace VisualHFT.Model
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using VisualHFT.Helpers;
+using VisualHFT.Enums;
+
+namespace VisualHFT.Model
 {
-    using System;
-    using System.Collections.Generic;
-    using VisualHFT.Enums;
-
-    public partial class Position
+    public class Position
     {
-        public Position()
-        {
-            this.CloseExecutions = new List<Execution>();
-            this.OpenExecutions = new List<Execution>();
-        }
-        public Position(Position p)
-        {
-            this.CloseExecutions = p.CloseExecutions.Select(x => new Execution(x, p.Symbol)).ToList();
-            this.OpenExecutions = p.OpenExecutions.Select(x => new Execution(x, p.Symbol)).ToList();
+        private string _symbol;
+        private double _totBuy;
+        private double _totSell;
+        private double _wrkBuy;
+        private double _wrkSell;
+        private double _plTot;
+        private double _plRealized;
+        private double _plOpen;
+        private double _currentMidPrice;
+        private PositionManagerCalculationMethod _method;
+        private List<Order> _buys;
+        private List<Order> _sells;
+        private DateTime _lastUpdated;
+        private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
 
 
-            this.AttemptsToClose = p.AttemptsToClose;
-            this.CloseBestAsk = p.CloseBestAsk;
-            this.CloseBestBid = p.CloseBestBid;
-            this.CloseClOrdId = p.CloseClOrdId;
-            this.CloseFireSignalTimestamp = p.CloseFireSignalTimestamp;
-            this.CloseOriginPartyID = p.CloseOriginPartyID;
-            this.CloseProviderId = p.CloseProviderId;
-            this.CloseQuoteId = p.CloseQuoteId;
-            this.CloseQuoteLocalTimeStamp = p.CloseQuoteLocalTimeStamp;
-            this.CloseQuoteServerTimeStamp = p.CloseQuoteServerTimeStamp;
-            this.CloseStatus = p.CloseStatus;
-            this.CloseTimeStamp = p.CloseTimeStamp;
-            this.CreationTimeStamp = p.CreationTimeStamp;
-            this.Currency = p.Currency;
-            this.FreeText = p.FreeText;
-            this.FutSettDate = p.FutSettDate;
-            this.GetCloseAvgPrice = p.GetCloseAvgPrice;
-            this.GetCloseQuantity = p.GetCloseQuantity;
-            this.GetOpenAvgPrice = p.GetOpenAvgPrice;
-            this.GetOpenQuantity = p.GetOpenQuantity;
-            this.GetPipsPnL = p.GetPipsPnL;
-            this.ID = p.ID;
-            this.IsCloseMM = p.IsCloseMM;
-            this.IsOpenMM = p.IsOpenMM;
-            this.LayerName = this.LayerName;
-            this.MaxDrowdown = p.MaxDrowdown;
-            this.OpenBestAsk = p.OpenBestAsk;
-            this.OpenBestBid = p.OpenBestBid;
-            this.OpenClOrdId = p.OpenClOrdId;
-            this.OpenFireSignalTimestamp = p.OpenFireSignalTimestamp;
-            this.OpenOriginPartyID = p.OpenOriginPartyID;
-            this.OpenProviderId = p.OpenProviderId;
-            this.OpenQuoteId = p.OpenQuoteId;
-            this.OpenQuoteLocalTimeStamp = p.OpenQuoteLocalTimeStamp;
-            this.OpenQuoteServerTimeStamp = p.OpenQuoteServerTimeStamp;
-            this.OpenStatus = p.OpenStatus;
-            this.OrderQuantity = p.OrderQuantity;
-            this.PipsPnLInCurrency = p.PipsPnLInCurrency;
-            this.PipsTrail = p.PipsTrail;
-            this.PositionID = p.PositionID;
-            this.Side = p.Side;
-            this.StopLoss = p.StopLoss;
-            this.StrategyCode = p.StrategyCode;
-            this.Symbol = p.Symbol;
-            this.SymbolDecimals = p.SymbolDecimals;
-            this.SymbolMultiplier = p.SymbolMultiplier;
-            this.TakeProfit = p.TakeProfit;
-            this.UnrealizedPnL = p.UnrealizedPnL;
-        }
-        ~Position()
+        public Position(string symbol, PositionManagerCalculationMethod method)
         {
-            if (this.CloseExecutions != null)
-                this.CloseExecutions.Clear();
-            this.CloseExecutions = null;
-
-            if (this.OpenExecutions != null)
-                this.OpenExecutions.Clear();
-            this.OpenExecutions = null;
+            _method = method;
+            _symbol = symbol;
+            _buys = new List<Order>();
+            _sells = new List<Order>();
         }
 
-        public string OpenProviderName { get; set; }
-        public string CloseProviderName { get; set; }
-        public List<Execution> AllExecutions
+        public Position(List<Order> orders, PositionManagerCalculationMethod method)
         {
-            get
+            _method = method;
+            if (orders.Select(x => x.Symbol).Distinct().Count() > 1)
+                throw new Exception("This class is not able to handle orders with multiple symbols.");
+
+            _buys = orders.Where(x => x.Side == eORDERSIDE.Buy).DefaultIfEmpty(new Order()).ToList();
+            _sells = orders.Where(x => x.Side == eORDERSIDE.Sell).DefaultIfEmpty(new Order()).ToList();
+
+            Symbol = orders.First().Symbol;
+
+            Recalculate();
+        }
+
+        public string Symbol
+        {
+            get => _symbol;
+            private set => _symbol = value;
+        }
+
+        public double TotBuy
+        {
+            get => _totBuy;
+            private set => _totBuy = value;
+        }
+
+        public double TotSell
+        {
+            get => _totSell;
+            private set => _totSell = value;
+        }
+
+        public double WrkBuy
+        {
+            get => _wrkBuy;
+            private set => _wrkBuy = value;
+        }
+
+        public double WrkSell
+        {
+            get => _wrkSell;
+            private set => _wrkSell = value;
+        }
+
+        public double PLTot
+        {
+            get => _plTot;
+            private set => _plTot = value;
+        }
+
+        public double PLRealized
+        {
+            get => _plRealized;
+            private set => _plRealized = value;
+        }
+
+        public double PLOpen
+        {
+            get => _plOpen;
+            private set => _plOpen = value;
+        }
+
+        public DateTime LastUpdated
+        {
+            get => _lastUpdated;
+            private set => _lastUpdated = value;
+        }
+
+        public double NetPosition => _totBuy - _totSell;
+        public double Exposure => NetPosition * _currentMidPrice;
+
+        public bool UpdateCurrentMidPrice(double value)
+        {
+            _lock.EnterReadLock();
+            try
             {
-                var _ret = new List<Execution>();
-                if (this.OpenExecutions != null && this.OpenExecutions.Any())
-                    _ret.AddRange(this.OpenExecutions);
-
-                if (this.CloseExecutions != null && this.CloseExecutions.Any())
-                    _ret.AddRange(this.CloseExecutions);
-                return _ret/*.OrderBy(x => x.ServerTimeStamp)*/.ToList();
+                if (_currentMidPrice == value)
+                    return false;
+                _currentMidPrice = value;
+                Recalculate(false);
+                return true;
             }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+
         }
 
-
-        public long ID { get; set; }
-        public long PositionID { get; set; }
-        public int AttemptsToClose { get; set; }
-        public string CloseClOrdId { get; set; }
-        public int CloseProviderId { get; set; }
-        public Nullable<int> CloseQuoteId { get; set; }
-        public Nullable<System.DateTime> CloseQuoteLocalTimeStamp { get; set; }
-        public Nullable<System.DateTime> CloseQuoteServerTimeStamp { get; set; }
-        public int CloseStatus { get; set; }
-        public System.DateTime CloseTimeStamp { get; set; }
-        public System.DateTime CreationTimeStamp { get; set; }
-        public string Currency { get; set; }
-        public string FreeText { get; set; }
-        public Nullable<System.DateTime> FutSettDate { get; set; }
-        public decimal GetCloseAvgPrice { get; set; }
-        public decimal GetCloseQuantity { get; set; }
-        public decimal GetOpenAvgPrice { get; set; }
-        public decimal GetOpenQuantity { get; set; }
-        public decimal GetPipsPnL { get; set; }
-        public bool IsCloseMM { get; set; }
-        public bool IsOpenMM { get; set; }
-        public decimal MaxDrowdown { get; set; }
-        public string OpenClOrdId { get; set; }
-        public int OpenProviderId { get; set; }
-        public Nullable<int> OpenQuoteId { get; set; }
-        public Nullable<System.DateTime> OpenQuoteLocalTimeStamp { get; set; }
-        public Nullable<System.DateTime> OpenQuoteServerTimeStamp { get; set; }
-        public int OpenStatus { get; set; }
-        public decimal OrderQuantity { get; set; }
-        public decimal PipsTrail { get; set; }
-        public ePOSITIONSIDE Side { get; set; }
-        public decimal StopLoss { get; set; }
-        public string StrategyCode { get; set; }
-        public string Symbol { get; set; }
-        public int SymbolDecimals { get; set; }
-        public int SymbolMultiplier { get; set; }
-        public decimal TakeProfit { get; set; }
-        public decimal UnrealizedPnL { get; set; }
-        public Nullable<decimal> OpenBestBid { get; set; }
-        public Nullable<decimal> OpenBestAsk { get; set; }
-        public Nullable<decimal> CloseBestBid { get; set; }
-        public Nullable<decimal> CloseBestAsk { get; set; }
-        public string OpenOriginPartyID { get; set; }
-        public string CloseOriginPartyID { get; set; }
-        public string LayerName { get; set; }
-        public Nullable<System.DateTime> OpenFireSignalTimestamp { get; set; }
-        public Nullable<System.DateTime> CloseFireSignalTimestamp { get; set; }
-        public Nullable<decimal> PipsPnLInCurrency { get; set; }
-
-        public virtual List<Execution> CloseExecutions { get; set; }
-        public virtual List<Execution> OpenExecutions { get; set; }
-        private Order GetOrder(bool isOpen)
+        public void AddOrUpdateOrder(Order newExecutionOrder, out Order? outAddedOrder, out Order? outUpdatedOrder)
         {
-            if (!string.IsNullOrEmpty(this.OpenClOrdId))
+            if (newExecutionOrder.OrderID == 0)
+                throw new ArgumentException("OrderID must be set for the execution order.");
+            if (newExecutionOrder.Status == eORDERSTATUS.NONE)
+                throw new ArgumentException("Status must be set for the execution order.");
+
+            bool isNewOrder = false;
+            _lock.EnterWriteLock();
+            try
             {
-                Order o = new Order();
-                //o.OrderID
-                o.Currency = this.Currency;
-                o.ClOrdId = isOpen ? this.OpenClOrdId : this.CloseClOrdId;
-                o.ProviderId = isOpen ? this.OpenProviderId : this.CloseProviderId;
-                o.ProviderName = isOpen ? this.OpenProviderName : this.CloseProviderName;
-                o.LayerName = this.LayerName;
-                o.AttemptsToClose = this.AttemptsToClose;
-                o.BestAsk = isOpen ? this.OpenBestAsk.ToDouble() : this.CloseBestAsk.ToDouble();
-                o.BestBid = isOpen ? this.OpenBestBid.ToDouble() : this.CloseBestBid.ToDouble();
-                o.CreationTimeStamp = isOpen ? this.OpenQuoteLocalTimeStamp.ToDateTime() : this.CloseQuoteLocalTimeStamp.ToDateTime();
-                o.Executions = isOpen ? this.OpenExecutions.ToList() : this.CloseExecutions.ToList();
-                o.SymbolMultiplier = this.SymbolMultiplier;
-                o.Symbol = this.Symbol;
-                o.FreeText = this.FreeText;
-                o.Status = (eORDERSTATUS)(isOpen ? this.OpenStatus : this.CloseStatus);
-                o.GetAvgPrice = isOpen ? this.GetOpenAvgPrice.ToDouble() : this.GetCloseAvgPrice.ToDouble();
-
-                o.GetQuantity = isOpen ? this.GetOpenQuantity.ToDouble() : this.GetCloseQuantity.ToDouble();
-                o.Quantity = this.OrderQuantity.ToDouble();
-                o.FilledQuantity = isOpen ? this.GetOpenQuantity.ToDouble() : this.GetCloseQuantity.ToDouble();
-
-                o.IsEmpty = false;
-                o.IsMM = isOpen ? this.IsOpenMM : this.IsCloseMM;
-                //o.MaxDrowdown = 
-                //o.MinQuantity = 
-                //o.OrderID = 
-
-                //TO-DO: we need to find a way to add this.
-                //*************o.OrderType = this 
-
-                //o.PipsTrail
-
-                o.PricePlaced = o.Executions.Where(x => x.Status == ePOSITIONSTATUS.SENT || x.Status == ePOSITIONSTATUS.NEW || x.Status == ePOSITIONSTATUS.REPLACESENT)
-                    .First().Price.ToDouble();
-                if (o.PricePlaced == 0) //if this happens, is because the data is corrupted. But, in order to auto-fix it, we use AvgPrice
+                if (newExecutionOrder.Side == eORDERSIDE.Buy)
                 {
-                    o.PricePlaced = o.GetAvgPrice;
+                    if (_buys == null)
+                        _buys = new List<Order>();
+                    var existingOrder = _buys.FirstOrDefault(x => x.OrderID == newExecutionOrder.OrderID);
+                    if (existingOrder == null)
+                    {
+                        _buys.Add(newExecutionOrder);
+                        isNewOrder = true;
+                    }
+                    else
+                    {
+                        existingOrder.Update(newExecutionOrder);
+                    }
                 }
-                o.QuoteID = isOpen ? this.OpenQuoteId.ToInt() : this.CloseQuoteId.ToInt();
-                o.QuoteLocalTimeStamp = isOpen ? this.OpenQuoteLocalTimeStamp.ToDateTime() : this.CloseQuoteLocalTimeStamp.ToDateTime();
-                o.QuoteServerTimeStamp = isOpen ? this.OpenQuoteServerTimeStamp.ToDateTime() : this.CloseQuoteServerTimeStamp.ToDateTime();
-                if (isOpen)
-                    o.Side = (eORDERSIDE)this.Side;
                 else
-                    o.Side = (eORDERSIDE)(this.Side == ePOSITIONSIDE.Sell ? eORDERSIDE.Buy : eORDERSIDE.Sell); //the opposite
-                //o.StopLoss = 
-                o.StrategyCode = this.StrategyCode;
-                o.SymbolDecimals = this.SymbolDecimals;
-                o.SymbolMultiplier = this.SymbolMultiplier;
-                //o.TakeProfit
-
-                //TO-DO: we need to find a way to add this.
-                //*************o.TimeInForce = 
-
-                //o.UnrealizedPnL               
-                o.LastUpdated = HelperTimeProvider.Now;
-                o.FilledPercentage = 100 * (o.FilledQuantity / o.Quantity);
-                return o;
+                {
+                    if (_sells == null)
+                        _sells = new List<Order>();
+                    var existingOrder = _sells.FirstOrDefault(x => x.OrderID == newExecutionOrder.OrderID);
+                    if (existingOrder == null)
+                    {
+                        _sells.Add(newExecutionOrder);
+                        isNewOrder = true;
+                    }
+                    else
+                    {
+                        existingOrder.Update(newExecutionOrder);
+                    }
+                }
+                Recalculate();
             }
-            return null;
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+
+            if (isNewOrder)
+            {
+                outAddedOrder = newExecutionOrder;
+                outUpdatedOrder = null;
+            }
+            else
+            {
+                outAddedOrder = null;
+                outUpdatedOrder = newExecutionOrder;
+            }
         }
-        public List<Order> GetOrders()
+
+        public List<Order> GetAllOrders(DateTime? sessionDate)
         {
+            _lock.EnterReadLock();
+            try
+            {
+                if (sessionDate == null)
+                    return _buys.Concat(_sells).ToList();
 
-            Order openOrder = GetOrder(true);
-            Order closeOrder = GetOrder(false);
-            var orders = new List<Order>();
-            if (openOrder != null)
-                orders.Add(openOrder);
-            if (closeOrder != null)
-                orders.Add(closeOrder);
-
-
-            return orders;
+                return _buys.Concat(_sells)
+                    .Where(order => order.CreationTimeStamp.Date == sessionDate.Value.Date)
+                    .ToList();
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
         }
 
+        private void Recalculate(bool recalculateBuysSellsAgain = true)
+        {
+            try
+            {
+                if (recalculateBuysSellsAgain)
+                {
+                    _totBuy = _buys.Sum(x => x.FilledQuantity);
+                    _totSell = _sells.Sum(x => x.FilledQuantity);
+
+                    _wrkBuy = _buys.Sum(x => x.PendingQuantity);
+                    _wrkSell = _sells.Sum(x => x.PendingQuantity);
+                }
+
+                _plRealized = HelperPnLCalculator.CalculateRealizedPnL(_buys, _sells, _method);
+                _plOpen = HelperPnLCalculator.CalculateOpenPnL(_buys, _sells, _method, _currentMidPrice);
+                _plTot = _plRealized + _plOpen;
+
+                _lastUpdated = HelperTimeProvider.Now;
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+
+
+        }
 
     }
 }

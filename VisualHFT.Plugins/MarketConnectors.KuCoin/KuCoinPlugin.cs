@@ -1,15 +1,13 @@
 ﻿using Kucoin.Net;
 using Kucoin.Net.Clients;
-using Kucoin.Net.Objects.Models;
 using Kucoin.Net.Enums;
-
-using CryptoExchange.Net.Authentication;
 using CryptoExchange.Net.Objects;
 using MarketConnectors.KuCoin.Model;
 using MarketConnectors.KuCoin.UserControls;
 using MarketConnectors.KuCoin.ViewModel;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,24 +21,26 @@ using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using Kucoin.Net.Objects.Models.Spot;
 using Kucoin.Net.Objects.Models.Spot.Socket;
-using System.Data;
 using CryptoExchange.Net.CommonObjects;
-using Kucoin.Net.Objects;
-using System.Runtime.CompilerServices;
+using Kucoin.Net.Interfaces.Clients;
+using VisualHFT.Commons.Interfaces;
+using Order = CryptoExchange.Net.CommonObjects.Order;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace MarketConnectors.KuCoin
 {
-    public class KuCoinPlugin : BasePluginDataRetriever
+    public class KuCoinPlugin : BasePluginDataRetriever, IDataRetrieverTestable
     {
         private bool _disposed = false; // to track whether the object has been disposed
 
         private PlugInSettings _settings;
-        private KucoinSocketClient _socketClient;
-        private KucoinRestClient _restClient;
+        private IKucoinSocketClient _socketClient;
+        private IKucoinRestClient _restClient;
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
 
-        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>> _eventBuffers =
-            new Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>>();
+        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>> _eventBuffers =
+            new Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>>();
 
         private Dictionary<string, HelperCustomQueue<Tuple<string, KucoinTrade>>> _tradesBuffers =
             new Dictionary<string, HelperCustomQueue<Tuple<string, KucoinTrade>>>();
@@ -68,6 +68,8 @@ namespace MarketConnectors.KuCoin
 
         public KuCoinPlugin()
         {
+            _socketClient = new KucoinSocketClient();
+            _restClient = new KucoinRestClient();
             SetReconnectionAction(InternalStartAsync);
             log.Info($"{this.Name} has been loaded.");
         }
@@ -126,7 +128,7 @@ namespace MarketConnectors.KuCoin
             // Initialize event buffer for each symbol
             foreach (var symbol in GetAllNormalizedSymbols())
             {
-                _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>($"<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
+                _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>($"<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
                 _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, KucoinTrade>>($"<Tuple<DateTime, string, KucoinTrade>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
             }
 
@@ -253,7 +255,6 @@ namespace MarketConnectors.KuCoin
                             localuserOrder.CreationTimeStamp = item.Timestamp;
                             localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                             //localuserOrder.OrderID = long.Parse(item.OrderId);
-                            localuserOrder.QuoteServerTimeStamp = item.Timestamp;
                             localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                             localuserOrder.ProviderName = _settings.Provider.ProviderName;
                             localuserOrder.CreationTimeStamp = item.Timestamp;
@@ -303,7 +304,6 @@ namespace MarketConnectors.KuCoin
 
                         if (item.Side == CommonOrderSide.Buy)
                         {
-                            localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                             localuserOrder.PricePlaced = (double)item.Price;
                             localuserOrder.BestBid = (double)item.Price;
                             localuserOrder.Side = eORDERSIDE.Buy;
@@ -312,10 +312,8 @@ namespace MarketConnectors.KuCoin
                         {
                             localuserOrder.Side = eORDERSIDE.Sell;
                             localuserOrder.BestAsk = (double)item.Price;
-                            localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                             localuserOrder.Quantity = (double)item.Quantity;
                         }
-                        localuserOrder.GetAvgPrice = (double)item.Price;
                         localuserOrder.LastUpdated = DateTime.Now;
                         localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
                         RaiseOnDataReceived(localuserOrder);
@@ -336,7 +334,6 @@ namespace MarketConnectors.KuCoin
                 localuserOrder.CreationTimeStamp = item.OrderTime.Value;
                 localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 //localuserOrder.OrderID = long.Parse(item.OrderId);
-                localuserOrder.QuoteServerTimeStamp = item.OrderTime.Value;
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.OrderTime.Value;
@@ -386,7 +383,6 @@ namespace MarketConnectors.KuCoin
 
             if (item.Side == OrderSide.Buy)
             {
-                localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                 localuserOrder.PricePlaced = (double)item.Price;
                 localuserOrder.BestBid = (double)item.Price;
                 localuserOrder.Side = eORDERSIDE.Buy;
@@ -395,10 +391,8 @@ namespace MarketConnectors.KuCoin
             {
                 localuserOrder.Side = eORDERSIDE.Sell;
                 localuserOrder.BestAsk = (double)item.Price;
-                localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                 localuserOrder.Quantity = (double)item.OriginalQuantity;
             }
-            localuserOrder.GetAvgPrice = (double)item.Price;
             localuserOrder.LastUpdated = DateTime.Now;
             localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
             RaiseOnDataReceived(localuserOrder);
@@ -414,7 +408,6 @@ namespace MarketConnectors.KuCoin
                 localuserOrder.CreationTimeStamp = item.OrderTime.Value;
                 localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 //localuserOrder.OrderID = long.Parse(item.OrderId);
-                localuserOrder.QuoteServerTimeStamp = item.OrderTime.Value;
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.OrderTime.Value;
@@ -464,7 +457,6 @@ namespace MarketConnectors.KuCoin
 
             if (item.Side == OrderSide.Buy)
             {
-                localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                 localuserOrder.PricePlaced = (double)item.Price;
                 localuserOrder.BestBid = (double)item.Price;
                 localuserOrder.Side = eORDERSIDE.Buy;
@@ -473,7 +465,6 @@ namespace MarketConnectors.KuCoin
             {
                 localuserOrder.Side = eORDERSIDE.Sell;
                 localuserOrder.BestAsk = (double)item.Price;
-                localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                 localuserOrder.Quantity = (double)item.OriginalQuantity;
             }
 
@@ -503,7 +494,6 @@ namespace MarketConnectors.KuCoin
                 localuserOrder.Status = eORDERSTATUS.CANCELED;
             }
 
-            localuserOrder.GetAvgPrice = (double)item.Price;
             localuserOrder.LastUpdated = DateTime.Now;
             localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
             RaiseOnDataReceived(localuserOrder);
@@ -544,9 +534,8 @@ namespace MarketConnectors.KuCoin
             {
                 var normalizedSymbol = GetNormalizedSymbol(symbol);
                 log.Info($"{this.Name}: sending WS Trades Subscription {normalizedSymbol} ");
-                deltaSubscription = await _socketClient.SpotApi.SubscribeToOrderBookUpdatesAsync(
+                deltaSubscription = await _socketClient.SpotApi.SubscribeToAggregatedOrderBookUpdatesAsync(
                     symbol,
-                    _settings.DepthLevels,
                     data =>
                     {
                         // Buffer the events
@@ -554,7 +543,6 @@ namespace MarketConnectors.KuCoin
                         {
                             try
                             {
-                                KucoinOrderBookEntry entry = new KucoinOrderBookEntry();
                                 data.Timestamp = data.Timestamp;
                                 if (Math.Abs(DateTime.Now.Subtract(data.Timestamp.ToLocalTime()).TotalSeconds) > 1)
                                 {
@@ -563,7 +551,7 @@ namespace MarketConnectors.KuCoin
                                     HelperNotificationManager.Instance.AddNotification(this.Name, _msg, HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
                                 }
                                 _eventBuffers[normalizedSymbol].Add(
-                                       new Tuple<DateTime, string, KucoinStreamOrderBookChanged>(
+                                       new Tuple<DateTime, string, KucoinStreamOrderBook>(
                                            data.Timestamp.ToLocalTime(), normalizedSymbol, data.Data));
                             }
                             catch (Exception ex)
@@ -635,7 +623,7 @@ namespace MarketConnectors.KuCoin
             _timerPing.Enabled = true; // Start the timer
         }
 
-        private void eventBuffers_onReadAction(Tuple<DateTime, string, KucoinStreamOrderBookChanged> eventData)
+        private void eventBuffers_onReadAction(Tuple<DateTime, string, KucoinStreamOrderBook> eventData)
         {
             UpdateOrderBook(eventData.Item3, eventData.Item2, eventData.Item1);
         }
@@ -728,7 +716,7 @@ namespace MarketConnectors.KuCoin
         }
         #endregion
 
-        private void UpdateOrderBook(KucoinStreamOrderBookChanged lob_update, string symbol, DateTime ts)
+        private void UpdateOrderBook(KucoinStreamOrderBook lob_update, string symbol, DateTime ts)
         {
             if (!_localOrderBooks.ContainsKey(symbol))
                 return;
@@ -740,8 +728,15 @@ namespace MarketConnectors.KuCoin
             {
                 local_lob = new VisualHFT.Model.OrderBook();
             }
-            foreach (var item in lob_update.Bids)
+            if (lob_update.SequenceStart > local_lob.Sequence &&
+                lob_update.SequenceStart != local_lob.Sequence + 1)
+                throw new Exception("Detected sequence gap.");
+
+            foreach (var item in lob_update.Changes.Bids)
             {
+                if (item.Sequence <= local_lob.Sequence)
+                    continue;
+
                 if (item.Quantity != 0)
                 {
                     local_lob.AddOrUpdateLevel(new DeltaBookItem()
@@ -766,9 +761,13 @@ namespace MarketConnectors.KuCoin
                         ServerTimeStamp = ts,
                         Symbol = symbol
                     });
+
+                local_lob.Sequence = item.Sequence;
             }
-            foreach (var item in lob_update.Asks)
+            foreach (var item in lob_update.Changes.Asks)
             {
+                if (item.Sequence <= local_lob.Sequence)
+                    continue;
                 if (item.Quantity != 0)
                 {
                     local_lob.AddOrUpdateLevel(new DeltaBookItem()
@@ -793,6 +792,7 @@ namespace MarketConnectors.KuCoin
                         ServerTimeStamp = ts,
                         Symbol = symbol
                     });
+                local_lob.Sequence = item.Sequence;
             }
 
 
@@ -852,6 +852,7 @@ namespace MarketConnectors.KuCoin
             lob.ProviderID = _settings.Provider.ProviderID;
             lob.ProviderName = _settings.Provider.ProviderName;
             lob.SizeDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.Asks.Select(x => x.Quantity));
+            lob.Sequence = data.Sequence ?? 0;
 
             var _asks = new List<VisualHFT.Model.BookItem>();
             var _bids = new List<VisualHFT.Model.BookItem>();
@@ -996,6 +997,99 @@ namespace MarketConnectors.KuCoin
             // Display the view, perhaps in a dialog or a new window.
             view.DataContext = viewModel;
             return view;
+        }
+
+
+
+
+        //FOR UNIT TESTING PURPOSES
+        public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
+        {
+            var localModel = new KucoinOrderBook(); //transform to KucoinOrderBook
+            localModel.Symbol = snapshotModel.Symbol;
+            localModel.Asks = snapshotModel.Asks.Select(x => new KucoinOrderBookEntry()
+            {
+                Price = x.Price.ToDecimal(),
+                Quantity = x.Size.ToDecimal()
+            });
+            localModel.Bids = snapshotModel.Bids.Select(x => new KucoinOrderBookEntry()
+            {
+                Price = x.Price.ToDecimal(),
+                Quantity = x.Size.ToDecimal()
+            });
+            localModel.Timestamp = DateTime.Now;
+            localModel.Sequence = sequence;
+            _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
+
+            var symbol = snapshotModel.Symbol;
+
+            if (!_localOrderBooks.ContainsKey(symbol))
+            {
+                _localOrderBooks.Add(symbol, ToOrderBookModel(localModel, symbol));
+            }
+            else
+                _localOrderBooks[symbol] = ToOrderBookModel(localModel, symbol);
+
+
+            RaiseOnDataReceived(_localOrderBooks[symbol]);
+        }
+        public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
+        {
+            var symbol = bidDeltaModel?.FirstOrDefault()?.Symbol;
+            if (symbol == null)
+                symbol = askDeltaModel?.FirstOrDefault()?.Symbol;
+            if (string.IsNullOrEmpty(symbol))
+                throw new Exception("Couldn't find the symbol for this model.");
+            var ts = DateTime.Now;
+
+            var localModel = new KucoinStreamOrderBook(); //transform to KucoinStreamOrderBook
+            localModel.Changes = new KucoinStreamOrderBookChanged()
+            {
+                Bids = bidDeltaModel?.Select(x => new KucoinStreamOrderBookEntry()
+                {
+                    Price = x.Price.ToDecimal(),
+                    Quantity = x.Size.ToDecimal(),
+                    Sequence = x.Sequence
+                }),
+                Asks = askDeltaModel?.Select(x => new KucoinStreamOrderBookEntry()
+                {
+                    Price = x.Price.ToDecimal(),
+                    Quantity = x.Size.ToDecimal(),
+                    Sequence = x.Sequence
+                }),
+                Timestamp = DateTime.Now
+            };
+            localModel.SequenceStart = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));
+
+            UpdateOrderBook(localModel, symbol, ts);
+        }
+
+        public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
+        {
+            //depending on the scenario, load its message(s)
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "jsonMessages/PrivateMessages_Scenario1.json"));
+            JObject rootJsonObject = JObject.Parse(jsonString);
+            JToken dataToken = rootJsonObject["data"];
+            string dataJsonString = dataToken.ToString();
+
+
+            // Replace KucoinSymbol with the actual model class you need
+            KucoinStreamOrderNewUpdate newOrderItem = JsonConvert.DeserializeObject<KucoinStreamOrderNewUpdate>(dataJsonString);
+            KucoinStreamOrderUpdate updateExistingItem = JsonConvert.DeserializeObject<KucoinStreamOrderUpdate>(dataJsonString);
+
+
+
+
+            UpdateUserOrder(newOrderItem);
+            //UpdateUserOrder(updateExistingItem);
+
+
+
+            //convert newOrderItem to VisualHFT.Model.Order
+
+
+            return new List<VisualHFT.Model.Order>();
+
         }
     }
 }

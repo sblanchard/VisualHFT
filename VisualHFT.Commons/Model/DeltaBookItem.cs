@@ -20,6 +20,7 @@ namespace VisualHFT.Commons.Model
         }
 
         public string OriginalEntryID { get; set; }
+        public long Sequence { get; set; }
 
         public void Reset()
         {

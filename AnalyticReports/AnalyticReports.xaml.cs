@@ -49,7 +49,7 @@ namespace VisualHFT.AnalyticReport
         private void LoadData()
         {
             if (this.Signals != null)
-                this.Signals = this.Signals.OrderBy(x => x.CreationTimeStamp).ToList();
+                this.Signals = this.Signals; //.OrderBy(x => x.CreationTimeStamp).ToList();
             if (this.Signals.Count > 0)
             {
                 this.Title = "HFT Analytics";

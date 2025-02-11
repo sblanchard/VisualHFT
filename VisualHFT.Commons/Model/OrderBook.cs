@@ -296,6 +296,7 @@ namespace VisualHFT.Model
             get => _data.ImbalanceValue;
             set => _data.ImbalanceValue = value;
         }
+        public long Sequence { get; set; }
 
         public void ShallowCopyFrom(OrderBook e, CustomObjectPool<BookItem> pool)
         {

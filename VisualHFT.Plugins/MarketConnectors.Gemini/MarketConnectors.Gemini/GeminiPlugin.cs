@@ -433,7 +433,6 @@ namespace MarketConnectors.Gemini
                     localuserOrder.OrderType = eORDERTYPE.LIMIT;
 
                     localuserOrder.Quantity = item.original_amount;
-                    localuserOrder.GetAvgPrice = item.price;
                     if (item.order_type.ToLower().Equals("limit"))
                     {
                         localuserOrder.OrderType = eORDERTYPE.LIMIT;
@@ -455,8 +454,6 @@ namespace MarketConnectors.Gemini
                     }
                     else if (item.side.ToLower().Equals("buy"))
                     {
-                        localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
-                        localuserOrder.QuoteServerTimeStamp = DateTimeOffset.FromUnixTimeSeconds(item.timestamp).DateTime;
                         localuserOrder.PricePlaced = item.price;
                         localuserOrder.BestBid = item.price;
                         localuserOrder.Side = eORDERSIDE.Buy;
@@ -469,7 +466,6 @@ namespace MarketConnectors.Gemini
                     }
                     else if (item.type.ToLower().Equals("fill"))
                     {
-                        localuserOrder.GetAvgPrice = item.avg_execution_price;
                         localuserOrder.FilledQuantity = item.executed_amount;
                         localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
                     }

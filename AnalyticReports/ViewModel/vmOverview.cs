@@ -39,7 +39,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
             else
                 return;
             Position oSignal = this.Signals[0];
-            if (oSignal != null)
+            /*if (oSignal != null)
             {
                 double totalCount = this.Signals.Count;
                 decimal totalReturn = this.Signals.Sum(s => s.PipsPnLInCurrency.Value);
@@ -82,7 +82,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
                 tTestValue = (Math.Sqrt(totalCount) * tradesPnL.Average() / tradesPnL.StdDev()).ToString("n2");
 
                 RaisePropertyChanged(String.Empty);
-            }
+            }*/
 
         }
     }

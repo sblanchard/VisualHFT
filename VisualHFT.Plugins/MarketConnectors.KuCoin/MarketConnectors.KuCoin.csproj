@@ -8,6 +8,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="jsonMessages\PrivateMessages_Scenario1.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="jsonMessages\PrivateMessages_Scenario1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\log4net.config" Link="log4net.config" />
   </ItemGroup>
 

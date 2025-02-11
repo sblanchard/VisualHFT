@@ -64,7 +64,6 @@ namespace VisualHFT.Model
         {
             ProviderName = order.ProviderName;
             OrderID = order.OrderID;
-            StrategyCode = order.StrategyCode;
             Symbol = order.Symbol;
             ProviderId = order.ProviderId;
             ClOrdId = order.ClOrdId;
@@ -73,34 +72,15 @@ namespace VisualHFT.Model
             TimeInForce = order.TimeInForce;
             Status = order.Status;
             Quantity = order.Quantity;
-            MinQuantity = order.MinQuantity;
             FilledQuantity = order.FilledQuantity;
             PricePlaced = order.PricePlaced;
             Currency = order.Currency;
-            FutSettDate = order.FutSettDate;
-            IsMM = order.IsMM;
             IsEmpty = order.IsEmpty;
-            LayerName = order.LayerName;
-            AttemptsToClose = order.AttemptsToClose;
-            SymbolMultiplier = order.SymbolMultiplier;
-            SymbolDecimals = order.SymbolDecimals;
             FreeText = order.FreeText;
-            OriginPartyID = order.OriginPartyID;
             Executions = order.Executions;
-            QuoteID = order.QuoteID;
-            QuoteServerTimeStamp = order.QuoteServerTimeStamp;
-            QuoteLocalTimeStamp = order.QuoteLocalTimeStamp;
             CreationTimeStamp = order.CreationTimeStamp;
-            FireSignalTimestamp = order.FireSignalTimestamp;
-            StopLoss = order.StopLoss;
-            TakeProfit = order.TakeProfit;
-            PipsTrail = order.PipsTrail;
-            UnrealizedPnL = order.UnrealizedPnL;
-            MaxDrowdown = order.MaxDrowdown;
             BestAsk = order.BestAsk;
             BestBid = order.BestBid;
-            GetAvgPrice = order.GetAvgPrice;
-            GetQuantity = order.GetQuantity;
 
 
             LastUpdated = HelperTimeProvider.Now;
@@ -110,7 +90,6 @@ namespace VisualHFT.Model
         {
             ProviderName = "";
             OrderID = 0;
-            StrategyCode = "";
             Symbol = "";
             ProviderId = 0;
             ClOrdId = "";
@@ -119,41 +98,22 @@ namespace VisualHFT.Model
             TimeInForce = eORDERTIMEINFORCE.NONE;
             Status = eORDERSTATUS.NONE;
             Quantity = 0;
-            MinQuantity = 0;
             FilledQuantity = 0;
             PricePlaced = 0;
             Currency = "";
-            FutSettDate = "";
-            IsMM = false;
             IsEmpty = true;
-            LayerName = "";
-            AttemptsToClose = 0;
-            SymbolMultiplier = 1;
-            SymbolDecimals = 0;
             FreeText = "";
-            OriginPartyID = "";
             if (Executions != null)
                 Executions.Clear();
             else
                 Executions = new List<Execution>();
-            QuoteID = 0;
-            QuoteServerTimeStamp = DateTime.MinValue;
-            QuoteLocalTimeStamp = DateTime.MinValue;
             CreationTimeStamp = DateTime.MinValue;
-            FireSignalTimestamp = DateTime.MinValue;
-            StopLoss = 0;
-            TakeProfit = 0;
-            PipsTrail = false;
-            UnrealizedPnL = 0;
-            MaxDrowdown = 0;
             BestAsk = 0;
             BestBid = 0;
-            GetAvgPrice = 0;
-            GetQuantity = 0;
             LastUpdated = HelperTimeProvider.Now;
         }
 
-        public double PendingQuantity => Quantity - FilledQuantity;
+        public double PendingQuantity => (Status != eORDERSTATUS.CANCELED && Status != eORDERSTATUS.REJECTED ? Quantity - FilledQuantity: 0);
         public string ProviderName
         {
             get => _providerName;
@@ -163,11 +123,6 @@ namespace VisualHFT.Model
         {
             get => _orderID;
             set => _orderID = value;
-        }
-        public string StrategyCode
-        {
-            get => _strategyCode;
-            set => _strategyCode = value;
         }
         public string Symbol
         {
@@ -209,11 +164,6 @@ namespace VisualHFT.Model
             get => _quantity;
             set => _quantity = value;
         }
-        public double MinQuantity
-        {
-            get => _minQuantity;
-            set => _minQuantity = value;
-        }
         public double FilledQuantity
         {
             get => _filledQuantity;
@@ -229,70 +179,20 @@ namespace VisualHFT.Model
             get => _currency;
             set => _currency = value;
         }
-        public string FutSettDate
-        {
-            get => _futSettDate;
-            set => _futSettDate = value;
-        }
-        public bool IsMM
-        {
-            get => _isMM;
-            set => _isMM = value;
-        }
         public bool IsEmpty
         {
             get => _isEmpty;
             set => _isEmpty = value;
-        }
-        public string LayerName
-        {
-            get => _layerName;
-            set => _layerName = value;
-        }
-        public int AttemptsToClose
-        {
-            get => _attemptsToClose;
-            set => _attemptsToClose = value;
-        }
-        public int SymbolMultiplier
-        {
-            get => _symbolMultiplier;
-            set => _symbolMultiplier = value;
-        }
-        public int SymbolDecimals
-        {
-            get => _symbolDecimals;
-            set => _symbolDecimals = value;
         }
         public string FreeText
         {
             get => _freeText;
             set => _freeText = value;
         }
-        public string OriginPartyID
-        {
-            get => _originPartyID;
-            set => _originPartyID = value;
-        }
         public List<Execution> Executions
         {
             get => _executions;
             set => _executions = value;
-        }
-        public int QuoteID
-        {
-            get => _quoteID;
-            set => _quoteID = value;
-        }
-        public DateTime QuoteServerTimeStamp
-        {
-            get => _quoteServerTimeStamp;
-            set => _quoteServerTimeStamp = value;
-        }
-        public DateTime QuoteLocalTimeStamp
-        {
-            get => _quoteLocalTimeStamp;
-            set => _quoteLocalTimeStamp = value;
         }
         public DateTime CreationTimeStamp
         {
@@ -304,41 +204,6 @@ namespace VisualHFT.Model
             get => _lastUpdate;
             set => _lastUpdate = value;
         }
-        public DateTime ExecutedTimeStamp
-        {
-            get => _executedTimeStamp;
-            set => _executedTimeStamp = value;
-        }
-        public DateTime FireSignalTimestamp
-        {
-            get => _fireSignalTimestamp;
-            set => _fireSignalTimestamp = value;
-        }
-        public double StopLoss
-        {
-            get => _stopLoss;
-            set => _stopLoss = value;
-        }
-        public double TakeProfit
-        {
-            get => _takeProfit;
-            set => _takeProfit = value;
-        }
-        public bool PipsTrail
-        {
-            get => _pipsTrail;
-            set => _pipsTrail = value;
-        }
-        public double UnrealizedPnL
-        {
-            get => _unrealizedPnL;
-            set => _unrealizedPnL = value;
-        }
-        public double MaxDrowdown
-        {
-            get => _maxDrowdown;
-            set => _maxDrowdown = value;
-        }
         public double BestBid
         {
             get => _bestBid;
@@ -348,16 +213,6 @@ namespace VisualHFT.Model
         {
             get => _bestAsk;
             set => _bestAsk = value;
-        }
-        public double GetAvgPrice
-        {
-            get => _getAvgPrice;
-            set => _getAvgPrice = value;
-        }
-        public double GetQuantity
-        {
-            get => _getQuantity;
-            set => _getQuantity = value;
         }
         public double FilledPercentage
         {

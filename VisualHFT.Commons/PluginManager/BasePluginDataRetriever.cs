@@ -5,6 +5,7 @@ using System.Text;
 using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.Studies;
 using VisualHFT.DataRetriever;
+using VisualHFT.DataTradeRetriever;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
@@ -121,7 +122,7 @@ namespace VisualHFT.Commons.PluginManager
         {
             if (_ARE_ALL_DATA_RETRIEVERS_ENABLE || overrideDisabiityFromOtherDataRetrievers)
             {
-                HelperCommon.EXECUTEDORDERS.AddOrder(executedOrderModel);
+                HelperPosition.Instance.UpdateData(executedOrderModel);
             }
         }
         protected virtual void RaiseOnDataReceived(List<Strategy> strategies, bool overrideDisabiityFromOtherDataRetrievers = false)
@@ -177,7 +178,7 @@ namespace VisualHFT.Commons.PluginManager
                     }
                     break;
                 case "ExecutedOrder":
-                    HelperCommon.EXECUTEDORDERS.AddOrder(e.ParsedModel as VisualHFT.Model.Order);
+                    HelperPosition.Instance.UpdateData(e.ParsedModel as VisualHFT.Model.Order);
                     break;
                 //case "Execution":
                 //    ParseExecution(e.ParsedModel as VisualHFT.Model.Execution);

@@ -15,7 +15,7 @@ namespace VisualHFT.Helpers
 
 			//MAKE cummulative
 			decimal dEquity = 0; // aPositions.First().GetOpenAvgPrice * aPositions.First().GetOpenQuantity;
-            foreach (var p in aPositions.Where(x => x.PipsPnLInCurrency.HasValue).OrderBy(x => x.CreationTimeStamp))
+            /*foreach (var p in aPositions.Where(x => x.PipsPnLInCurrency.HasValue).OrderBy(x => x.CreationTimeStamp))
             {
                 dEquity += p.PipsPnLInCurrency.Value;
                 cEquity e = new cEquity();
@@ -24,7 +24,7 @@ namespace VisualHFT.Helpers
                 e.Equity = dEquity;
                 e.VolumeQty = p.OrderQuantity;
                 dRet.Add(e);
-            }
+            }*/
             return dRet;
         }
         public static List<cEquity> GetEquityCurveByHour(List<VisualHFT.Model.Position> aPositions)
@@ -62,14 +62,14 @@ namespace VisualHFT.Helpers
             if (aPositions == null || aPositions.Count == 0)
                 return null;
             List<cBalance> dRet = new List<cBalance>();            
-            foreach (var p in aPositions.Where(x => x.PipsPnLInCurrency.HasValue).OrderBy(x => x.CreationTimeStamp))
+            /*foreach (var p in aPositions.Where(x => x.PipsPnLInCurrency.HasValue).OrderBy(x => x.CreationTimeStamp))
             {
                 //OPEN
                 dRet.Add(new cBalance() { Date = p.CreationTimeStamp, Balance = -(p.GetOpenAvgPrice * p.GetOpenQuantity) });
                 //CLOSE
                 if (p.CloseTimeStamp > p.CreationTimeStamp)
                     dRet.Add(new cBalance() { Date = p.CloseTimeStamp, Balance = -(p.GetCloseAvgPrice * p.GetCloseQuantity) });
-            }
+            }*/
             //MAKE IT cummulative
             decimal dBalance = 0;
             foreach(var b in dRet)

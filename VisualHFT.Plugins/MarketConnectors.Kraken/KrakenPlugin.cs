@@ -243,7 +243,6 @@ namespace MarketConnectors.Kraken
                 localuserOrder.CreationTimeStamp = item.Timestamp;
                 localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 // localuserOrder.OrderID = long.Parse(item.OrderId);
-                localuserOrder.QuoteServerTimeStamp = item.Timestamp;
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.EffectiveTime.HasValue ? item.EffectiveTime.Value : item.Timestamp;
@@ -296,7 +295,6 @@ namespace MarketConnectors.Kraken
             {
                 if (item.OrderSide == OrderSide.Buy)
                 {
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.CreationTimeStamp = item.Timestamp;
                     localuserOrder.PricePlaced = (double)item.LimitPrice;
                     localuserOrder.BestBid = (double)item.LimitPrice;
@@ -306,7 +304,6 @@ namespace MarketConnectors.Kraken
                 {
                     localuserOrder.Side = eORDERSIDE.Sell;
                     localuserOrder.BestAsk = (double)item.LimitPrice;
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.Quantity = (double)item.OrderQuantity;
                 }
                 localuserOrder.Status = eORDERSTATUS.NEW;
@@ -325,7 +322,6 @@ namespace MarketConnectors.Kraken
             }
 
 
-            localuserOrder.GetAvgPrice = item.AveragePrice.HasValue ? (double)item.AveragePrice.Value : 0;
             localuserOrder.LastUpdated = DateTime.Now;
             localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
             RaiseOnDataReceived(localuserOrder);
