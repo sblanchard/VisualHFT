@@ -60,6 +60,10 @@ namespace VisualHFT.Model
         {
             IsEmpty = true;
         }
+        public Order(Order order)
+        {
+            Update(order);
+        }
         public void Update(Order order)
         {
             ProviderName = order.ProviderName;
@@ -81,7 +85,7 @@ namespace VisualHFT.Model
             CreationTimeStamp = order.CreationTimeStamp;
             BestAsk = order.BestAsk;
             BestBid = order.BestBid;
-
+            FilledPrice = order.FilledPrice;
 
             LastUpdated = HelperTimeProvider.Now;
         }
@@ -99,6 +103,7 @@ namespace VisualHFT.Model
             Status = eORDERSTATUS.NONE;
             Quantity = 0;
             FilledQuantity = 0;
+            FilledPrice = 0;
             PricePlaced = 0;
             Currency = "";
             IsEmpty = true;
@@ -219,6 +224,7 @@ namespace VisualHFT.Model
             get => _filledPercentage;
             set => _filledPercentage = value;
         }
+        public double FilledPrice { get; set; }
     }
 
 }

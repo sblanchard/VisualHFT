@@ -3,12 +3,20 @@ using VisualHFT.Commons.Model;
 using VisualHFT.Helpers;
 using VisualHFT.DataRetriever.TestingFramework.Core;
 using VisualHFT.Enums;
+using Xunit.Abstractions;
 
 
 namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 {
     public class MarketDataTests 
     {
+        private readonly ITestOutputHelper _testOutputHelper;
+
+        public MarketDataTests(ITestOutputHelper testOutputHelper)
+        {
+            _testOutputHelper = testOutputHelper;
+        }
+
         private OrderBook CreateInitialSnapshot()
         {
             var _symbol = "EUR/USD";
@@ -44,6 +52,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;
@@ -83,6 +94,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;
@@ -115,6 +129,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;
@@ -158,6 +175,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;
@@ -194,10 +214,12 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             OrderBook _actualOrderBook = null;
             //Subscribe to the OrderBook to Assert
             HelperOrderBook.Instance.Subscribe(lob => { _actualOrderBook = lob; });
-
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+                
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;
@@ -210,8 +232,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
                 _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
                 mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
-
-
+                
                 //Assert
                 Assert.NotNull(_actualOrderBook);
                 Assert.Equal(snapshotModel.Symbol, _actualOrderBook.Symbol);
@@ -242,6 +263,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;
@@ -286,6 +310,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;
@@ -329,6 +356,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = 10; //start sequence of snapshot on 10 to see how delta will be applied
@@ -364,6 +394,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = 10; //start sequence of snapshot on 10 to see how delta will be applied
@@ -399,6 +432,10 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
+                
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = 10; //start sequence of snapshot on 10 to see how delta will be applied
@@ -437,6 +474,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = snapshotModel.Sequence;

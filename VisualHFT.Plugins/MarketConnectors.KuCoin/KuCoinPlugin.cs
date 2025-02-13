@@ -543,16 +543,15 @@ namespace MarketConnectors.KuCoin
                         {
                             try
                             {
-                                data.Timestamp = data.Timestamp;
-                                if (Math.Abs(DateTime.Now.Subtract(data.Timestamp.ToLocalTime()).TotalSeconds) > 1)
+                                if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
                                 {
-                                    var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.Timestamp.ToLocalTime()).TotalSeconds)} seconds.";
+                                    var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
                                     log.Warn(_msg);
                                     HelperNotificationManager.Instance.AddNotification(this.Name, _msg, HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
                                 }
                                 _eventBuffers[normalizedSymbol].Add(
                                        new Tuple<DateTime, string, KucoinStreamOrderBook>(
-                                           data.Timestamp.ToLocalTime(), normalizedSymbol, data.Data));
+                                           data.ReceiveTime.ToLocalTime(), normalizedSymbol, data.Data));
                             }
                             catch (Exception ex)
                             {
@@ -1073,7 +1072,7 @@ namespace MarketConnectors.KuCoin
             string dataJsonString = dataToken.ToString();
 
 
-            // Replace KucoinSymbol with the actual model class you need
+            // Replace KucoinSymbol with the actual model class
             KucoinStreamOrderNewUpdate newOrderItem = JsonConvert.DeserializeObject<KucoinStreamOrderNewUpdate>(dataJsonString);
             KucoinStreamOrderUpdate updateExistingItem = JsonConvert.DeserializeObject<KucoinStreamOrderUpdate>(dataJsonString);
 

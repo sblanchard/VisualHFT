@@ -234,7 +234,7 @@ namespace MarketConnectors.Binance
                     {
                         try
                         {
-                            data.Data.EventTime = data.Timestamp;
+                            data.Data.EventTime = data.ReceiveTime;
                             if (Math.Abs(DateTime.Now.Subtract(data.Data.EventTime.ToLocalTime()).TotalSeconds) > 1)
                             {
                                 var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.Data.EventTime.ToLocalTime()).TotalSeconds)} seconds.";

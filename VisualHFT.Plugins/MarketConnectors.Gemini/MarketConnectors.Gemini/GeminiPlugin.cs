@@ -1,5 +1,4 @@
 ﻿using CryptoExchange.Net.CommonObjects;
-using CryptoExchange.Net.Interfaces;
 using Gemini.Net.Clients;
 using Gemini.Net.Models;
 using MarketConnectors.Gemini.Model;
@@ -7,20 +6,11 @@ using MarketConnectors.Gemini.UserControls;
 using MarketConnectors.Gemini.ViewModel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.Dynamic;
 using System.IO;
-using System.Net.Http;
-using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Reflection.Metadata;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
+using VisualHFT.Commons.Interfaces;
 using VisualHFT.Commons.Model;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.DataRetriever;
@@ -30,13 +20,12 @@ using VisualHFT.Model;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
 using Websocket.Client;
-using static MarketConnectors.Gemini.GeminiPlugin;
 using OrderBook = VisualHFT.Model.OrderBook;
 using Trade = VisualHFT.Model.Trade;
 
 namespace MarketConnectors.Gemini
 {
-    public class GeminiPlugin : BasePluginDataRetriever
+    public class GeminiPlugin : BasePluginDataRetriever, IDataRetrieverTestable
     {
         private new bool _disposed = false; // to track whether the object has been disposed
         GeminiSubscription geminiSubscription = new GeminiSubscription();
@@ -755,6 +744,62 @@ namespace MarketConnectors.Gemini
                 }
                 _disposed = true;
             }
+        }
+
+        public void InjectSnapshot(OrderBook snapshotModel, long sequence)
+        {
+            var localModel = new InitialResponse(); //transform to local model
+            localModel.asks = snapshotModel.Asks.Select(x => new Ask()
+            {
+                price = x.Price.Value,
+                amount = x.Size.Value,
+                timestamp = x.LocalTimeStamp.Ticks
+            }).ToList();
+            localModel.bids = snapshotModel.Bids.Select(x => new Bid()
+            {
+                price = x.Price.Value,
+                amount = x.Size.Value,
+                timestamp = x.LocalTimeStamp.Ticks
+            }).ToList();
+            _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
+
+            var symbol = snapshotModel.Symbol;
+
+            if (!_localOrderBooks.ContainsKey(symbol))
+            {
+                _localOrderBooks.Add(symbol, ToOrderBookModel(localModel, symbol));
+            }
+            else
+                _localOrderBooks[symbol] = ToOrderBookModel(localModel, symbol);
+
+
+            RaiseOnDataReceived(_localOrderBooks[symbol]);
+
+        }
+
+        public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
+        {
+            var symbol = bidDeltaModel?.FirstOrDefault()?.Symbol;
+            if (symbol == null)
+                symbol = askDeltaModel?.FirstOrDefault()?.Symbol;
+            if (string.IsNullOrEmpty(symbol))
+                throw new Exception("Couldn't find the symbol for this model.");
+            var ts = DateTime.Now;
+
+            var localModel = new GeminiResponseInitial(); //transform to local model
+            localModel.symbol = symbol;
+            localModel.changes = new List<List<string>>();
+            
+
+
+
+            var localModelJson = JsonConvert.SerializeObject(localModel);
+            HandleMessage(localModelJson, DateTime.Now);
+        }
+
+        public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
+        {
+            throw new NotImplementedException();
         }
     }
 }

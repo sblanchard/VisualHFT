@@ -113,6 +113,7 @@
     <Content Include="App.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="VisualHFT.Plugins\MarketConnectors.Kraken\README.md.bak" />
     <Resource Include="Images\database.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>

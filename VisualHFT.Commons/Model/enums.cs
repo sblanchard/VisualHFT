@@ -133,6 +133,15 @@ namespace VisualHFT.Enums
 
     public enum eTestingPrivateMessageScenario
     {
-        SCENARIO_1
+        SCENARIO_1,
+        SCENARIO_2,
+        SCENARIO_3,
+        SCENARIO_4,
+        SCENARIO_5,
+        SCENARIO_6,
+        SCENARIO_7,
+        SCENARIO_8,
+        SCENARIO_9,
+        SCENARIO_10,
     }
 }

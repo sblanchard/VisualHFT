@@ -8,7 +8,37 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="KrakenExchange.Net" Version="5.5.4" />
+    <Content Include="JsonMessages\PrivateMessages_Scenario9.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario8.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario7.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario6.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario5.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario4.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario3.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario2.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="JsonMessages\PrivateMessages_Scenario1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="KrakenExchange.Net" Version="5.7.1" />
     <PackageReference Include="log4net" Version="3.0.3" />
   </ItemGroup>
 

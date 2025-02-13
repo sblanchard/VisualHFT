@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using VisualHFT.Helpers;
+﻿using VisualHFT.Helpers;
 using VisualHFT.Enums;
 
 namespace VisualHFT.Model

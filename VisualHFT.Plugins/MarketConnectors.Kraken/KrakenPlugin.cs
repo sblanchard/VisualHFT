@@ -2,7 +2,6 @@
 using Kraken.Net.Clients;
 using Kraken.Net.Objects.Models;
 using Kraken.Net.Enums;
-
 using CryptoExchange.Net.Authentication;
 using CryptoExchange.Net.Objects;
 using MarketConnectors.Kraken.Model;
@@ -22,11 +21,13 @@ using CryptoExchange.Net.Objects.Sockets;
 using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using Kraken.Net.Objects.Models.Socket;
-using CryptoExchange.Net.Sockets;
+using VisualHFT.Commons.Interfaces;
+using Newtonsoft.Json.Linq;
+using System.IO;
 
 namespace MarketConnectors.Kraken
 {
-    public class KrakenPlugin : BasePluginDataRetriever
+    public class KrakenPlugin : BasePluginDataRetriever, IDataRetrieverTestable
     {
         private bool _disposed = false; // to track whether the object has been disposed
 
@@ -189,7 +190,7 @@ namespace MarketConnectors.Kraken
                             {
                                 foreach (var item in trade.Data)
                                 {
-                                    item.Timestamp = trade.Timestamp; //not sure why these are different
+                                    item.Timestamp = trade.ReceiveTime; 
                                     _traderQueueRef.Add(
                                         new Tuple<string, KrakenTradeUpdate>(_normalizedSymbol, item));
                                 }
@@ -238,7 +239,6 @@ namespace MarketConnectors.Kraken
             if (!this._localUserOrders.ContainsKey(item.OrderId))
             {
                 localuserOrder = new VisualHFT.Model.Order();
-                localuserOrder.ClOrdId = item.ClientOrderId;
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.CreationTimeStamp = item.Timestamp;
                 localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -343,16 +343,15 @@ namespace MarketConnectors.Kraken
                         {
                             try
                             {
-                                data.Timestamp = data.Timestamp;
-                                if (Math.Abs(DateTime.Now.Subtract(data.Timestamp.ToLocalTime()).TotalSeconds) > 1)
+                                if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
                                 {
-                                    var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.Timestamp.ToLocalTime()).TotalSeconds)} seconds.";
+                                    var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
                                     log.Warn(_msg);
                                     HelperNotificationManager.Instance.AddNotification(this.Name, _msg, HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
                                 }
                                 _eventBuffers[normalizedSymbol].Add(
                                        new Tuple<DateTime, string, KrakenBookUpdate>(
-                                           data.Timestamp.ToLocalTime(), normalizedSymbol, data.Data));
+                                           data.ReceiveTime.ToLocalTime(), normalizedSymbol, data.Data));
                             }
                             catch (Exception ex)
                             {
@@ -773,5 +772,235 @@ namespace MarketConnectors.Kraken
             view.DataContext = viewModel;
             return view;
         }
+
+
+        //FOR UNIT TESTING PURPOSES
+        public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
+        {
+            var localModel = new KrakenOrderBook();
+            localModel.Bids = snapshotModel.Bids.Select(x => new KrakenOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal(), Timestamp = x.LocalTimeStamp}).ToList();
+            localModel.Asks = snapshotModel.Asks.Select(x => new KrakenOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal(), Timestamp = x.LocalTimeStamp}).ToList();
+            _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
+
+            var symbol = snapshotModel.Symbol;
+
+            if (!_localOrderBooks.ContainsKey(symbol))
+            {
+                _localOrderBooks.Add(symbol, ToOrderBookModel(localModel, symbol));
+            }
+            else
+                _localOrderBooks[symbol] = ToOrderBookModel(localModel, symbol);
+
+            _localOrderBooks[symbol].Sequence = sequence;// KRAKEN does not provide sequence numbers
+
+            RaiseOnDataReceived(_localOrderBooks[symbol]);
+
+        }
+
+        public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
+        {
+            var symbol = bidDeltaModel?.FirstOrDefault()?.Symbol;
+            if (symbol == null)
+                symbol = askDeltaModel?.FirstOrDefault()?.Symbol;
+            if (string.IsNullOrEmpty(symbol))
+                throw new Exception("Couldn't find the symbol for this model.");
+            var ts = DateTime.Now;
+
+            var localModel = new KrakenBookUpdate();
+            localModel.Bids = bidDeltaModel?.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal()}).ToList();
+            localModel.Asks = askDeltaModel?.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+
+            //************************************************************************************************************************
+            //sequence is not provided by KRAKEN (then make adjustments to this method, so Unit tests don't fail)
+            //************************************************************************************************************************
+            long maxSequence = Math.Max(bidDeltaModel.Max(x => x.Sequence), askDeltaModel.Max(x => x.Sequence));
+            long minSequence = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));
+            if (_localOrderBooks.ContainsKey(symbol))
+            {
+                if (minSequence < _localOrderBooks[symbol].Sequence)
+                {
+                    bidDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
+                    askDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
+                    localModel.Bids = bidDeltaModel?.Select(x => new KrakenBookUpdateEntry()
+                        { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+                    localModel.Asks = askDeltaModel?.Select(x => new KrakenBookUpdateEntry()
+                        { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+                }
+                else if (minSequence != _localOrderBooks[symbol].Sequence + 1)
+                {
+                    throw new Exception("Sequence numbers are not in order.");
+                }
+                else
+                    _localOrderBooks[symbol].Sequence = maxSequence;
+            }
+            //************************************************************************************************************************
+            //************************************************************************************************************************
+
+            UpdateOrderBook(localModel, symbol, ts);
+        }
+
+        public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
+        {
+            //depending on the scenario, load its message(s)
+            string _file = "";
+            if (scenario == eTestingPrivateMessageScenario.SCENARIO_1)
+                _file = "PrivateMessages_Scenario1.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_2)
+                _file = "PrivateMessages_Scenario2.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_3)
+                _file = "PrivateMessages_Scenario3.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_4)
+                _file = "PrivateMessages_Scenario4.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_5)
+                _file = "PrivateMessages_Scenario5.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_6)
+                _file = "PrivateMessages_Scenario6.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_7)
+                _file = "PrivateMessages_Scenario7.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_8)
+                _file = "PrivateMessages_Scenario8.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_9)
+            {
+                _file = "PrivateMessages_Scenario9.json";
+                throw new Exception("Messages collected for this scenario don't look good.");
+            }
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_10)
+            {
+                _file = "PrivateMessages_Scenario10.json";
+                throw new Exception("Messages were not collected for this scenario.");
+            }
+
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"jsonMessages/{_file}"));
+
+            //DESERIALIZE EXCHANGES MODEL
+            List<KrakenOrderUpdate> modelList = new List<KrakenOrderUpdate>();
+            var dataEvents = new List<KrakenOrderUpdate>();
+            var jsonArray = JArray.Parse(jsonString);
+            foreach (var jsonObject in jsonArray)
+            {
+                JToken dataToken = jsonObject["data"];
+                string dataJsonString = dataToken.ToString();
+                var jsonArrayData = JArray.Parse(dataJsonString);
+                foreach (var jsonObjectData in jsonArrayData)
+                {
+                    string jsonObjectDataString = jsonObjectData.ToString(); // Convert JObject to string for debugging
+                    KrakenOrderUpdate _data = JsonParser.Parse(jsonObjectDataString);
+                    if (_data != null)
+                        modelList.Add(_data);
+                }
+            }
+            //END DESERIALIZE EXCHANGES MODEL
+
+
+
+            //UPDATE VISUALHFT CORE & CREATE MODEL TO RETURN
+            if (!modelList.Any())
+                throw new Exception("No data was found in the json file.");
+            foreach (var item in modelList)
+            {
+                UpdateUserOrder(item);
+            }
+            //END UPDATE VISUALHFT CORE
+
+
+
+            //CREATE MODEL TO RETURN (First, identify the order that was sent, then use that one with the updated values)
+            var dicOrders = new Dictionary<string, VisualHFT.Model.Order>(); //we need to use dictionary to identify orders (because exchanges orderId is string)
+
+            foreach (var item in modelList)
+            {
+                if (item.OrderStatus == OrderStatusUpdate.Pending) //identify the order sent
+                {
+                    var order = new VisualHFT.Model.Order()
+                    {
+                        CreationTimeStamp = item.Timestamp,
+                        PricePlaced = item.LimitPrice.ToDouble(),
+                        ProviderId = _settings.Provider.ProviderID,
+                        ProviderName = _settings.Provider.ProviderName,
+                        Symbol = item.Symbol,
+                        Side = item.OrderSide == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell,
+                    };
+                    if (item.OrderType != OrderType.Market)
+                        order.Quantity = item.OrderQuantity.ToDouble();
+
+                    //Since OrderID needs to match (the one we are creating for this scenario vs the one created by this class) use the localUserOrders to get it
+                    order.OrderID = this._localUserOrders[item.OrderId].OrderID; //DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    if (item.TimeInForce == TimeInForce.IOC)
+                        order.TimeInForce = eORDERTIMEINFORCE.IOC;
+                    else if (item.TimeInForce == TimeInForce.GTC || item.TimeInForce == TimeInForce.GTD)
+                        order.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+                    if (item.OrderType == OrderType.Limit)
+                        order.OrderType = eORDERTYPE.LIMIT;
+                    else if (item.OrderType == OrderType.Market)
+                        order.OrderType = eORDERTYPE.MARKET;
+                    else
+                        order.OrderType = eORDERTYPE.LIMIT;
+                    order.Status = eORDERSTATUS.SENT;
+
+                    dicOrders.Add(item.OrderId, order);
+                }
+                else if (item.OrderStatus == OrderStatusUpdate.New)
+                {
+                    var orderToUpdate = dicOrders[item.OrderId];
+                    orderToUpdate.Status = eORDERSTATUS.NEW;
+                    if (item.OrderEventType == OrderEventType.Amended) //the order was amended
+                    {
+                        orderToUpdate.PricePlaced = item.LimitPrice.ToDouble();
+                        if (item.OrderQuantity.HasValue)
+                            orderToUpdate.Quantity = item.OrderQuantity.ToDouble();
+                        orderToUpdate.LastUpdated = item.Timestamp;
+                        if (item.QuantityFilled.HasValue)
+                            orderToUpdate.FilledQuantity = item.QuantityFilled.ToDouble();
+                        if (item.AveragePrice.HasValue)
+                            orderToUpdate.FilledPrice = item.AveragePrice.ToDouble();
+                    }
+                }
+                else if (item.OrderStatus == OrderStatusUpdate.Canceled || item.OrderStatus == OrderStatusUpdate.Expired)
+                {
+                    var orderToUpdate = dicOrders[item.OrderId];
+
+                    //update needed fields only
+                    orderToUpdate.LastUpdated = item.Timestamp;
+                    if (item.QuantityFilled.HasValue)
+                        orderToUpdate.FilledQuantity = item.QuantityFilled.ToDouble();
+                    if (item.AveragePrice.HasValue)
+                        orderToUpdate.FilledPrice = item.AveragePrice.ToDouble();
+
+                    orderToUpdate.Status = eORDERSTATUS.CANCELED;
+                }
+                else if (item.OrderStatus == OrderStatusUpdate.PartiallyFilled || item.OrderStatus == OrderStatusUpdate.Filled)
+                {
+                    var orderToUpdate = dicOrders[item.OrderId];
+
+                    //update needed fields only
+                    orderToUpdate.LastUpdated = item.Timestamp;
+                    if (item.QuantityFilled.HasValue)
+                        orderToUpdate.FilledQuantity = item.QuantityFilled.ToDouble();
+                    if (item.AveragePrice.HasValue)
+                        orderToUpdate.FilledPrice = item.AveragePrice.ToDouble();
+                    orderToUpdate.Status = (item.OrderStatus == OrderStatusUpdate.PartiallyFilled ? eORDERSTATUS.PARTIALFILLED: eORDERSTATUS.FILLED);
+                    if (orderToUpdate.OrderType == eORDERTYPE.MARKET) //update original order and price placed
+                    {
+                        orderToUpdate.PricePlaced = orderToUpdate.FilledPrice;
+                        orderToUpdate.Quantity = orderToUpdate.FilledQuantity;
+                    }
+                }
+
+            }
+            //END CREATE MODEL TO RETURN
+
+
+            return dicOrders.Values.ToList();
+
+        }
+
+
     }
+
+
+
+
+
 }
+

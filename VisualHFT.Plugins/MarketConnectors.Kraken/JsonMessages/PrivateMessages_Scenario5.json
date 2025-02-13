@@ -1,0 +1,92 @@
+[
+  {
+    "channel": "executions",
+    "type": "update",
+    "data": [
+      {
+        "order_id": "O2FCH3-KOXLG-VUEYRU",
+        "symbol": "BERA/USD",
+        "order_qty": 1.73598,
+        "cum_cost": 0.00000,
+        "time_in_force": "GTC",
+        "exec_type": "pending_new",
+        "side": "buy",
+        "order_type": "limit",
+        "order_userref": 0,
+        "limit_price_type": "static",
+        "limit_price": 5.530,
+        "stop_price": 0.000,
+        "order_status": "pending_new",
+        "fee_usd_equiv": 0.00000,
+        "fee_ccy_pref": "fciq",
+        "timestamp": "2025-02-12T07:33:55.066646Z"
+      }
+    ],
+    "sequence": 23
+  },
+  {
+    "channel": "executions",
+    "type": "update",
+    "data": [
+      {
+        "timestamp": "2025-02-12T07:33:55.066646Z",
+        "order_status": "new",
+        "exec_type": "new",
+        "order_userref": 0,
+        "order_id": "O2FCH3-KOXLG-VUEYRU"
+      }
+    ],
+    "sequence": 24
+  },
+  {
+    "channel": "executions",
+    "type": "update",
+    "data": [
+      {
+        "order_id": "O2FCH3-KOXLG-VUEYRU",
+        "order_userref": 0,
+        "exec_id": "TMIYJP-P6AWF-GXR2K6",
+        "exec_type": "trade",
+        "trade_id": 19149,
+        "symbol": "BERA/USD",
+        "side": "buy",
+        "last_qty": 1.73598,
+        "last_price": 5.530,
+        "liquidity_ind": "m",
+        "cost": 9.59997,
+        "order_type": "limit",
+        "timestamp": "2025-02-12T07:37:01.261538Z",
+        "order_status": "partially_filled",
+        "cum_qty": 1.73598,
+        "cum_cost": 9.59997,
+        "avg_price": 5.530,
+        "fee_usd_equiv": 0.02400,
+        "fees": [
+          {
+            "asset": "USD",
+            "qty": 0.02400
+          }
+        ]
+      }
+    ],
+    "sequence": 25
+  },
+  {
+    "channel": "executions",
+    "type": "update",
+    "data": [
+      {
+        "timestamp": "2025-02-12T07:37:01.261538Z",
+        "order_status": "filled",
+        "exec_type": "filled",
+        "cum_qty": 1.73598,
+        "cum_cost": 9.59997,
+        "fee_usd_equiv": 0.02400,
+        "avg_price": 5.530,
+        "order_userref": 0,
+        "order_id": "O2FCH3-KOXLG-VUEYRU"
+      }
+    ],
+    "sequence": 26
+  }
+]

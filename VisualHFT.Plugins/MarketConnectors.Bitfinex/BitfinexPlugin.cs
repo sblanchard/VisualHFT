@@ -181,7 +181,7 @@ namespace MarketConnectors.Bitfinex
                             {
                                 foreach (var item in trade.Data)
                                 {
-                                    item.Timestamp = trade.Timestamp; //not sure why these are different
+                                    item.Timestamp = trade.ReceiveTime; //not sure why these are different
                                     _traderQueueRef.Add(
                                         new Tuple<string, BitfinexTradeSimple>(_normalizedSymbol, item));
                                 }
@@ -228,7 +228,7 @@ namespace MarketConnectors.Bitfinex
                                 {
                                     _eventBuffers[normalizedSymbol].Add(
                                         new Tuple<DateTime, string, BitfinexOrderBookEntry>(
-                                            data.Timestamp.ToLocalTime(), normalizedSymbol, item));
+                                            data.ReceiveTime.ToLocalTime(), normalizedSymbol, item));
                                 }
                             }
                             catch (Exception ex)

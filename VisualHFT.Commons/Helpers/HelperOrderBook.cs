@@ -71,6 +71,7 @@ namespace VisualHFT.Helpers
                             log.Error(ex);
                             OnException?.Invoke(new VisualHFT.Commons.Model.ErrorEventArgs(ex, subscriber.Target));
                         });
+                        throw;
                     }
                 }
             }
