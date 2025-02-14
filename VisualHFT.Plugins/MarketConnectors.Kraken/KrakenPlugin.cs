@@ -216,9 +216,9 @@ namespace MarketConnectors.Kraken
         }
         private async Task InitializeUserPrivateOrders()
         {
-            if (string.IsNullOrEmpty(this._settings.ApiKey) && !string.IsNullOrEmpty(this._settings.ApiSecret))
+            if (!string.IsNullOrEmpty(this._settings.ApiKey) && !string.IsNullOrEmpty(this._settings.ApiSecret))
             {
-                await _socketClient.SpotApi.SubscribeToOrderUpdatesAsync(neworder =>
+                await _socketClient.SpotApi.SubscribeToOrderUpdatesAsync(async neworder =>
                 {
                     log.Info(neworder.Data);
                     if (neworder.Data != null)
@@ -227,7 +227,7 @@ namespace MarketConnectors.Kraken
 
                         foreach (var order in item)
                         {
-                            UpdateUserOrder(order);
+                           await UpdateUserOrder(order);
                         }
                     }
                 }, true, true);
