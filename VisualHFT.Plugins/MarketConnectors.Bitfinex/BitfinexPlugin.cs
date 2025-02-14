@@ -240,7 +240,6 @@ namespace MarketConnectors.Bitfinex
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.CreationTimeStamp = item.CreateTime;
                 localuserOrder.OrderID = item.Id;
-                localuserOrder.QuoteServerTimeStamp = item.CreateTime;
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.CreateTime;
@@ -293,7 +292,6 @@ namespace MarketConnectors.Bitfinex
             {
                 if (item.Side == OrderSide.Buy)
                 {
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.CreationTimeStamp = item.CreateTime;
                     localuserOrder.PricePlaced = (double)item.Price;
                     localuserOrder.BestBid = (double)item.Price;
@@ -303,7 +301,6 @@ namespace MarketConnectors.Bitfinex
                 {
                     localuserOrder.Side = eORDERSIDE.Sell;
                     localuserOrder.BestAsk = (double)item.Price;
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.CreationTimeStamp = item.CreateTime;
                     localuserOrder.Quantity = (double)item.Quantity;
                 }
@@ -333,7 +330,6 @@ namespace MarketConnectors.Bitfinex
             }
 
 
-            localuserOrder.GetAvgPrice = item.PriceAverage.HasValue ? (double)item.PriceAverage.Value : 0;
             localuserOrder.LastUpdated = DateTime.Now;
             localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
             RaiseOnDataReceived(localuserOrder);

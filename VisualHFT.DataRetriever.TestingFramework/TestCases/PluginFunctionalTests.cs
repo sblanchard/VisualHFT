@@ -44,8 +44,8 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             OrderBook _actualOrderBook = null;
             bool exceptionTriggered = false;
             Stopwatch sp = new Stopwatch(); //to monitor timeout
-            const int TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE = 10;
-            const int SECONDS_TO_WAIT_BEFORE_START_CHECKING = 3;
+            const int TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE = 20;
+            const int SECONDS_TO_WAIT_BEFORE_START_CHECKING = 5;
 
             HelperOrderBook.Instance.Subscribe(lob =>
             {

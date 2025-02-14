@@ -385,7 +385,6 @@ namespace MarketConnectors.Binance
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.CreationTimeStamp = item.CreateTime;
                 localuserOrder.OrderID = item.Id;
-                localuserOrder.QuoteServerTimeStamp = item.CreateTime;
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.CreateTime;
@@ -437,7 +436,6 @@ namespace MarketConnectors.Binance
             {
                 if (item.Side == OrderSide.Buy)
                 {
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.CreationTimeStamp = item.CreateTime;
                     localuserOrder.PricePlaced = (double)item.Price;
                     localuserOrder.BestBid = (double)item.Price;
@@ -447,7 +445,6 @@ namespace MarketConnectors.Binance
                 {
                     localuserOrder.Side = eORDERSIDE.Sell;
                     localuserOrder.BestAsk = (double)item.Price;
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.CreationTimeStamp = item.CreateTime;
                     localuserOrder.Quantity = (double)item.Quantity;
                 }
@@ -500,7 +497,6 @@ namespace MarketConnectors.Binance
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.CreationTimeStamp = item.CreateTime;
                 localuserOrder.OrderID = item.Id;
-                localuserOrder.QuoteServerTimeStamp = item.CreateTime;
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.CreateTime;
@@ -552,7 +548,6 @@ namespace MarketConnectors.Binance
             {
                 if (item.Side == OrderSide.Buy)
                 {
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.CreationTimeStamp = item.CreateTime;
                     localuserOrder.PricePlaced = (double)item.Price;
                     localuserOrder.BestBid = (double)item.Price;
@@ -562,7 +557,6 @@ namespace MarketConnectors.Binance
                 {
                     localuserOrder.Side = eORDERSIDE.Sell;
                     localuserOrder.BestAsk = (double)item.Price;
-                    localuserOrder.QuoteLocalTimeStamp = DateTime.Now;
                     localuserOrder.CreationTimeStamp = item.CreateTime;
                     localuserOrder.Quantity = (double)item.Quantity;
                 }
