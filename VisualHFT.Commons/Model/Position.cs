@@ -124,7 +124,8 @@ namespace VisualHFT.Model
                 throw new ArgumentException("OrderID must be set for the execution order.");
             if (newExecutionOrder.Status == eORDERSTATUS.NONE)
                 throw new ArgumentException("Status must be set for the execution order.");
-
+            if (newExecutionOrder.Symbol != _symbol)
+                throw new ArgumentException("The order's symbol does not belongs to this position.");
             bool isNewOrder = false;
             _lock.EnterWriteLock();
             try

@@ -500,6 +500,142 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             }
         }
 
+        [Fact]
+        public void Test_MarketDataDelta_CombinedMultipleDeltas_UsingPriceLookup()
+        {
+            OrderBook _actualOrderBook = null;
+            // Subscribe to receive OrderBook updates
+            HelperOrderBook.Instance.Subscribe(lob => { _actualOrderBook = lob; });
+
+            var marketConnectors = AssemblyLoader.LoadDataRetrievers();
+            foreach (var mktConnector in marketConnectors)
+            {
+                var connectorName = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING COMBINED MULTIPLE DELTAS IN {connectorName}");
+
+                // Arrange: Create the initial snapshot and set the starting sequence.
+                var snapshotModel = CreateInitialSnapshot();
+                long startingSequence = snapshotModel.Sequence;
+
+                // --- BID DELTAS ---
+                // Delete the bid at price 1.00005 (from the snapshot, originally at EntryID "6")
+                // Change the bid at price 1.00004 (originally EntryID "7") to have a new size of 150
+                // Add a new bid at price 1.00006 with size 50
+                var bidDeltaModel = new List<DeltaBookItem>
+        {
+            new DeltaBookItem
+            {
+                Symbol = snapshotModel.Symbol,
+                IsBid = true,
+                Price = 1.00005,
+                MDUpdateAction = eMDUpdateAction.Delete,
+                Sequence = ++startingSequence
+            },
+            new DeltaBookItem
+            {
+                Symbol = snapshotModel.Symbol,
+                IsBid = true,
+                Price = 1.00004,
+                Size = 150,
+                MDUpdateAction = eMDUpdateAction.Change,
+                Sequence = ++startingSequence
+            },
+            new DeltaBookItem
+            {
+                Symbol = snapshotModel.Symbol,
+                IsBid = true,
+                Price = 1.00006,
+                Size = 50,
+                MDUpdateAction = eMDUpdateAction.New,
+                Sequence = ++startingSequence
+            }
+        };
+
+                // --- ASK DELTAS ---
+                // Delete the ask at price 1.00010 (originally EntryID "1")
+                // Change the ask at price 1.00009 (originally EntryID "2") to have a new size of 120
+                // Add a new ask at price 1.00005 with size 60
+                var askDeltaModel = new List<DeltaBookItem>
+        {
+            new DeltaBookItem
+            {
+                Symbol = snapshotModel.Symbol,
+                IsBid = false,
+                Price = 1.00010,
+                MDUpdateAction = eMDUpdateAction.Delete,
+                Sequence = ++startingSequence
+            },
+            new DeltaBookItem
+            {
+                Symbol = snapshotModel.Symbol,
+                IsBid = false,
+                Price = 1.00009,
+                Size = 120,
+                MDUpdateAction = eMDUpdateAction.Change,
+                Sequence = ++startingSequence
+            },
+            new DeltaBookItem
+            {
+                Symbol = snapshotModel.Symbol,
+                IsBid = false,
+                Price = 1.00005,
+                Size = 60,
+                MDUpdateAction = eMDUpdateAction.New,
+                Sequence = ++startingSequence
+            }
+        };
+
+                // Act: Inject the snapshot and then apply the combined delta changes.
+                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+
+                // Assert: Verify the overall OrderBook properties.
+                Assert.NotNull(_actualOrderBook);
+                Assert.Equal(snapshotModel.Symbol, _actualOrderBook.Symbol);
+
+                // --- BID ASSERTIONS ---
+                // Since we deleted one bid and added one new bid, the total count should remain unchanged.
+                Assert.Equal(snapshotModel.Bids.Count(), _actualOrderBook.Bids.Count());
+                // Verify the bid at price 1.00005 is removed.
+                Assert.Null(_actualOrderBook.Bids.FirstOrDefault(b => b.Price == 1.00005));
+                // Verify the bid at price 1.00004 has been updated to size 150.
+                var updatedBid = _actualOrderBook.Bids.FirstOrDefault(b => b.Price == 1.00004);
+                Assert.NotNull(updatedBid);
+                Assert.Equal(150, updatedBid.Size);
+                // Verify the new bid at price 1.00006 with size 50 exists.
+                var newBid = _actualOrderBook.Bids.FirstOrDefault(b => b.Price == 1.00006);
+                Assert.NotNull(newBid);
+                Assert.Equal(50, newBid.Size);
+
+                // --- ASK ASSERTIONS ---
+                // Since we deleted one ask and added one new ask, the total count should remain unchanged.
+                Assert.Equal(snapshotModel.Asks.Count(), _actualOrderBook.Asks.Count());
+                // Verify the ask at price 1.00010 is removed.
+                Assert.Null(_actualOrderBook.Asks.FirstOrDefault(a => a.Price == 1.00010));
+                // Verify the ask at price 1.00009 has been updated to size 120.
+                var updatedAsk = _actualOrderBook.Asks.FirstOrDefault(a => a.Price == 1.00009);
+                Assert.NotNull(updatedAsk);
+                Assert.Equal(120, updatedAsk.Size);
+                // Verify the new ask at price 1.00005 with size 60 exists.
+                var newAsk = _actualOrderBook.Asks.FirstOrDefault(a => a.Price == 1.00005);
+                Assert.NotNull(newAsk);
+                Assert.Equal(60, newAsk.Size);
+
+                // --- TOP OF BOOK ASSERTIONS ---
+                // For bids, the best (highest) bid should now be the new bid at 1.00006.
+                var bestBid = _actualOrderBook.GetTOB(true);
+                Assert.Equal(1.00006, bestBid.Price);
+                Assert.Equal(50, bestBid.Size);
+                // For asks, the best (lowest) ask should now be the new ask at 1.00005.
+                var bestAsk = _actualOrderBook.GetTOB(false);
+                Assert.Equal(1.00005, bestAsk.Price);
+                Assert.Equal(60, bestAsk.Size);
+
+                // Verify that the OrderBook's sequence number has been updated to the last delta's sequence.
+                Assert.Equal(startingSequence, _actualOrderBook.Sequence);
+            }
+        }
+
 
     }
 

@@ -535,6 +535,126 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             
         }
 
+        [Fact]
+        public void Test_AddOrder_WithDifferentSymbol_ShouldFail()
+        {
+            // Arrange: Create a position for symbol "AAPL"
+            var position = new Position("AAPL", PositionManagerCalculationMethod.FIFO);
+            var order = new Order
+            {
+                OrderID = 100,
+                Status = eORDERSTATUS.NEW,
+                Symbol = "GOOG", // Different symbol than the position
+                Side = eORDERSIDE.Buy,
+                Quantity = 100,
+                FilledQuantity = 0,
+                PricePlaced = 150,
+                CreationTimeStamp = DateTime.Now
+            };
+
+            // Act & Assert: Expect an exception because the order's symbol doesn't match the position's symbol.
+            Assert.Throws<ArgumentException>(() => position.AddOrUpdateOrder(order, out var addedOrder, out var updatedOrder));
+        }
+
+
+        [Fact]
+        public void Test_UpdateMidPrice_WithZeroNetPosition_HasNoEffect()
+        {
+            // Arrange: Create a position with no orders (NetPosition is zero)
+            var position = new Position("AAPL", PositionManagerCalculationMethod.FIFO);
+
+            // Act: Update the mid price even though no orders exist.
+            var needToChange = position.UpdateCurrentMidPrice(200);
+
+            // Assert: The update flag may be true to indicate a market update,
+            // but with no filled orders, all position metrics remain zero.
+            Assert.True(needToChange);
+            Assert.Equal(0, position.NetPosition);
+            Assert.Equal(0, position.Exposure);
+            Assert.Equal(0, position.PLOpen);
+            Assert.Equal(0, position.PLRealized);
+            Assert.Equal(0, position.PLTot);
+        }
+
+        [Fact]
+        public void Test_FIFOOrderAggregation_WithDifferentPrices()
+        {
+            // Arrange: Create a position using FIFO method for symbol "TEST"
+            var position = new Position("TEST", PositionManagerCalculationMethod.FIFO);
+
+            // Order 1: Buy 1 at 50000
+            var order1 = new Order
+            {
+                OrderID = 10,
+                Status = eORDERSTATUS.NEW,
+                Symbol = "TEST",
+                Side = eORDERSIDE.Buy,
+                Quantity = 1,
+                FilledQuantity = 0,
+                PricePlaced = 50000,
+                CreationTimeStamp = DateTime.Now
+            };
+            position.AddOrUpdateOrder(order1, out var addedOrder1, out var updatedOrder1);
+            order1.Status = eORDERSTATUS.FILLED;
+            order1.FilledQuantity = 1;
+            position.AddOrUpdateOrder(order1, out addedOrder1, out updatedOrder1);
+
+            // Order 2: Buy 1 at 60000
+            var order2 = new Order
+            {
+                OrderID = 11,
+                Status = eORDERSTATUS.NEW,
+                Symbol = "TEST",
+                Side = eORDERSIDE.Buy,
+                Quantity = 1,
+                FilledQuantity = 0,
+                PricePlaced = 60000,
+                CreationTimeStamp = DateTime.Now
+            };
+            position.AddOrUpdateOrder(order2, out var addedOrder2, out var updatedOrder2);
+            order2.Status = eORDERSTATUS.FILLED;
+            order2.FilledQuantity = 1;
+            position.AddOrUpdateOrder(order2, out addedOrder2, out updatedOrder2);
+
+            // Act: Update the mid price to 65000
+            position.UpdateCurrentMidPrice(65000);
+
+            // Assert:
+            // NetPosition should be 2 (two filled buys)
+            Assert.Equal(2, position.NetPosition);
+            // Exposure should be the current market price times net position: 2 * 65000 = 130000.
+            Assert.Equal(130000, position.Exposure);
+            // PLOpen calculated using each order's price:
+            // (65000 - 50000) + (65000 - 60000) = 15000 + 5000 = 20000.
+            Assert.Equal(20000, position.PLOpen);
+        }
+
+        [Fact]
+        public void Test_UpdateNonExistingOrder_AddsAsNew()
+        {
+            // Arrange: Create a position for symbol "MSFT"
+            var position = new Position("MSFT", PositionManagerCalculationMethod.FIFO);
+            // Create an update for an order that hasn't been added yet.
+            var orderUpdate = new Order
+            {
+                OrderID = 999,
+                Status = eORDERSTATUS.FILLED,
+                Symbol = "MSFT",
+                Side = eORDERSIDE.Buy,
+                Quantity = 10,
+                FilledQuantity = 10,
+                PricePlaced = 250,
+                CreationTimeStamp = DateTime.Now
+            };
+
+            // Act: Attempt to update an order that doesn't exist yet.
+            position.AddOrUpdateOrder(orderUpdate, out var addedOrder, out var updatedOrder);
+
+            // Assert: The order should be treated as a new addition.
+            Assert.NotNull(addedOrder);
+            Assert.Null(updatedOrder);
+            Assert.Single(position.GetAllOrders(null));
+        }
 
 
     }

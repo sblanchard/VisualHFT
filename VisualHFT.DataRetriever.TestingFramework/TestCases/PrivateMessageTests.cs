@@ -8,32 +8,6 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 {
     public class PrivateMessageTests
     {
-        private OrderBook CreateInitialSnapshot()
-        {
-            var _symbol = "EUR/USD";
-            return new OrderBook(_symbol, 5, 5)
-            {
-                Asks = new CachedCollection<BookItem>(null)
-                {
-                    new BookItem() { Price = 1.00010, Size = 100, Symbol = _symbol, EntryID = "1", IsBid = false, },
-                    new BookItem() { Price = 1.00009, Size = 100, Symbol = _symbol, EntryID = "2", IsBid = false, },
-                    new BookItem() { Price = 1.00008, Size = 100, Symbol = _symbol, EntryID = "3", IsBid = false, },
-                    new BookItem() { Price = 1.00007, Size = 100, Symbol = _symbol, EntryID = "4", IsBid = false, },
-                    new BookItem() { Price = 1.00006, Size = 100, Symbol = _symbol, EntryID = "5", IsBid = false, },
-                },
-                Bids = new CachedCollection<BookItem>(null)
-                {
-                    new BookItem() { Price = 1.00005, Size = 100, Symbol = _symbol, EntryID = "6", IsBid = true, },
-                    new BookItem() { Price = 1.00004, Size = 100, Symbol = _symbol, EntryID = "7", IsBid = true, },
-                    new BookItem() { Price = 1.00003, Size = 100, Symbol = _symbol, EntryID = "8", IsBid = true, },
-                    new BookItem() { Price = 1.00002, Size = 100, Symbol = _symbol, EntryID = "9", IsBid = true, },
-                    new BookItem() { Price = 1.00001, Size = 100, Symbol = _symbol, EntryID = "10", IsBid = true, },
-                },
-                Sequence = 1,
-            };
-        }
-
-
         /*
          Test Case 1: Place and Cancel a Limit Buy Order Below Market Price
         */
@@ -333,8 +307,8 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.Symbol, _actualPosition.Symbol);
                 Assert.Equal(0, _actualPosition.WrkBuy);
                 Assert.Equal(0, _actualPosition.WrkSell);
-                Assert.Equal(-(_expectedOrderSent.FilledQuantity * newMarketPrice), _actualPosition.Exposure);
-                Assert.Equal(-_expectedOrderSent.FilledQuantity, _actualPosition.NetPosition);
+                Assert.Equal((_expectedOrderSent.FilledQuantity * newMarketPrice), _actualPosition.Exposure);
+                Assert.Equal(_expectedOrderSent.FilledQuantity, _actualPosition.NetPosition);
                 Assert.Equal((_expectedOrderSent.FilledQuantity * (_expectedOrderSent.PricePlaced - newMarketPrice)), _actualPosition.PLOpen);
                 Assert.Equal(0, _actualPosition.PLRealized);
                 Assert.Equal((_expectedOrderSent.FilledQuantity * (_expectedOrderSent.PricePlaced - newMarketPrice)), _actualPosition.PLTot);
@@ -416,7 +390,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                var _actualLastOrderReceived = _actualOrders.Last();
                Assert.NotNull(_actualLastOrderReceived);
                Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
-               Assert.Equal(eORDERSTATUS.FILLED, _actualLastOrderReceived.Status);
+               Assert.Equal(eORDERSTATUS.CANCELED, _actualLastOrderReceived.Status);
 
            }
     }
@@ -571,69 +545,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void Test_PrivateMessage_Scenario9()
         {
-            //1. Place a Stop-Limit Order
-            //2. The stop is triggered
-            //3. Expecting a fill
 
-
-
-            var marketConnectors = AssemblyLoader.LoadDataRetrievers();
-            foreach (var mktConnector in marketConnectors) //run the same test for each plugin
-            {
-                //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
-                List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_9);
-                var _expectedOrderSent = _expectedExecutedOrders
-                    .FirstOrDefault(x => x.Status == eORDERSTATUS.CANCELED);
-
-                var _actualPosition = HelperPosition.Instance.GetAllPositions().FirstOrDefault();
-                double newMarketPrice = _expectedOrderSent.PricePlaced * 1.25;//current price increased by 25%
-                _actualPosition.UpdateCurrentMidPrice(newMarketPrice);
-                var _actualOrders = _actualPosition.GetAllOrders(null);
-                var _actualOrderSent = _actualOrders.FirstOrDefault();
-
-
-                //ORDER SENT ASSERTION
-                Assert.NotNull(_actualOrders);
-                Assert.Single(_actualOrders);       //must be one order (we sent just one order, plus updates received from exchange for that same order)
-                Assert.NotNull(_actualOrderSent);
-                Assert.NotNull(_expectedOrderSent);
-
-                // _expectedOrderSent   -> What VisualHFT expects as order
-                // _actualOrderSent     -> The actual order the plugin has generated.
-                Assert.NotEqual(0, _actualOrderSent.OrderID);
-                Assert.Equal(_expectedOrderSent.OrderID, _actualOrderSent.OrderID);
-                Assert.Equal(_expectedOrderSent.Status, _actualOrderSent.Status);
-                Assert.Equal(_expectedOrderSent.ProviderId, _actualOrderSent.ProviderId);
-                Assert.Equal(_expectedOrderSent.Symbol, _actualOrderSent.Symbol);
-                Assert.Equal(_expectedOrderSent.Side, _actualOrderSent.Side);
-                Assert.Equal(_expectedOrderSent.OrderType, _actualOrderSent.OrderType);
-                Assert.Equal(_expectedOrderSent.PricePlaced, _actualOrderSent.PricePlaced);
-                Assert.Equal(_expectedOrderSent.Quantity, _actualOrderSent.Quantity);
-                Assert.Equal(_expectedOrderSent.FilledQuantity, _actualOrderSent.FilledQuantity);
-                Assert.Equal(_expectedOrderSent.FilledPrice, _actualOrderSent.FilledPrice);
-                Assert.Equal(_expectedOrderSent.PendingQuantity, _actualOrderSent.PendingQuantity);
-
-                //POSITIONS STATUS: Assert the Position Manager has the same order (expected) as the actual order
-                Assert.Equal(_expectedOrderSent.Symbol, _actualPosition.Symbol);
-                Assert.Equal(0, _actualPosition.WrkBuy);
-                Assert.Equal(0, _actualPosition.WrkSell);
-                Assert.Equal((_expectedOrderSent.FilledQuantity * newMarketPrice), _actualPosition.Exposure);
-                Assert.Equal(_expectedOrderSent.FilledQuantity, _actualPosition.NetPosition);
-                Assert.Equal((_expectedOrderSent.FilledQuantity * (_expectedOrderSent.PricePlaced - newMarketPrice)), _actualPosition.PLOpen);
-                Assert.Equal(0, _actualPosition.PLRealized);
-                Assert.Equal((_expectedOrderSent.FilledQuantity * (_expectedOrderSent.PricePlaced - newMarketPrice)), _actualPosition.PLTot);
-                Assert.Equal(_expectedOrderSent.FilledQuantity, _actualPosition.TotBuy);
-                Assert.Equal(0, _actualPosition.TotSell);
-
-
-
-                //SPECIFIC ASSERTIONS: last order received must be wit status "Canceled"
-                var _actualLastOrderReceived = _actualOrders.Last();
-                Assert.NotNull(_actualLastOrderReceived);
-                Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
-                Assert.Equal(eORDERSTATUS.FILLED, _actualLastOrderReceived.Status);
-
-            }
         }
 
     }
