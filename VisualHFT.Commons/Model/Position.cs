@@ -29,20 +29,6 @@ namespace VisualHFT.Model
             _sells = new List<Order>();
         }
 
-        public Position(List<Order> orders, PositionManagerCalculationMethod method)
-        {
-            _method = method;
-            if (orders.Select(x => x.Symbol).Distinct().Count() > 1)
-                throw new Exception("This class is not able to handle orders with multiple symbols.");
-
-            _buys = orders.Where(x => x.Side == eORDERSIDE.Buy).DefaultIfEmpty(new Order()).ToList();
-            _sells = orders.Where(x => x.Side == eORDERSIDE.Sell).DefaultIfEmpty(new Order()).ToList();
-
-            Symbol = orders.First().Symbol;
-
-            Recalculate();
-        }
-
         public string Symbol
         {
             get => _symbol;

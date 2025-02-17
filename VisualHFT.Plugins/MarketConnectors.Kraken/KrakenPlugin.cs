@@ -235,96 +235,81 @@ namespace MarketConnectors.Kraken
         }
         private async Task UpdateUserOrder(KrakenOrderUpdate item)
         {
-            VisualHFT.Model.Order localuserOrder;
-            if (!this._localUserOrders.ContainsKey(item.OrderId))
+            VisualHFT.Model.Order localuserOrder = null;
+            if (!this._localUserOrders.ContainsKey(item.OrderId) && (item.OrderStatus == OrderStatusUpdate.New || item.OrderStatus == OrderStatusUpdate.Pending))
             {
                 localuserOrder = new VisualHFT.Model.Order();
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.CreationTimeStamp = item.Timestamp;
                 localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                // localuserOrder.OrderID = long.Parse(item.OrderId);
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
-                localuserOrder.CreationTimeStamp = item.EffectiveTime.HasValue ? item.EffectiveTime.Value : item.Timestamp;
-                localuserOrder.Quantity = (double)item.OrderQuantity;
+                if (item.OrderQuantity.HasValue) //when orderType=MARKET does not inform qty
+                    localuserOrder.Quantity = (double)item.OrderQuantity;
                 localuserOrder.PricePlaced = (double)item.LimitPrice;
                 localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
-                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+                localuserOrder.TimeInForce = item.TimeInForce == TimeInForce.IOC? eORDERTIMEINFORCE.IOC : eORDERTIMEINFORCE.GTC;
+                localuserOrder.OrderType = item.OrderType == OrderType.Market ? eORDERTYPE.MARKET : eORDERTYPE.LIMIT;
+                localuserOrder.Side = item.OrderSide == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell;
 
-
-                if (item.TimeInForce == TimeInForce.IOC)
-                {
-                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
-                }
-                else if (item.TimeInForce == TimeInForce.GTC)
-                {
-                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
-                }
+                localuserOrder.Status = eORDERSTATUS.NEW;
                 this._localUserOrders.Add(item.OrderId, localuserOrder);
             }
-            else
+            else if (this._localUserOrders.ContainsKey(item.OrderId))
             {
                 localuserOrder = this._localUserOrders[item.OrderId];
             }
 
 
-            if (item.OrderType == OrderType.Market)
+            if (localuserOrder != null)
             {
-                localuserOrder.OrderType = eORDERTYPE.MARKET;
-            }
-            else if (item.OrderType == OrderType.Limit)
-            {
-                localuserOrder.OrderType = eORDERTYPE.LIMIT;
-            }
-            else
-            {
-                localuserOrder.OrderType = eORDERTYPE.PEGGED;
-            }
-
-
-            if (item.OrderSide == OrderSide.Buy)
-            {
-                localuserOrder.Side = eORDERSIDE.Buy;
-            }
-            if (item.OrderSide == OrderSide.Sell)
-            {
-                localuserOrder.Side = eORDERSIDE.Sell;
-            }
-
-            if (item.OrderEventType == OrderEventType.New || item.OrderEventType == OrderEventType.PendingNew)
-            {
-                if (item.OrderSide == OrderSide.Buy)
+                if (item.OrderStatus == OrderStatusUpdate.New)
                 {
-                    localuserOrder.CreationTimeStamp = item.Timestamp;
-                    localuserOrder.PricePlaced = (double)item.LimitPrice;
-                    localuserOrder.BestBid = (double)item.LimitPrice;
-                    localuserOrder.Side = eORDERSIDE.Buy;
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                    if (item.OrderEventType == OrderEventType.Amended) //the order was amended
+                    {
+                        localuserOrder.PricePlaced = item.LimitPrice.ToDouble();
+                        if (item.OrderQuantity.HasValue)
+                            localuserOrder.Quantity = item.OrderQuantity.ToDouble();
+                        localuserOrder.LastUpdated = item.Timestamp;
+                        if (item.QuantityFilled.HasValue)
+                            localuserOrder.FilledQuantity = item.QuantityFilled.ToDouble();
+                        if (item.AveragePrice.HasValue)
+                            localuserOrder.FilledPrice = item.AveragePrice.ToDouble();
+                    }
+
                 }
-                if (item.OrderSide == OrderSide.Sell)
+                else if (item.OrderStatus == OrderStatusUpdate.Expired || item.OrderStatus == OrderStatusUpdate.Canceled)
                 {
-                    localuserOrder.Side = eORDERSIDE.Sell;
-                    localuserOrder.BestAsk = (double)item.LimitPrice;
-                    localuserOrder.Quantity = (double)item.OrderQuantity;
+                    //update needed fields only
+                    localuserOrder.LastUpdated = item.Timestamp;
+                    if (item.QuantityFilled.HasValue)
+                        localuserOrder.FilledQuantity = item.QuantityFilled.ToDouble();
+                    if (item.AveragePrice.HasValue)
+                        localuserOrder.FilledPrice = item.AveragePrice.ToDouble();
+
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+
                 }
-                localuserOrder.Status = eORDERSTATUS.NEW;
-            }
-            if (item.OrderEventType == OrderEventType.Expired)
-            {
-                localuserOrder.Status = eORDERSTATUS.CANCELED;
-            }
-            if (item.OrderEventType == OrderEventType.Canceled)
-            {
-                localuserOrder.Status = eORDERSTATUS.CANCELED;
-            }
-            if (item.OrderEventType == OrderEventType.Filled)
-            {
-                localuserOrder.Status = eORDERSTATUS.FILLED;
-            }
+                else if (item.OrderStatus == OrderStatusUpdate.Filled || item.OrderStatus == OrderStatusUpdate.PartiallyFilled)
+                {
+                    //update needed fields only
+                    if (item.QuantityFilled.HasValue)
+                        localuserOrder.FilledQuantity = item.QuantityFilled.ToDouble();
+                    if (item.AveragePrice.HasValue)
+                        localuserOrder.FilledPrice = item.AveragePrice.ToDouble();
+                    localuserOrder.Status = (item.OrderStatus == OrderStatusUpdate.PartiallyFilled ? eORDERSTATUS.PARTIALFILLED : eORDERSTATUS.FILLED);
+                    if (localuserOrder.OrderType == eORDERTYPE.MARKET) //update original order and price placed
+                    {
+                        localuserOrder.PricePlaced = localuserOrder.FilledPrice;
+                        localuserOrder.Quantity = localuserOrder.FilledQuantity;
+                    }
 
+                }
 
-            localuserOrder.LastUpdated = DateTime.Now;
-            localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
-            RaiseOnDataReceived(localuserOrder);
+                localuserOrder.LastUpdated = DateTime.Now;
+                RaiseOnDataReceived(localuserOrder);
+            }
         }
         private async Task InitializeDeltasAsync()
         {

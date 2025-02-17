@@ -94,18 +94,14 @@ namespace VisualHFT.Commons.Helpers
             {
                 if (!_positionsBySymbol.ContainsKey(executedOrder.Symbol))
                 {
-                    _positionsBySymbol.Add(executedOrder.Symbol, new Position(new List<Order> { executedOrder }, PositionManagerCalculationMethod.FIFO));
-                    DispatchToSubscribers(_positionsBySymbol[executedOrder.Symbol], executedOrder, null);
+                    _positionsBySymbol.Add(executedOrder.Symbol, new Position(executedOrder.Symbol, PositionManagerCalculationMethod.FIFO));
                 }
-                else
-                {
-                    Order? addedOrder = null;
-                    Order? updatedOrder = null;
-                    _positionsBySymbol[executedOrder.Symbol].AddOrUpdateOrder(executedOrder, out addedOrder, out updatedOrder);
-                    DispatchToSubscribers(_positionsBySymbol[executedOrder.Symbol], addedOrder, updatedOrder);
-                }
+                Order? addedOrder = null;
+                Order? updatedOrder = null;
+                _positionsBySymbol[executedOrder.Symbol].AddOrUpdateOrder(executedOrder, out addedOrder, out updatedOrder);
+                DispatchToSubscribers(_positionsBySymbol[executedOrder.Symbol], addedOrder, updatedOrder);
 
-                
+
             }
             finally
             {
@@ -138,6 +134,16 @@ namespace VisualHFT.Commons.Helpers
             {
                 _lockObj.ExitReadLock();
             }
+        }
+
+        public void Reset()
+        {
+            //unsubscribe all
+            foreach (var subscriber in _subscribers)
+            {
+                Unsubscribe(subscriber);
+            }
+            _positionsBySymbol.Clear();
         }
     }
 }
