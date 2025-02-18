@@ -130,12 +130,13 @@ namespace MarketConnectors.KuCoin
             {
                 _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>($"<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
                 _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, KucoinTrade>>($"<Tuple<DateTime, string, KucoinTrade>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
-            }
 
+                _eventBuffers[symbol].PauseConsumer(); //this will allow collecting deltas (without delivering it), until we have the snapshot
+            }
+            await InitializeDeltasAsync(); //must start collecting deltas before snapshot
             await InitializeSnapshotsAsync();
             await InitializeOpenOrders();
             await InitializeTradesAsync();
-            await InitializeDeltasAsync();
             await InitializePingTimerAsync();
             await InitializeUserPrivateOrders();
         }
@@ -596,6 +597,7 @@ namespace MarketConnectors.KuCoin
                     {
                         _localOrderBooks[normalizedSymbol] = ToOrderBookModel(depthSnapshot.Data, normalizedSymbol);
                         log.Info($"{this.Name}: LOB {normalizedSymbol} level 2 Successfully loaded.");
+                        _eventBuffers[normalizedSymbol].ResumeConsumer();
                     }
                     else
                     {

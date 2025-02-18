@@ -4,7 +4,8 @@ using VisualHFT.Helpers;
 using VisualHFT.DataRetriever.TestingFramework.Core;
 using Xunit.Abstractions;
 using VisualHFT.PluginManager;
-using System.Reflection.Metadata;
+using VisualHFT.Commons.Helpers;
+
 
 namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 {
@@ -47,6 +48,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             const int TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE = 30;
             const int SECONDS_TO_WAIT_BEFORE_START_CHECKING = 5;
 
+            HelperOrderBook.Instance.Reset();// reset previous subscriptions
             HelperOrderBook.Instance.Subscribe(lob =>
             {
                 if (exceptionTriggered)
@@ -55,7 +57,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 exceptionTriggered = true;
                 throw new Exception("This should trigger reconnection process.");
             });
-
+            
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
             {
@@ -105,16 +107,24 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 sp.Reset();
             }
         }
-
         [Fact]
         public async Task Test_Plugin_CheckForCrossSpreadAfter5secs_Async()
         {
             OrderBook _actualOrderBook = null;
-            
+            Exception _receivedException = null;
+
+            HelperOrderBook.Instance.Reset();// reset previous subscriptions
             HelperOrderBook.Instance.Subscribe(lob =>
             {
                 _actualOrderBook = lob;
             });
+            HelperNotificationManager.Instance.NotificationAdded += (sender, e) =>
+            {
+                if (e.Notification.NotificationType == HelprNorificationManagerTypes.ERROR)
+                {
+                    _receivedException = e.Notification.Exception;
+                }
+            };
 
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors)
@@ -125,9 +135,10 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
                 var _dataRetriever = mktConnector as IDataRetriever;
                 await _dataRetriever.StartAsync();
+
                 DateTime startProcess = DateTime.Now;
                 DateTime? startCheckingSpread = null;
-                while (DateTime.Now.Subtract(startProcess).TotalSeconds < 10)
+                while (DateTime.Now.Subtract(startProcess).TotalSeconds < 10 && _receivedException == null)
                 {
                     if (_actualOrderBook != null)
                     {
@@ -145,9 +156,19 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                             startCheckingSpread = null;
                     }
                 }
-            }
+                
+                if (_receivedException != null)
+                {
+                    throw _receivedException;
+                }
+                Assert.NotNull(_actualOrderBook); //_actualOrderBook should be not null after 10 seconds
 
-            Assert.NotNull(_actualOrderBook);
+                
+                
+                //reset for next plugin
+                _receivedException = null;
+                _actualOrderBook = null;
+            }
         }
 
     }

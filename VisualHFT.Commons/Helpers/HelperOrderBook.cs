@@ -87,5 +87,13 @@ namespace VisualHFT.Helpers
                 DispatchToSubscribers(e);
             }
         }
+
+        public void Reset()
+        {
+            foreach (var subscriber in _subscribers)
+            {
+                Unsubscribe(subscriber);
+            }
+        }
     }
 }
