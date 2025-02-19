@@ -37,6 +37,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(ePluginStatus.STARTED, _plugin.Status);
                 await _dataRetriever.StopAsync();
                 Assert.Equal(ePluginStatus.STOPPED, _plugin.Status);
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
         [Fact]
@@ -105,17 +106,22 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                     await Task.Delay(500); //wait for reconnection
                 }
                 sp.Reset();
+
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
         [Fact]
-        public async Task Test_Plugin_CheckForCrossSpreadAfter5secs_Async()
+        public async Task Test_Plugin_CheckForCrossSpreadAfter10secs_Async()
         {
+            object _lock = new object();
             OrderBook _actualOrderBook = null;
             Exception _receivedException = null;
 
             HelperOrderBook.Instance.Reset();// reset previous subscriptions
             HelperOrderBook.Instance.Subscribe(lob =>
             {
+                lock (_lock)
+                    _actualOrderBook = lob;
                 _actualOrderBook = lob;
             });
             HelperNotificationManager.Instance.NotificationAdded += (sender, e) =>
@@ -142,18 +148,21 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 {
                     if (_actualOrderBook != null)
                     {
-                        if (_actualOrderBook.Spread < 0)
+                        lock (_lock)
                         {
-                            if (!startCheckingSpread.HasValue)
-                                startCheckingSpread = DateTime.Now;
-                            if (DateTime.Now.Subtract(startCheckingSpread.Value).TotalSeconds > 5)
+                            if (_actualOrderBook.Spread < 0)
                             {
-                                _testOutputHelper.WriteLine($"FAILED TESTING SPREAD IN {CONNECTOR_NAME}");
-                                Assert.Fail("Crossed spread detected.");
+                                if (!startCheckingSpread.HasValue)
+                                    startCheckingSpread = DateTime.Now;
+                                if (DateTime.Now.Subtract(startCheckingSpread.Value).TotalSeconds > 5)
+                                {
+                                    _testOutputHelper.WriteLine($"FAILED TESTING SPREAD IN {CONNECTOR_NAME}");
+                                    Assert.Fail("Crossed spread detected.");
+                                }
                             }
+                            else
+                                startCheckingSpread = null;
                         }
-                        else
-                            startCheckingSpread = null;
                     }
                 }
                 
@@ -168,6 +177,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 //reset for next plugin
                 _receivedException = null;
                 _actualOrderBook = null;
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
 

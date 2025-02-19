@@ -80,6 +80,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                 Assert.Equal(eORDERSTATUS.CANCELED, _actualLastOrderReceived.Status);
 
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
         
@@ -149,6 +150,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                 Assert.Equal(eORDERSTATUS.CANCELED, _actualLastOrderReceived.Status);
 
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
 
@@ -218,6 +220,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                 Assert.Equal(eORDERSTATUS.FILLED, _actualLastOrderReceived.Status);
 
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
         /*
@@ -286,6 +289,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                 Assert.Equal(eORDERSTATUS.FILLED, _actualLastOrderReceived.Status);
 
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
 
@@ -355,6 +359,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                 Assert.Equal(eORDERSTATUS.FILLED, _actualLastOrderReceived.Status);
 
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
 
@@ -429,7 +434,8 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                Assert.Equal(eORDERSTATUS.CANCELED, _actualLastOrderReceived.Status);
 
-           }
+               _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
+            }
         }
 
 
@@ -504,6 +510,8 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                 Assert.Equal(eORDERSTATUS.CANCELED, _actualLastOrderReceived.Status);
 
+
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
 
@@ -580,6 +588,8 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
                 Assert.Equal(eORDERSTATUS.FILLED, _actualLastOrderReceived.Status);
 
+
+                _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
         }
 
