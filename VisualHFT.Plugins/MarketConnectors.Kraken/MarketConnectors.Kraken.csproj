@@ -8,31 +8,31 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="JsonMessages\PrivateMessages_Scenario9.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario9.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario8.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario8.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario7.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario7.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario6.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario6.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario5.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario5.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario4.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario4.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario3.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario3.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario2.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario2.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="JsonMessages\PrivateMessages_Scenario1.json">
+    <Content Include="kraken_JsonMessages\PrivateMessages_Scenario1.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

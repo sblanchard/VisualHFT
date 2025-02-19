@@ -8,35 +8,35 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="jsonMessages\PrivateMessages_Scenario1.json" />
+    <None Remove="kukoin_jsonMessages\PrivateMessages_Scenario1.json" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="jsonMessages\PrivateMessages_Scenario3.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario3.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario4.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario4.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario5.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario5.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario6.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario6.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario7.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario7.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario8.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario8.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario9.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario9.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario2.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario2.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="jsonMessages\PrivateMessages_Scenario1.json">
+    <Content Include="kukoin_jsonMessages\PrivateMessages_Scenario1.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

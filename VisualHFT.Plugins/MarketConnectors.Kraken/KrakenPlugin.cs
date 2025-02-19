@@ -855,7 +855,7 @@ namespace MarketConnectors.Kraken
                 throw new Exception("Messages were not collected for this scenario.");
             }
 
-            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"jsonMessages/{_file}"));
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"kraken_JsonMessages/{_file}"));
 
             //DESERIALIZE EXCHANGES MODEL
             List<KrakenOrderUpdate> modelList = new List<KrakenOrderUpdate>();

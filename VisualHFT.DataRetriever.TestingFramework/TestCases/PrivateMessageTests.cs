@@ -3,11 +3,19 @@ using VisualHFT.DataRetriever.TestingFramework.Core;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
+using Xunit.Abstractions;
 
 namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 {
     public class PrivateMessageTests
     {
+        private readonly ITestOutputHelper _testOutputHelper;
+        public PrivateMessageTests(ITestOutputHelper testOutputHelper)
+        {
+            _testOutputHelper = testOutputHelper;
+        }
+
+
         /*
          Test Case 1: Place and Cancel a Limit Buy Order Below Market Price
         */
@@ -18,6 +26,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_1);
                 var _expectedOrderSent = _expectedExecutedOrders
@@ -84,6 +95,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_2);
                 var _expectedOrderSent = _expectedExecutedOrders
@@ -149,6 +163,10 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
+
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_3);
                 var _expectedOrderSent = _expectedExecutedOrders
@@ -213,6 +231,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_4);
                 var _expectedOrderSent = _expectedExecutedOrders
@@ -279,6 +300,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_5);
                 var _expectedOrderSent = _expectedExecutedOrders
@@ -350,8 +374,11 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
            foreach (var mktConnector in marketConnectors) //run the same test for each plugin
            {
-               //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
-               List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_6);
+               var CONNECTOR_NAME = mktConnector.GetType().Name;
+               _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
+                //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
+                List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_6);
                var _expectedOrderSent = _expectedExecutedOrders
                    .FirstOrDefault(x => x.Status == eORDERSTATUS.CANCELED);
 
@@ -403,7 +430,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                Assert.Equal(eORDERSTATUS.CANCELED, _actualLastOrderReceived.Status);
 
            }
-    }
+        }
 
 
         /*
@@ -422,6 +449,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_7);
                 var _expectedOrderSent = _expectedExecutedOrders
@@ -494,6 +524,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                var CONNECTOR_NAME = mktConnector.GetType().Name;
+                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
+
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_8);
                 var _expectedOrderSent = _expectedExecutedOrders

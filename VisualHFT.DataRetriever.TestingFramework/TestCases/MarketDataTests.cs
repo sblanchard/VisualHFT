@@ -409,7 +409,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                     new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = true, Price = 1.00005, Sequence = ++_startingSequence}
                 }, new List<DeltaBookItem>()
                 {
-                    new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = false, Price = 1.00006, Sequence = ++_startingSequence}
+                    new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "5", MDUpdateAction = eMDUpdateAction.Delete, IsBid = false, Price = 1.00006, Sequence = ++_startingSequence}
                 }); 
 
 
@@ -525,6 +525,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         {
             new DeltaBookItem
             {
+                EntryID = "6",
                 Symbol = snapshotModel.Symbol,
                 IsBid = true,
                 Price = 1.00005,
@@ -533,6 +534,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             },
             new DeltaBookItem
             {
+                EntryID = "7",
                 Symbol = snapshotModel.Symbol,
                 IsBid = true,
                 Price = 1.00004,
@@ -542,6 +544,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             },
             new DeltaBookItem
             {
+                EntryID = "newID",
                 Symbol = snapshotModel.Symbol,
                 IsBid = true,
                 Price = 1.00006,
@@ -559,6 +562,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         {
             new DeltaBookItem
             {
+                EntryID = "1",
                 Symbol = snapshotModel.Symbol,
                 IsBid = false,
                 Price = 1.00010,
@@ -567,6 +571,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             },
             new DeltaBookItem
             {
+                EntryID = "2",
                 Symbol = snapshotModel.Symbol,
                 IsBid = false,
                 Price = 1.00009,
@@ -576,6 +581,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             },
             new DeltaBookItem
             {
+                EntryID = "newID",
                 Symbol = snapshotModel.Symbol,
                 IsBid = false,
                 Price = 1.00005,

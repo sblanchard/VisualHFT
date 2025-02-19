@@ -1067,7 +1067,7 @@ namespace MarketConnectors.KuCoin
         public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
         {
             //depending on the scenario, load its message(s)
-            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "jsonMessages/PrivateMessages_Scenario1.json"));
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "kucoin_jsonMessages/PrivateMessages_Scenario1.json"));
             JObject rootJsonObject = JObject.Parse(jsonString);
             JToken dataToken = rootJsonObject["data"];
             string dataJsonString = dataToken.ToString();
@@ -1075,13 +1075,9 @@ namespace MarketConnectors.KuCoin
 
             // Replace KucoinSymbol with the actual model class
             KucoinStreamOrderNewUpdate newOrderItem = JsonConvert.DeserializeObject<KucoinStreamOrderNewUpdate>(dataJsonString);
-            KucoinStreamOrderUpdate updateExistingItem = JsonConvert.DeserializeObject<KucoinStreamOrderUpdate>(dataJsonString);
-
-
 
 
             UpdateUserOrder(newOrderItem);
-            //UpdateUserOrder(updateExistingItem);
 
 
 

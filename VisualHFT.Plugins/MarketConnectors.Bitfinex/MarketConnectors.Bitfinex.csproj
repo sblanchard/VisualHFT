@@ -8,6 +8,36 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario2.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario3.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario4.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario5.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario6.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario7.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario8.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bitfinex_jsonMessages\PrivateMessages_Scenario9.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\log4net.config" Link="log4net.config" />
   </ItemGroup>
 

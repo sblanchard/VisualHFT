@@ -430,13 +430,25 @@ namespace VisualHFT.Model
         }
         public virtual void DeleteLevel(DeltaBookItem item)
         {
-            if (!item.Price.HasValue || item.Price.Value == 0)
-                throw new Exception("DeltaBookItem cannot be deleted since has no price.");
+            if (string.IsNullOrEmpty(item.EntryID) && (!item.Price.HasValue || item.Price.Value == 0))
+                throw new Exception("DeltaBookItem cannot be deleted since has no price or no EntryID.");
             lock (_data.Lock)
             {
-                var _itemToDelete =
-                    (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks)
-                    .FirstOrDefault(x => x.Price == item.Price);
+                BookItem _itemToDelete = null;
+
+
+                if (!string.IsNullOrEmpty(item.EntryID))
+                {
+                    _itemToDelete = (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks)
+                        .FirstOrDefault(x => x.EntryID == item.EntryID);
+                }
+                else if (item.Price.HasValue && item.Price > 0)
+                {
+                    _itemToDelete = (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks)
+                        .FirstOrDefault(x => x.Price == item.Price);
+                }
+
+
                 if (_itemToDelete != null)
                 {
                     (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Remove(_itemToDelete);

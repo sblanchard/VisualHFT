@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VisualHFT.Commons\VisualHFT.Commons.csproj" />
+    <ProjectReference Include="..\VisualHFT.Plugins\MarketConnectors.Bitfinex\MarketConnectors.Bitfinex.csproj" />
+    <ProjectReference Include="..\VisualHFT.Plugins\MarketConnectors.Kraken\MarketConnectors.Kraken.csproj" />
     <ProjectReference Include="..\VisualHFT.Plugins\MarketConnectors.KuCoin\MarketConnectors.KuCoin.csproj" />
   </ItemGroup>
 
