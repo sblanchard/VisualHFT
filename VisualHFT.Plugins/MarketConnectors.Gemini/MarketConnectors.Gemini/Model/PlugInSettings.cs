@@ -9,6 +9,7 @@ namespace MarketConnectors.Gemini.Model
 
         public required string HostName { get; set; }
         public required string WebSocketHostName { get; set; }
+        public required string WebSocketHostName_UserOrder { get; set; }
         public string ApiKey { get; set; }
         public string ApiSecret { get; set; } 
         public List<string> Symbols { get; set; }

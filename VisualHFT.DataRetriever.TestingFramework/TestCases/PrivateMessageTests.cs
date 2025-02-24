@@ -309,6 +309,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_5);
+                
                 var _expectedOrderSent = _expectedExecutedOrders
                     .FirstOrDefault(x => x.Status == eORDERSTATUS.FILLED);
 

@@ -83,9 +83,7 @@ namespace MarketConnectors.Gemini
         {
             await base.StartAsync();//call the base first 
 
-            await InitializeSnapshotAsync();  
-            
-
+            await InitializeSnapshotAsync();   
             await InitializeDeltasAsync();
             await InitializeUserPrivateOrders();
              
@@ -218,7 +216,7 @@ namespace MarketConnectors.Gemini
                     });
 
                     var exitEvent = new ManualResetEvent(false);
-                    _userOrderEvents = new WebsocketClient(new Uri(_settings.WebSocketHostName), factory);
+                    _userOrderEvents = new WebsocketClient(new Uri(_settings.WebSocketHostName_UserOrder), factory);
                     _userOrderEvents.ReconnectTimeout = TimeSpan.FromSeconds(30);
                     _userOrderEvents.ReconnectionHappened.Subscribe(info =>
                     {
@@ -382,126 +380,132 @@ namespace MarketConnectors.Gemini
                 foreach (var item in _dataType)
                 {
 
-                    VisualHFT.Model.Order localuserOrder;
-                    if (!this._localUserOrders.ContainsKey(item.client_order_id))
-                    {
-                        localuserOrder = new VisualHFT.Model.Order();
-                        localuserOrder.ClOrdId = item.client_order_id;
-                        localuserOrder.Currency = GetNormalizedSymbol(item.symbol);
-                        localuserOrder.OrderID = item.order_id;
-                        localuserOrder.ProviderId = _settings!.Provider.ProviderID;
-                        localuserOrder.ProviderName = _settings.Provider.ProviderName;
-                        localuserOrder.CreationTimeStamp = DateTimeOffset.FromUnixTimeSeconds(item.timestamp).DateTime;
-                        localuserOrder.Quantity = item.original_amount;
-                        localuserOrder.PricePlaced = item.price;
-                        localuserOrder.Symbol = GetNormalizedSymbol(item.symbol);
-                        localuserOrder.FilledQuantity = item.executed_amount;
-                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
-
-                        if (!string.IsNullOrEmpty(item.behavior))
-                        {
-                            if (item.behavior.ToLower().Equals("immediate-or-cancel"))
-                            {
-                                localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
-                            }
-                            else if (item.behavior.ToLower().Equals("fill-or-kill"))
-                            {
-                                localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
-                            }
-                            else if (item.behavior.ToLower().Equals("maker-or-cancel"))
-                            {
-                                localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
-                            }
-                        }
-                        this._localUserOrders.Add(item.client_order_id, localuserOrder);
-                    }
-                    else
-                    {
-
-                        localuserOrder = this._localUserOrders[item.client_order_id];
-                    }
-                    localuserOrder.OrderType = eORDERTYPE.LIMIT;
-
-                    localuserOrder.Quantity = item.original_amount;
-                    if (item.order_type.ToLower().Equals("limit"))
-                    {
-                        localuserOrder.OrderType = eORDERTYPE.LIMIT;
-                    }
-                    else if (item.order_type.ToLower().Equals("exchange limit"))
-                    {
-                        localuserOrder.OrderType = eORDERTYPE.PEGGED;
-                    }
-                    else if (item.order_type.ToLower().Equals("market buy"))
-                    {
-                        localuserOrder.OrderType = eORDERTYPE.MARKET;
-                    }
-
-                    if (item.side.ToLower().Equals("sell"))
-                    {
-                        localuserOrder.BestAsk = item.price;
-                        localuserOrder.Side = eORDERSIDE.Sell;
-
-                    }
-                    else if (item.side.ToLower().Equals("buy"))
-                    {
-                        localuserOrder.PricePlaced = item.price;
-                        localuserOrder.BestBid = item.price;
-                        localuserOrder.Side = eORDERSIDE.Buy;
-
-                    }
-
-                    if (item.type.ToLower().Equals("accepted"))
-                    {
-                        localuserOrder.Status = eORDERSTATUS.NEW;
-                    }
-                    else if (item.type.ToLower().Equals("fill"))
-                    {
-                        localuserOrder.FilledQuantity = item.executed_amount;
-                        localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
-                    }
-                    else if (item.type.ToLower().Equals("closed"))
-                    {
-                        localuserOrder.Status = eORDERSTATUS.FILLED;
-                        if (item.is_cancelled)
-                        {
-                            localuserOrder.Status = eORDERSTATUS.CANCELED;
-
-                        }
-                    }
-                    else if (item.type.ToLower().Equals("rejected"))
-                    {
-                        localuserOrder.Status = eORDERSTATUS.REJECTED;
-                    }
-                    else if (item.type.ToLower().Equals("cancelled"))
-                    {
-                        localuserOrder.Status = eORDERSTATUS.CANCELED;
-                    }
-                    else if (item.type.ToLower().Equals("cancel_rejected"))
-                    {
-                        localuserOrder.Status = eORDERSTATUS.CANCELED;
-                    }
-                    if (!string.IsNullOrEmpty(item.behavior))
-                    {
-                        if (item.behavior.ToLower().Equals("immediate-or-cancel"))
-                        {
-                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
-                        }
-                        else if (item.behavior.ToLower().Equals("fill-or-kill"))
-                        {
-                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
-                        }
-                        else if (item.behavior.ToLower().Equals("maker-or-cancel"))
-                        {
-                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
-                        }
-                    }
-                    localuserOrder.LastUpdated = DateTime.Now;
-                    localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
-                    RaiseOnDataReceived(localuserOrder);
+                    UpdateUserOrderBook(item);
 
                 }
             }
         }
+
+        private void UpdateUserOrderBook(UserOrderData item)
+        {
+            VisualHFT.Model.Order localuserOrder;
+            if (!this._localUserOrders.ContainsKey(item.client_order_id))
+            {
+                localuserOrder = new VisualHFT.Model.Order();
+                localuserOrder.ClOrdId = item.client_order_id;
+                localuserOrder.Currency = GetNormalizedSymbol(item.symbol);
+                localuserOrder.OrderID = item.order_id;
+                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                localuserOrder.CreationTimeStamp = DateTimeOffset.FromUnixTimeSeconds(item.timestamp).DateTime;
+                localuserOrder.Quantity = item.original_amount;
+                localuserOrder.PricePlaced = item.price;
+                localuserOrder.Symbol = GetNormalizedSymbol(item.symbol);
+                localuserOrder.FilledQuantity = item.executed_amount;
+                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+                if (!string.IsNullOrEmpty(item.behavior))
+                {
+                    if (item.behavior.ToLower().Equals("immediate-or-cancel"))
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                    }
+                    else if (item.behavior.ToLower().Equals("fill-or-kill"))
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                    }
+                    else if (item.behavior.ToLower().Equals("maker-or-cancel"))
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
+                    }
+                }
+                this._localUserOrders.Add(item.client_order_id, localuserOrder);
+            }
+            else
+            {
+
+                localuserOrder = this._localUserOrders[item.client_order_id];
+            }
+            localuserOrder.OrderType = eORDERTYPE.LIMIT;
+
+            localuserOrder.Quantity = item.original_amount;
+            if (item.order_type.ToLower().Equals("limit"))
+            {
+                localuserOrder.OrderType = eORDERTYPE.LIMIT;
+            }
+            else if (item.order_type.ToLower().Equals("exchange limit"))
+            {
+                localuserOrder.OrderType = eORDERTYPE.PEGGED;
+            }
+            else if (item.order_type.ToLower().Equals("market buy"))
+            {
+                localuserOrder.OrderType = eORDERTYPE.MARKET;
+            }
+
+            if (item.side.ToLower().Equals("sell"))
+            {
+                localuserOrder.BestAsk = item.price;
+                localuserOrder.Side = eORDERSIDE.Sell;
+
+            }
+            else if (item.side.ToLower().Equals("buy"))
+            {
+                localuserOrder.PricePlaced = item.price;
+                localuserOrder.BestBid = item.price;
+                localuserOrder.Side = eORDERSIDE.Buy;
+
+            }
+
+            if (item.type.ToLower().Equals("accepted"))
+            {
+                localuserOrder.Status = eORDERSTATUS.NEW;
+            }
+            else if (item.type.ToLower().Equals("fill"))
+            {
+                localuserOrder.FilledQuantity = item.executed_amount;
+                localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+            }
+            else if (item.type.ToLower().Equals("closed"))
+            {
+                localuserOrder.Status = eORDERSTATUS.FILLED;
+                if (item.is_cancelled)
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+
+                }
+            }
+            else if (item.type.ToLower().Equals("rejected"))
+            {
+                localuserOrder.Status = eORDERSTATUS.REJECTED;
+            }
+            else if (item.type.ToLower().Equals("cancelled"))
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+            else if (item.type.ToLower().Equals("cancel_rejected"))
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+            if (!string.IsNullOrEmpty(item.behavior))
+            {
+                if (item.behavior.ToLower().Equals("immediate-or-cancel"))
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                }
+                else if (item.behavior.ToLower().Equals("fill-or-kill"))
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                }
+                else if (item.behavior.ToLower().Equals("maker-or-cancel"))
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
+                }
+            }
+            localuserOrder.LastUpdated = DateTime.Now;
+            localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
+            RaiseOnDataReceived(localuserOrder);
+        }
+
         private void HandleMessage(string marketData, DateTime serverTime)
         {
             string message = marketData;
@@ -584,6 +588,7 @@ namespace MarketConnectors.Gemini
                 var identifiedSizeDecimalPlaces = RecognizeDecimalPlacesAutomatically(book.Asks.Where(x => x.Size.HasValue).Select(x => x.Size.Value));
                 book.SizeDecimalPlaces = identifiedSizeDecimalPlaces;
                 book.PriceDecimalPlaces = identifiedPriceDecimalPlaces;
+
                 foreach (var bookItem in book.Asks)
                 {
                     bookItem.SizeDecimalPlaces = identifiedSizeDecimalPlaces;
@@ -706,6 +711,7 @@ namespace MarketConnectors.Gemini
                 ApiSecret = "",
                 HostName = "https://api.gemini.com/v1/book/",
                 WebSocketHostName = "wss://api.gemini.com/v2/marketdata?heartbeat=true",
+                WebSocketHostName_UserOrder = "wss://api.gemini.com/v1/order/events?heartbeat=true",
                 Provider = new VisualHFT.Model.Provider() { ProviderID = 5, ProviderName = "Gemini" },
                 Symbols = new List<string>() { "BTCUSD(BTC/USD)", "ETHUSD(ETH/USD)" } // Add more symbols as needed
             };
@@ -720,7 +726,7 @@ namespace MarketConnectors.Gemini
             }
             if (_settings.Provider == null) //To prevent back compability with older setting formats
             {
-                _settings.Provider = new VisualHFT.Model.Provider() { ProviderID = 2, ProviderName = "Bitfinex" };
+                _settings.Provider = new VisualHFT.Model.Provider() { ProviderID = 5, ProviderName = "Gemini" };
             }
             ParseSymbols(string.Join(',', _settings.Symbols.ToArray())); //Utilize normalization function
         }
@@ -782,20 +788,240 @@ namespace MarketConnectors.Gemini
                 throw new Exception("Couldn't find the symbol for this model.");
             var ts = DateTime.Now;
 
-            var localModel = new GeminiResponseInitial(); //transform to local model
-            localModel.symbol = symbol;
-            localModel.changes = new List<List<string>>();
-            
+            var localModel = new InitialResponse();
+            localModel.bids = bidDeltaModel?.Select(x => new Bid() { price = x.Price.Value,amount= x.Size.Value}).ToList();
+            localModel.asks = askDeltaModel?.Select(x => new Ask() { price = x.Price.Value, amount = x.Size.Value }).ToList();
 
+            //************************************************************************************************************************
+            //sequence is not provided by binance (then make adjustments to this method, so Unit tests don't fail)
+            //************************************************************************************************************************
+            long maxSequence = Math.Max(bidDeltaModel.Max(x => x.Sequence), askDeltaModel.Max(x => x.Sequence));
+            long minSequence = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));
+            if (_localOrderBooks.ContainsKey(symbol))
+            {
+                if (minSequence < _localOrderBooks[symbol].Sequence)
+                {
+                    bidDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
+                    askDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
+                
+                    localModel.bids = bidDeltaModel?.Select(x => new Bid()
+                    { price = x.Price.Value, amount= x.Size.Value }).ToList();
+                    localModel.asks = askDeltaModel?.Select(x => new Ask()
+                    { price= x.Price.Value, amount= x.Size.Value}).ToList();
+                }
 
+                else if (minSequence != _localOrderBooks[symbol].Sequence + 1)
+                {
+                    throw new Exception("Sequence numbers are not in order.");
+                }
+                else
+                    _localOrderBooks[symbol].Sequence = maxSequence;
+            }
+            //************************************************************************************************************************
+            //************************************************************************************************************************
 
-            var localModelJson = JsonConvert.SerializeObject(localModel);
-            HandleMessage(localModelJson, DateTime.Now);
+            ToOrderBookModel(localModel, symbol);
         }
 
         public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
         {
-            throw new NotImplementedException();
+
+
+            string _file = "";
+            if (scenario == eTestingPrivateMessageScenario.SCENARIO_1)
+                _file = "PrivateMessages_Scenario1.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_2)
+                _file = "PrivateMessages_Scenario2.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_3)
+                _file = "PrivateMessages_Scenario3.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_4)
+                _file = "PrivateMessages_Scenario4.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_5)
+                _file = "PrivateMessages_Scenario5.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_6)
+                _file = "PrivateMessages_Scenario6.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_7)
+                _file = "PrivateMessages_Scenario7.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_8)
+                _file = "PrivateMessages_Scenario8.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_9)
+            {
+                _file = "PrivateMessages_Scenario9.json";
+                throw new Exception("Messages collected for this scenario don't look good.");
+            }
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_10)
+            {
+                _file = "PrivateMessages_Scenario10.json";
+                throw new Exception("Messages were not collected for this scenario.");
+            }
+
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"Gemini_jsonMessages/{_file}"));
+            JsonParser parser = new JsonParser();
+            //DESERIALIZE EXCHANGES MODEL
+            List<UserOrderData> modelList = new List<UserOrderData>();
+            var dataEvents = new List<UserOrderData>();
+            var jsonArray = JArray.Parse(jsonString);
+            foreach (var jsonObject in jsonArray)
+            {
+                JArray innerArray =JArray.Parse(jsonObject.ToString());
+
+                string dataJsonString = innerArray[0].ToString();
+
+                UserOrderData _data = parser.Parse<UserOrderData>(dataJsonString);
+
+                if (_data != null)
+                    modelList.Add(_data);
+
+            }
+            //END UPDATE VISUALHFT CORE
+
+
+            //UPDATE VISUALHFT CORE & CREATE MODEL TO RETURN
+            if (!modelList.Any())
+                throw new Exception("No data was found in the json file.");
+            foreach (var item in modelList)
+            { 
+                UpdateUserOrderBook(item);
+            }
+            //END UPDATE VISUALHFT CORE
+
+
+            //CREATE MODEL TO RETURN (First, identify the order that was sent, then use that one with the updated values)
+            var dicOrders = new Dictionary<long, VisualHFT.Model.Order>(); //we need to use dictionary to identify orders (because exchanges orderId is string) 
+
+             
+
+            foreach (var item in modelList)
+            {
+
+                VisualHFT.Model.Order localuserOrder;
+                if (!dicOrders.ContainsKey(item.order_id))
+                {
+                    localuserOrder = new VisualHFT.Model.Order();
+                    localuserOrder.ClOrdId = item.client_order_id;
+                    localuserOrder.Currency = GetNormalizedSymbol(item.symbol);
+                    localuserOrder.OrderID = item.order_id;
+                    localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                    localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                    localuserOrder.CreationTimeStamp = DateTimeOffset.FromUnixTimeSeconds(item.timestamp).DateTime;
+                    localuserOrder.Quantity = item.original_amount;
+                    localuserOrder.PricePlaced = item.price;
+                    localuserOrder.Symbol = GetNormalizedSymbol(item.symbol);
+                    localuserOrder.FilledQuantity = item.executed_amount;
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+                    if (!string.IsNullOrEmpty(item.behavior))
+                    {
+                        if (item.behavior.ToLower().Equals("immediate-or-cancel"))
+                        {
+                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                        }
+                        else if (item.behavior.ToLower().Equals("fill-or-kill"))
+                        {
+                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                        }
+                        else if (item.behavior.ToLower().Equals("maker-or-cancel"))
+                        {
+                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
+                        }
+                    }
+                    dicOrders.Add(item.order_id, localuserOrder);
+                }
+                else
+                {
+
+                    localuserOrder = dicOrders[item.order_id];
+                }
+                localuserOrder.OrderType = eORDERTYPE.LIMIT;
+
+                localuserOrder.Quantity = item.original_amount;
+                if (item.order_type.ToLower().Equals("limit"))
+                {
+                    localuserOrder.OrderType = eORDERTYPE.LIMIT;
+                }
+                else if (item.order_type.ToLower().Equals("exchange limit"))
+                {
+                    localuserOrder.OrderType = eORDERTYPE.PEGGED;
+                }
+                else if (item.order_type.ToLower().Equals("market buy"))
+                {
+                    localuserOrder.OrderType = eORDERTYPE.MARKET;
+                }
+
+                if (item.side.ToLower().Equals("sell"))
+                {
+                    localuserOrder.BestAsk = item.price;
+                    localuserOrder.Side = eORDERSIDE.Sell;
+
+                }
+                else if (item.side.ToLower().Equals("buy"))
+                {
+                    localuserOrder.PricePlaced = item.price;
+                    localuserOrder.BestBid = item.price;
+                    localuserOrder.Side = eORDERSIDE.Buy;
+
+                }
+
+                if (item.type.ToLower().Equals("accepted"))
+                {
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                }
+                else if (item.type.ToLower().Equals("fill"))
+                {
+                    localuserOrder.FilledQuantity = item.executed_amount;
+                    localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+                }
+                else if (item.type.ToLower().Equals("closed"))
+                {
+                    localuserOrder.Status = eORDERSTATUS.FILLED;
+                    if (item.is_cancelled)
+                    {
+                        localuserOrder.Status = eORDERSTATUS.CANCELED;
+
+                    }
+                }
+                else if (item.type.ToLower().Equals("rejected"))
+                {
+                    localuserOrder.Status = eORDERSTATUS.REJECTED;
+                }
+                else if (item.type.ToLower().Equals("cancelled"))
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+                }
+                else if (item.type.ToLower().Equals("cancel_rejected"))
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+                }
+                else if (item.type.ToLower().Equals("closed"))
+                {
+                     
+                }
+                if (!string.IsNullOrEmpty(item.behavior))
+                {
+                    if (item.behavior.ToLower().Equals("immediate-or-cancel"))
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                    }
+                    else if (item.behavior.ToLower().Equals("fill-or-kill"))
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                    }
+                    else if (item.behavior.ToLower().Equals("maker-or-cancel"))
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
+                    }
+                }
+                localuserOrder.LastUpdated = DateTime.Now;
+                localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
+                RaiseOnDataReceived(localuserOrder);
+
+            }
+
+            //END CREATE MODEL TO RETURN
+            return dicOrders.Values.ToList();
+
+            //ProcessUserOrderData
+
         }
     }
 }
