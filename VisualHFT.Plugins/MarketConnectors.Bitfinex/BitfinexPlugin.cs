@@ -297,11 +297,18 @@ namespace MarketConnectors.Bitfinex
                         {
                             try
                             {
-                                foreach (var item in data.Data)
+                                if (data.UpdateType != SocketUpdateType.Update)
                                 {
-                                    _eventBuffers[normalizedSymbol].Add(
-                                        new Tuple<DateTime, string, BitfinexRawOrderBookEntry>(
-                                            data.ReceiveTime.ToLocalTime(), normalizedSymbol, item));
+                                    UpdateOrderBookFromWS(data.Data, normalizedSymbol);
+                                }
+                                else
+                                {
+                                    foreach (var item in data.Data)
+                                    {
+                                        _eventBuffers[normalizedSymbol].Add(
+                                            new Tuple<DateTime, string, BitfinexRawOrderBookEntry>(
+                                                data.ReceiveTime.ToLocalTime(), normalizedSymbol, item));
+                                    }
                                 }
                             }
                             catch (Exception ex)
@@ -547,7 +554,7 @@ namespace MarketConnectors.Bitfinex
         private VisualHFT.Model.OrderBook ToOrderBookModel(BitfinexRawOrderBook data, string symbol)
         {
             var identifiedPriceDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.Asks.Select(x => x.Price));
-            
+
             var lob = new VisualHFT.Model.OrderBook(symbol, identifiedPriceDecimalPlaces, _settings.DepthLevels);
             lob.ProviderID = _settings.Provider.ProviderID;
             lob.ProviderName = _settings.Provider.ProviderName;
@@ -583,6 +590,29 @@ namespace MarketConnectors.Bitfinex
             });
 
             return lob;
+        }
+        private void UpdateOrderBookFromWS(IEnumerable<BitfinexRawOrderBookEntry> data, string symbol)
+        {
+            if (!_localOrderBooks.TryGetValue(symbol, out VisualHFT.Model.OrderBook? lob))
+            {
+                return;
+            }
+            lob.Clear(); //reset order book
+
+            data.ToList().ForEach(x =>
+            {
+                lob.AddOrUpdateLevel(new DeltaBookItem()
+                {
+                    IsBid = (x.Quantity > 0),
+                    Price = (double)x.Price,
+                    Size = (double)Math.Abs(x.Quantity),
+                    LocalTimeStamp = DateTime.Now,
+                    ServerTimeStamp = DateTime.Now,
+                    Symbol = symbol,
+                    EntryID = x.OrderId.ToString(),
+                    MDUpdateAction = eMDUpdateAction.New,
+                });
+            });
         }
 
 
@@ -782,16 +812,19 @@ namespace MarketConnectors.Bitfinex
             else if (scenario == eTestingPrivateMessageScenario.SCENARIO_7)
                 _file = "PrivateMessages_Scenario7.json";
             else if (scenario == eTestingPrivateMessageScenario.SCENARIO_8)
+            {
                 _file = "PrivateMessages_Scenario8.json";
+                throw new Exception("This scenario is not valid for this exchange.");
+            }
             else if (scenario == eTestingPrivateMessageScenario.SCENARIO_9)
             {
                 _file = "PrivateMessages_Scenario9.json";
-                throw new Exception("Messages collected for this scenario don't look good.");
+                throw new Exception("This scenario is not valid for this exchange.");
             }
             else if (scenario == eTestingPrivateMessageScenario.SCENARIO_10)
             {
                 _file = "PrivateMessages_Scenario10.json";
-                throw new Exception("Messages were not collected for this scenario.");
+                throw new Exception("This scenario is not valid for this exchange.");
             }
 
             string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"bitfinex_jsonMessages/{_file}"));
