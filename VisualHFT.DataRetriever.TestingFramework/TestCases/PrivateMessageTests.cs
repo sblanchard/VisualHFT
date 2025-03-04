@@ -311,7 +311,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_5);
                 
                 var _expectedOrderSent = _expectedExecutedOrders
-                    .FirstOrDefault(x => x.Status == eORDERSTATUS.FILLED);
+                    .FirstOrDefault(x => x.Status == eORDERSTATUS.CANCELED);
 
                 var _actualPosition = HelperPosition.Instance.GetAllPositions().FirstOrDefault();
                 double newMarketPrice = _expectedOrderSent.PricePlaced * 1.25;//current price increased by 25%
@@ -358,7 +358,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 var _actualLastOrderReceived = _actualOrders.Last();
                 Assert.NotNull(_actualLastOrderReceived);
                 Assert.Equal(_expectedOrderSent.OrderID, _actualLastOrderReceived.OrderID);
-                Assert.Equal(eORDERSTATUS.FILLED, _actualLastOrderReceived.Status);
+                Assert.Equal(eORDERSTATUS.CANCELED, _actualLastOrderReceived.Status);
 
                 _testOutputHelper.WriteLine($"TESTING {CONNECTOR_NAME} OK");
             }
