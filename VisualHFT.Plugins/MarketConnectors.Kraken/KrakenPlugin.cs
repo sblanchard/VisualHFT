@@ -328,15 +328,18 @@ namespace MarketConnectors.Kraken
                         {
                             try
                             {
-                                if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
+                                if (data.UpdateType == SocketUpdateType.Update)
                                 {
-                                    var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
-                                    log.Warn(_msg);
-                                    HelperNotificationManager.Instance.AddNotification(this.Name, _msg, HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
+                                    if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
+                                    {
+                                        var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
+                                        log.Warn(_msg);
+                                        HelperNotificationManager.Instance.AddNotification(this.Name, _msg, HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
+                                    }
+                                    _eventBuffers[normalizedSymbol].Add(
+                                        new Tuple<DateTime, string, KrakenBookUpdate>(
+                                            data.ReceiveTime.ToLocalTime(), normalizedSymbol, data.Data));
                                 }
-                                _eventBuffers[normalizedSymbol].Add(
-                                       new Tuple<DateTime, string, KrakenBookUpdate>(
-                                           data.ReceiveTime.ToLocalTime(), normalizedSymbol, data.Data));
                             }
                             catch (Exception ex)
                             {
@@ -653,7 +656,6 @@ namespace MarketConnectors.Kraken
                 );
             return lob;
         }
-
 
         protected override void Dispose(bool disposing)
         {

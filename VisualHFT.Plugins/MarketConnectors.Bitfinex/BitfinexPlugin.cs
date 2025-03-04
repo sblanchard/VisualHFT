@@ -250,6 +250,7 @@ namespace MarketConnectors.Bitfinex
                 ProviderName = _settings.Provider.ProviderName,
                 Symbol = item.Symbol,
                 Side = item.Side == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell,
+                ClOrdId = item.ClientOrderId.ToString()
             };
             if (item.Type != OrderType.ExchangeMarket && item.Type != OrderType.Market)
                 order.Quantity = item.Quantity.ToDouble();
@@ -268,7 +269,11 @@ namespace MarketConnectors.Bitfinex
                 order.OrderType = eORDERTYPE.LIMIT;
 
             if (item.Status == OrderStatus.Active)
+            {
+                order.PricePlaced = item.Price.ToDouble();
+                order.Quantity = item.Quantity.ToDouble();
                 order.Status = eORDERSTATUS.NEW;
+            }
             else if (item.Status == OrderStatus.Canceled)
                 order.Status = eORDERSTATUS.CANCELED;
             else if (item.Status == OrderStatus.Executed || item.Status == OrderStatus.ForcefullyExecuted || item.Status == OrderStatus.PartiallyFilled)
@@ -297,7 +302,7 @@ namespace MarketConnectors.Bitfinex
                         {
                             try
                             {
-                                if (data.UpdateType != SocketUpdateType.Update)
+                                if (data.UpdateType == SocketUpdateType.Snapshot)
                                 {
                                     UpdateOrderBookFromWS(data.Data, normalizedSymbol);
                                 }
@@ -892,17 +897,28 @@ namespace MarketConnectors.Bitfinex
             var retOrders = new List<VisualHFT.Model.Order>();
             foreach (var item in modelList)
             {
-                var order = new VisualHFT.Model.Order()
+                VisualHFT.Model.Order order = null;
+                if (retOrders.All(x => x.ClOrdId != item.ClientOrderId.ToString()))
                 {
-                    OrderID = item.Id,
-                    CreationTimeStamp = item.CreateTime,
-                    PricePlaced = item.Price.ToDouble(),
-                    Quantity = item.Quantity.ToDouble(),
-                    ProviderId = _settings.Provider.ProviderID,
-                    ProviderName = _settings.Provider.ProviderName,
-                    Symbol = item.Symbol,
-                    Side = item.Side == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell,
-                };
+                    order = new VisualHFT.Model.Order()
+                    {
+                        OrderID = item.Id,
+                        CreationTimeStamp = item.CreateTime,
+                        PricePlaced = item.Price.ToDouble(),
+                        Quantity = item.Quantity.ToDouble(),
+                        ProviderId = _settings.Provider.ProviderID,
+                        ProviderName = _settings.Provider.ProviderName,
+                        Symbol = item.Symbol,
+                        Side = item.Side == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell,
+                    };
+                    retOrders.Add(order);
+                }
+                else
+                {
+                    order = retOrders.FirstOrDefault(x => x.ClOrdId == item.ClientOrderId.ToString());
+                }
+
+                order.ClOrdId = item.ClientOrderId.ToString();
                 if (item.Type != OrderType.ExchangeMarket && item.Type != OrderType.Market)
                     order.Quantity = item.Quantity.ToDouble();
 
@@ -920,7 +936,11 @@ namespace MarketConnectors.Bitfinex
                     order.OrderType = eORDERTYPE.LIMIT;
 
                 if (item.Status == OrderStatus.Active)
+                {
+                    order.PricePlaced = item.Price.ToDouble();
+                    order.Quantity = item.Quantity.ToDouble();
                     order.Status = eORDERSTATUS.NEW;
+                }
                 else if (item.Status == OrderStatus.Canceled)
                     order.Status = eORDERSTATUS.CANCELED;
                 else if (item.Status == OrderStatus.Executed || item.Status == OrderStatus.ForcefullyExecuted || item.Status == OrderStatus.PartiallyFilled)
@@ -931,7 +951,7 @@ namespace MarketConnectors.Bitfinex
                 }
 
 
-                retOrders.Add(order);
+                
             }
             //END CREATE MODEL TO RETURN
 

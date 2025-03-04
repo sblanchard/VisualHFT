@@ -543,15 +543,25 @@ namespace MarketConnectors.KuCoin
                         {
                             try
                             {
-                                if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
+                                if (data.UpdateType == SocketUpdateType.Snapshot)
                                 {
-                                    var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
-                                    log.Warn(_msg);
-                                    HelperNotificationManager.Instance.AddNotification(this.Name, _msg, HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
+                                    return; //not valid condition
                                 }
-                                _eventBuffers[normalizedSymbol].Add(
-                                       new Tuple<DateTime, string, KucoinStreamOrderBook>(
-                                           data.ReceiveTime.ToLocalTime(), normalizedSymbol, data.Data));
+                                else
+                                {
+                                    if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
+                                    {
+                                        var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
+                                        log.Warn(_msg);
+                                        HelperNotificationManager.Instance.AddNotification(this.Name, _msg,
+                                            HelprNorificationManagerTypes.WARNING,
+                                            HelprNorificationManagerCategories.PLUGINS);
+                                    }
+
+                                    _eventBuffers[normalizedSymbol].Add(
+                                        new Tuple<DateTime, string, KucoinStreamOrderBook>(
+                                            data.ReceiveTime.ToLocalTime(), normalizedSymbol, data.Data));
+                                }
                             }
                             catch (Exception ex)
                             {

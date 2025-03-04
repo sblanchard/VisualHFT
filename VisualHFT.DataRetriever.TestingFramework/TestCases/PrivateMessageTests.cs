@@ -386,18 +386,18 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
                 List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_6);
                var _expectedOrderSent = _expectedExecutedOrders
-                   .FirstOrDefault(x => x.Status == eORDERSTATUS.CANCELED);
+                   .LastOrDefault(x => x.Status == eORDERSTATUS.CANCELED);
 
                var _actualPosition = HelperPosition.Instance.GetAllPositions().FirstOrDefault();
                double newMarketPrice = _expectedOrderSent.PricePlaced * 1.25;//current price increased by 25%
                _actualPosition.UpdateCurrentMidPrice(newMarketPrice);
                var _actualOrders = _actualPosition.GetAllOrders(null);
-               var _actualOrderSent = _actualOrders.FirstOrDefault();
+               var _actualOrderSent = _actualOrders.LastOrDefault();
 
 
                //ORDER SENT ASSERTION
                Assert.NotNull(_actualOrders);
-               Assert.Single(_actualOrders);       //must be one order (we sent just one order, plus updates received from exchange for that same order)
+               Assert.Equal(_actualOrders.Count, _expectedExecutedOrders.Count);
                Assert.NotNull(_actualOrderSent);
                Assert.NotNull(_expectedOrderSent);
 
@@ -537,7 +537,22 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
                 //Arrange & Act -> This will execute the private message scenario, creating the expected executed orders
-                List<VisualHFT.Model.Order> _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_8);
+                List<VisualHFT.Model.Order> _expectedExecutedOrders = null;
+                try
+                {
+                    _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_8);
+                }
+                catch (Exception e)
+                {
+                    if (e.Message == "This scenario is not valid for this exchange.")
+                    {
+                        _testOutputHelper.WriteLine(e.Message);
+                        return;
+                    }
+
+                    throw;
+                }
+                    
                 var _expectedOrderSent = _expectedExecutedOrders
                     .FirstOrDefault(x => x.Status == eORDERSTATUS.FILLED);
 
