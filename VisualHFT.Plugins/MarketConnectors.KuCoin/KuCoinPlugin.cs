@@ -332,15 +332,19 @@ namespace MarketConnectors.KuCoin
                 localuserOrder = new VisualHFT.Model.Order();
                 localuserOrder.ClOrdId = item.OrderId;
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
-                localuserOrder.CreationTimeStamp = item.OrderTime.Value; 
+                localuserOrder.CreationTimeStamp = item.OrderTime.Value;
 
-                //localuserOrder.OrderID = this._localUserOrders[item.OrderId].OrderID;
-
+                localuserOrder.OrderID = item.OrderId.ToString().GetHashCode();
                 //localuserOrder.OrderID = long.Parse(item.OrderId);
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                localuserOrder.Quantity = (double)item.OriginalQuantity;
+                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+
+                if (item.OrderType == OrderType.Market && item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.Quantity = item.OriginalValue.ToDouble();
+                }
                 localuserOrder.PricePlaced = (double)item.Price;
                 localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
@@ -386,16 +390,49 @@ namespace MarketConnectors.KuCoin
 
             if (item.Side == OrderSide.Buy)
             {
-                localuserOrder.PricePlaced = (double)item.Price;
-                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.FilledPrice = item.Price.ToDouble();
+                localuserOrder.PricePlaced = item.Price.ToDouble();
+                localuserOrder.BestBid = item.Price.ToDouble();
                 localuserOrder.Side = eORDERSIDE.Buy;
             }
             if (item.Side == OrderSide.Sell)
             {
                 localuserOrder.Side = eORDERSIDE.Sell;
-                localuserOrder.BestAsk = (double)item.Price;
-                localuserOrder.Quantity = (double)item.OriginalQuantity;
+                localuserOrder.BestAsk = item.Price.ToDouble();
+                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
             }
+            if (item.Side == OrderSide.Sell)
+            {
+                localuserOrder.Side = eORDERSIDE.Sell;
+                localuserOrder.BestAsk = item.Price.ToDouble();
+                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+            }
+
+            if (item.UpdateType == MatchUpdateType.Received)
+            {
+                if (item.Status == ExtendedOrderStatus.Open)
+                {
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                }
+                if (item.Status == ExtendedOrderStatus.Match)
+                {
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                }
+                if (item.Status == ExtendedOrderStatus.Done)
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+                }
+            }
+
+            if (item.UpdateType == MatchUpdateType.Filled)
+            { 
+                localuserOrder.Status = eORDERSTATUS.FILLED;
+            }
+            if (item.UpdateType == MatchUpdateType.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+
             localuserOrder.LastUpdated = DateTime.Now;
             localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
             RaiseOnDataReceived(localuserOrder);
@@ -409,12 +446,18 @@ namespace MarketConnectors.KuCoin
                 localuserOrder.ClOrdId = item.OrderId;
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+                localuserOrder.OrderID = item.OrderId.ToString().GetHashCode();
                 //localuserOrder.OrderID = long.Parse(item.OrderId);
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                localuserOrder.Quantity = (double)item.OriginalQuantity;
+                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+
+                if (item.OrderType == OrderType.Market && item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.Quantity = item.OriginalValue.ToDouble();
+                }
                 localuserOrder.PricePlaced = (double)item.Price;
                 localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
@@ -460,15 +503,31 @@ namespace MarketConnectors.KuCoin
 
             if (item.Side == OrderSide.Buy)
             {
-                localuserOrder.PricePlaced = (double)item.Price;
-                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.FilledPrice = item.Price.ToDouble();
+                localuserOrder.PricePlaced = item.Price.ToDouble();
+                localuserOrder.BestBid = item.Price.ToDouble();
                 localuserOrder.Side = eORDERSIDE.Buy;
             }
             if (item.Side == OrderSide.Sell)
             {
                 localuserOrder.Side = eORDERSIDE.Sell;
-                localuserOrder.BestAsk = (double)item.Price;
-                localuserOrder.Quantity = (double)item.OriginalQuantity;
+                localuserOrder.BestAsk = item.Price.ToDouble();
+                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+            }
+            if (item.UpdateType == MatchUpdateType.Received)
+            {
+                if (item.Status == ExtendedOrderStatus.Open)
+                {
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                }
+                if (item.Status == ExtendedOrderStatus.Match)
+                {
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                }
+                if (item.Status == ExtendedOrderStatus.Done)
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+                }
             }
 
             if (item.UpdateType == MatchUpdateType.Update)
@@ -489,6 +548,8 @@ namespace MarketConnectors.KuCoin
 
             if (item.UpdateType == MatchUpdateType.Filled)
             {
+                localuserOrder.PricePlaced = item.Price.ToDouble();
+                localuserOrder.FilledPrice=item.Price.ToDouble();
                 localuserOrder.FilledQuantity = (double)item.QuantityFilled;
                 localuserOrder.Status = eORDERSTATUS.FILLED;
             }
@@ -1150,13 +1211,19 @@ namespace MarketConnectors.KuCoin
                     localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                     localuserOrder.CreationTimeStamp = item.OrderTime.Value;
 
-                    localuserOrder.OrderID = this._localUserOrders[item.OrderId].OrderID;
+                    localuserOrder.OrderID = item.OrderId.ToString().GetHashCode();
 
                     localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                     localuserOrder.ProviderName = _settings.Provider.ProviderName;
                     localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                    localuserOrder.Quantity = (double)item.OriginalQuantity;
-                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.Quantity = item.OriginalQuantity.ToDouble() ;
+
+                    if (item.OrderType == OrderType.Market && item.Side == OrderSide.Buy)
+                    {
+                        localuserOrder.Quantity = item.OriginalValue.ToDouble();
+                    }
+
+                    localuserOrder.PricePlaced = item.Price.ToDouble();
                     localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
                     localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
                     /*
@@ -1201,17 +1268,33 @@ namespace MarketConnectors.KuCoin
 
                 if (item.Side == OrderSide.Buy)
                 {
-                    localuserOrder.PricePlaced = (double)item.Price;
-                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.FilledPrice = item.Price.ToDouble();
+                    localuserOrder.PricePlaced = item.Price.ToDouble();
+                    localuserOrder.BestBid = item.Price.ToDouble();
                     localuserOrder.Side = eORDERSIDE.Buy;
                 }
                 if (item.Side == OrderSide.Sell)
                 {
                     localuserOrder.Side = eORDERSIDE.Sell;
-                    localuserOrder.BestAsk = (double)item.Price;
-                    localuserOrder.Quantity = (double)item.OriginalQuantity;
+                    localuserOrder.BestAsk = item.Price.ToDouble();
+                    localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
                 }
 
+                if (item.UpdateType == MatchUpdateType.Received)
+                {
+                    if (item.Status == ExtendedOrderStatus.Open)
+                    {
+                        localuserOrder.Status = eORDERSTATUS.NEW;
+                    }
+                    if (item.Status == ExtendedOrderStatus.Match)
+                    {
+                        localuserOrder.Status = eORDERSTATUS.NEW;
+                    }
+                    if (item.Status == ExtendedOrderStatus.Done)
+                    {
+                        localuserOrder.Status = eORDERSTATUS.FILLED;
+                    }
+                }
                 if (item.UpdateType == MatchUpdateType.Update)
                 {
                     if (item.Status == ExtendedOrderStatus.Open)
@@ -1224,17 +1307,19 @@ namespace MarketConnectors.KuCoin
                     }
                     if (item.Status == ExtendedOrderStatus.Done)
                     {
-                        localuserOrder.Status = eORDERSTATUS.CANCELED;
+                        localuserOrder.Status = eORDERSTATUS.FILLED;
                     }
                 }
 
                 if (item.UpdateType == MatchUpdateType.Filled)
                 {
+                    localuserOrder.PricePlaced = item.Price.ToDouble();
+                    localuserOrder.FilledPrice = item.Price.ToDouble();
                     localuserOrder.FilledQuantity = (double)item.QuantityFilled;
                     localuserOrder.Status = eORDERSTATUS.FILLED;
                 }
                 if (item.UpdateType == MatchUpdateType.Canceled)
-                {
+                { 
                     localuserOrder.Status = eORDERSTATUS.CANCELED;
                 }
 

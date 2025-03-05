@@ -1,25 +1,44 @@
-[ 
+[
   {
     "topic": "/spotMarket/tradeOrdersV2",
     "type": "message",
     "subject": "orderChange",
-    "userId": "67448f9cc6c00c000111b216",
+    "userId": "672a2fb85539550001f98b7c",
     "channelType": "private",
     "data": {
-      "canceledSize": "0",
-      "filledSize": "0.00001",
-      "orderId": "67496cae2033a50007f6ee29",
-      "orderTime": 1732865198038,
+      "orderId": "67c86f79364b8a00074d0409",
+      "orderTime": 1741188985604,
       "orderType": "market",
-      "originSize": "0.00001",
+      "originFunds": "0.1",
+      "pt": 1741188985609,
+      "side": "buy",
+      "status": "new",
+      "symbol": "BTC-USDT",
+      "ts": 1741188985608000000,
+      "type": "received"
+    }
+  },
+  {
+    "topic": "/spotMarket/tradeOrdersV2",
+    "type": "message",
+    "subject": "orderChange",
+    "userId": "672a2fb85539550001f98b7c",
+    "channelType": "private",
+    "data": {
+      "canceledFunds": "0.0",
+      "filledSize": "0.1",
+      "funds": "0.0",
+      "orderId": "67c86f79364b8a00074d0409",
+      "orderTime": 1741188985604,
+      "orderType": "market",
+      "originFunds": "0.1",
+      "pt": 1741188985609,
       "remainFunds": "0",
       "remainSize": "0",
       "side": "buy",
-      "size": "0.00001",
-      "price": "95784.3",
       "status": "done",
       "symbol": "BTC-USDT",
-      "ts": 1732865198077000000,
+      "ts": 1741188985608000000,
       "type": "filled"
     }
   }
