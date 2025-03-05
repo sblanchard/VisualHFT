@@ -332,8 +332,10 @@ namespace MarketConnectors.KuCoin
                 localuserOrder = new VisualHFT.Model.Order();
                 localuserOrder.ClOrdId = item.OrderId;
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
-                localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                localuserOrder.CreationTimeStamp = item.OrderTime.Value; 
+
+                //localuserOrder.OrderID = this._localUserOrders[item.OrderId].OrderID;
+
                 //localuserOrder.OrderID = long.Parse(item.OrderId);
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
@@ -1076,25 +1078,172 @@ namespace MarketConnectors.KuCoin
 
         public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
         {
+
             //depending on the scenario, load its message(s)
-            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "kucoin_jsonMessages/PrivateMessages_Scenario1.json"));
-            JObject rootJsonObject = JObject.Parse(jsonString);
-            JToken dataToken = rootJsonObject["data"];
-            string dataJsonString = dataToken.ToString();
+            string _file = "";
+            if (scenario == eTestingPrivateMessageScenario.SCENARIO_1)
+                _file = "PrivateMessages_Scenario1.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_2)
+                _file = "PrivateMessages_Scenario2.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_3)
+                _file = "PrivateMessages_Scenario3.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_4)
+                _file = "PrivateMessages_Scenario4.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_5)
+                _file = "PrivateMessages_Scenario5.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_6)
+                _file = "PrivateMessages_Scenario6.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_7)
+                _file = "PrivateMessages_Scenario7.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_8)
+                _file = "PrivateMessages_Scenario8.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_9)
+            {
+                _file = "PrivateMessages_Scenario9.json";
+                throw new Exception("Messages collected for this scenario don't look good.");
+            }
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_10)
+            {
+                _file = "PrivateMessages_Scenario10.json";
+                throw new Exception("Messages were not collected for this scenario.");
+            }
 
 
-            // Replace KucoinSymbol with the actual model class
-            KucoinStreamOrderNewUpdate newOrderItem = JsonConvert.DeserializeObject<KucoinStreamOrderNewUpdate>(dataJsonString);
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"kucoin_jsonMessages/{_file}"));
+
+            //DESERIALIZE EXCHANGES MODEL
+            List<KucoinStreamOrderUpdate> modelList = new List<KucoinStreamOrderUpdate>();
+            var dataEvents = new List<KucoinStreamOrderUpdate>();
+            var jsonArray = JArray.Parse(jsonString);
+            foreach (JToken jsonObject in jsonArray)
+            {
+                JToken dataToken = jsonObject["data"];
+                string dataJsonString = dataToken.ToString();
+              
+                KucoinStreamOrderUpdate _data = JsonConvert.DeserializeObject<KucoinStreamOrderUpdate>(dataJsonString);
+                if (_data != null)
+                    modelList.Add(_data);
+            }
+            //END DESERIALIZE EXCHANGES MODEL
 
 
-            UpdateUserOrder(newOrderItem);
+
+            //UPDATE VISUALHFT CORE & CREATE MODEL TO RETURN
+            if (!modelList.Any())
+                throw new Exception("No data was found in the json file.");
+            foreach (var item in modelList)
+            {
+                UpdateUserOrder(item);
+            }
+            //END UPDATE VISUALHFT CORE
+
+            var dicOrders = new Dictionary<string, VisualHFT.Model.Order>(); //we need to use dictionary to identify orders (because exchanges orderId is string)
+
+            foreach (KucoinStreamOrderUpdate item in modelList)
+            {
+
+                VisualHFT.Model.Order localuserOrder;
+                if (!dicOrders.ContainsKey(item.OrderId))
+                {
+                    localuserOrder = new VisualHFT.Model.Order();
+                    localuserOrder.ClOrdId = item.OrderId;
+                    localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
+                    localuserOrder.CreationTimeStamp = item.OrderTime.Value;
+
+                    localuserOrder.OrderID = this._localUserOrders[item.OrderId].OrderID;
+
+                    localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                    localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                    localuserOrder.CreationTimeStamp = item.OrderTime.Value;
+                    localuserOrder.Quantity = (double)item.OriginalQuantity;
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+                    /*
+                    if (!string.IsNullOrEmpty(item.behaviour))
+                    {
+                        if (item.behavior.ToLower().Equals("immediate-or-cancel"))
+                        {
+                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                        }   
+                        else if (item.behavior.ToLower().Equals("fill-or-kill"))
+                        {
+                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                        }
+                        else if (item.behavior.ToLower().Equals("maker-or-cancel"))
+                        {
+                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
+                        }
+                    }
+                    */
+                    dicOrders.Add(item.OrderId, localuserOrder);
+                }
+                else
+                {
+                    localuserOrder = dicOrders[item.OrderId];
+                }
 
 
+                if (item.OrderType == OrderType.Market)
+                {
+                    localuserOrder.OrderType = eORDERTYPE.MARKET;
+                }
+                else if (item.OrderType == OrderType.Limit)
+                {
+                    localuserOrder.OrderType = eORDERTYPE.LIMIT;
 
-            //convert newOrderItem to VisualHFT.Model.Order
+                }
+                else
+                {
+                    localuserOrder.OrderType = eORDERTYPE.PEGGED;
+                }
 
 
-            return new List<VisualHFT.Model.Order>();
+                if (item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.Side = eORDERSIDE.Buy;
+                }
+                if (item.Side == OrderSide.Sell)
+                {
+                    localuserOrder.Side = eORDERSIDE.Sell;
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.Quantity = (double)item.OriginalQuantity;
+                }
+
+                if (item.UpdateType == MatchUpdateType.Update)
+                {
+                    if (item.Status == ExtendedOrderStatus.Open)
+                    {
+                        localuserOrder.Status = eORDERSTATUS.NEW;
+                    }
+                    if (item.Status == ExtendedOrderStatus.Match)
+                    {
+                        localuserOrder.Status = eORDERSTATUS.NEW;
+                    }
+                    if (item.Status == ExtendedOrderStatus.Done)
+                    {
+                        localuserOrder.Status = eORDERSTATUS.CANCELED;
+                    }
+                }
+
+                if (item.UpdateType == MatchUpdateType.Filled)
+                {
+                    localuserOrder.FilledQuantity = (double)item.QuantityFilled;
+                    localuserOrder.Status = eORDERSTATUS.FILLED;
+                }
+                if (item.UpdateType == MatchUpdateType.Canceled)
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+                }
+
+                localuserOrder.LastUpdated = DateTime.Now;
+                localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
+                //END CREATE MODEL TO RETURN
+            }
+
+            return dicOrders.Values.ToList();
 
         }
     }
