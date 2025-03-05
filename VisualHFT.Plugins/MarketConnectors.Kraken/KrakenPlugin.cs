@@ -241,7 +241,9 @@ namespace MarketConnectors.Kraken
                 localuserOrder = new VisualHFT.Model.Order();
                 localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                 localuserOrder.CreationTimeStamp = item.Timestamp;
+
                 localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
                 localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                 localuserOrder.ProviderName = _settings.Provider.ProviderName;
                 if (item.OrderQuantity.HasValue) //when orderType=MARKET does not inform qty
