@@ -1,14 +1,14 @@
-﻿using VisualHFT.Model;
+﻿using VisualHFT.Commons.Exceptions;
+using VisualHFT.Model;
 using VisualHFT.Commons.Model;
 using VisualHFT.Helpers;
 using VisualHFT.DataRetriever.TestingFramework.Core;
 using VisualHFT.Enums;
 using Xunit.Abstractions;
 
-
 namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 {
-    public class MarketDataTests 
+    public class MarketDataTests : IClassFixture<Log4NetFixture>
     {
         private readonly ITestOutputHelper _testOutputHelper;
 
@@ -41,6 +41,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Sequence = 1,
             };
         }
+
+
+
 
         [Fact]
         public void Test_MarketDataSnapshot()
@@ -106,8 +109,16 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert
@@ -141,8 +152,16 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert (all must remains equal)
@@ -187,9 +206,17 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert
@@ -229,9 +256,17 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
                 
                 //Assert
                 Assert.NotNull(_actualOrderBook);
@@ -275,9 +310,17 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert
@@ -322,9 +365,17 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    _actualOrderBook.FilterBidAskByMaxDepth = true; //set to filter by max depth
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert
@@ -365,14 +416,35 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 snapshotModel.Sequence = _startingSequence;
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence); //snapshot created
-                mktConnector.InjectDeltaModel(new List<DeltaBookItem>()
+                try
                 {
-                    new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = true, Price = 1.00005, Sequence = --_startingSequence}
-                },new List<DeltaBookItem>()
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence); //snapshot created
+                    mktConnector.InjectDeltaModel(new List<DeltaBookItem>()
+                    {
+                        new DeltaBookItem()
+                        {
+                            Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete,
+                            IsBid = true, Price = 1.00005, Sequence = --_startingSequence
+                        }
+                    }, new List<DeltaBookItem>()
+                    {
+                        new DeltaBookItem()
+                        {
+                            Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete,
+                            IsBid = false, Price = 1.00006, Sequence = --_startingSequence
+                        }
+                    }); //delta with lower sequence should be not computed
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
                 {
-                    new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = false, Price = 1.00006, Sequence = --_startingSequence}
-                }); //delta with lower sequence should be not computed
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
+                catch (ExceptionSequenceNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert (no delta should have been processed, both Limit Order Books must remain the same)
@@ -403,14 +475,27 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 snapshotModel.Sequence = _startingSequence;
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence); //snapshot created
-                mktConnector.InjectDeltaModel(new List<DeltaBookItem>()
+                try
                 {
-                    new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = true, Price = 1.00005, Sequence = ++_startingSequence}
-                }, new List<DeltaBookItem>()
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence); //snapshot created
+                    mktConnector.InjectDeltaModel(new List<DeltaBookItem>()
+                    {
+                        new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = true, Price = 1.00005, Sequence = ++_startingSequence}
+                    }, new List<DeltaBookItem>()
+                    {
+                        new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "5", MDUpdateAction = eMDUpdateAction.Delete, IsBid = false, Price = 1.00006, Sequence = ++_startingSequence}
+                    });
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
                 {
-                    new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "5", MDUpdateAction = eMDUpdateAction.Delete, IsBid = false, Price = 1.00006, Sequence = ++_startingSequence}
-                }); 
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
+                catch (ExceptionSequenceNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert (no delta should have been processed, both Limit Order Books must remain the same)
@@ -435,26 +520,46 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 var CONNECTOR_NAME = mktConnector.GetType().Name;
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
-                
+
                 //Arrange
                 var snapshotModel = CreateInitialSnapshot();
                 long _startingSequence = 10; //start sequence of snapshot on 10 to see how delta will be applied
                 snapshotModel.Sequence = _startingSequence;
                 _startingSequence++; // add gap
-                
-                //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence); //snapshot created
-                Assert.Throws<Exception>(() => 
-                {
-                    mktConnector.InjectDeltaModel(new List<DeltaBookItem>()
-                    {
-                        new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = true, Price = 1.00005, Sequence = ++_startingSequence}
-                    }, new List<DeltaBookItem>()
-                    {
-                        new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = false, Price = 1.00006, Sequence = ++_startingSequence}
-                    });
-                });
 
+                //Act
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence); //snapshot created
+                }
+                catch (ExceptionSequenceNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
+
+                bool forceEndTest = false;
+                Assert.Throws<Exception>(() =>
+                {
+                    try
+                    {
+                        mktConnector.InjectDeltaModel(new List<DeltaBookItem>()
+                        {
+                            new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = true, Price = 1.00005, Sequence = ++_startingSequence}
+                        }, new List<DeltaBookItem>()
+                        {
+                            new DeltaBookItem() { Symbol = snapshotModel.Symbol, EntryID = "6", MDUpdateAction = eMDUpdateAction.Delete, IsBid = false, Price = 1.00006, Sequence = ++_startingSequence}
+                        });
+                    }
+                    catch (ExceptionDeltasNotSupportedByExchange e)
+                    {
+                        forceEndTest = true;
+                        _testOutputHelper.WriteLine(e.Message);
+                        throw new Exception(); //just get out of Assert.Throws block
+                    }
+                });
+                if (forceEndTest)
+                    return;
                 //Assert (no delta should have been processed, both Limit Order Books must remain the same)
                 Assert.NotNull(_actualOrderBook);
                 Assert.Equal(snapshotModel.Symbol, _actualOrderBook.Symbol);
@@ -486,8 +591,16 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
 
                 //Act
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
 
                 //Assert
@@ -592,8 +705,16 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         };
 
                 // Act: Inject the snapshot and then apply the combined delta changes.
-                mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
-                mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                try
+                {
+                    mktConnector.InjectSnapshot(snapshotModel, snapshotModel.Sequence);
+                    mktConnector.InjectDeltaModel(bidDeltaModel, askDeltaModel);
+                }
+                catch (ExceptionDeltasNotSupportedByExchange e)
+                {
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
+                }
 
                 // Assert: Verify the overall OrderBook properties.
                 Assert.NotNull(_actualOrderBook);

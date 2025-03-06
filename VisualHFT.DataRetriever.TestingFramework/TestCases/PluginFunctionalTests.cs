@@ -72,7 +72,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 Assert.Equal(ePluginStatus.LOADED, _plugin.Status);
                 await _dataRetriever.StartAsync();
                 Assert.Equal(ePluginStatus.STARTED, _plugin.Status);
-                await Task.Delay(SECONDS_TO_WAIT_BEFORE_START_CHECKING); //wait for exception to be thrown
+                //await Task.Delay(SECONDS_TO_WAIT_BEFORE_START_CHECKING); //wait for exception to be thrown
 
 
 
@@ -82,7 +82,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 {
                     if (sp.Elapsed.TotalSeconds > TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE)
                         Assert.Fail($"{CONNECTOR_NAME}: Timeout while waiting for status STOPPED");
-                    await Task.Delay(500); //wait for reconnection
+                    await Task.Delay(10); //wait for reconnection
                 }
                 sp.Reset();
 
@@ -93,7 +93,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 {
                     if (sp.Elapsed.TotalSeconds > TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE)
                         Assert.Fail($"{CONNECTOR_NAME}: Timeout while waiting for status STARTING");
-                    await Task.Delay(500); //wait for reconnection
+                    await Task.Delay(100); //wait for reconnection
                 }
                 sp.Reset();
 
@@ -103,7 +103,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 {
                     if (sp.Elapsed.TotalSeconds > TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE)
                         Assert.Fail($"{CONNECTOR_NAME}: Timeout while waiting for status STARTED");
-                    await Task.Delay(500); //wait for reconnection
+                    await Task.Delay(100); //wait for reconnection
                 }
                 sp.Reset();
 

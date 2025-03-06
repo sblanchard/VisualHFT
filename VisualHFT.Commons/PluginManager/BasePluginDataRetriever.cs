@@ -208,20 +208,27 @@ namespace VisualHFT.Commons.PluginManager
         {
             _internalStartAsync = internalStartAsync;
         }
+
+        private bool _isReconnecting = false;
         protected async Task HandleConnectionLost(string reason = null, Exception exception = null, bool forceStartRegardlessStatus = false)
         {
+            if (_isReconnecting)
+                return;
+            _isReconnecting = true;
             if (!forceStartRegardlessStatus)
             {
                 if (Status == ePluginStatus
                         .STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
 
                 if (Status == ePluginStatus.STOPPING)
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPING");
+                    _isReconnecting = false;
                     return;
                 }
             }
@@ -234,6 +241,7 @@ namespace VisualHFT.Commons.PluginManager
             {
                 Interlocked.Decrement(ref _pendingReconnectionRequests);
                 log.Warn($"{this.Name} Too many pending requests.");
+                _isReconnecting = false;
                 return;
             }
 
@@ -246,6 +254,7 @@ namespace VisualHFT.Commons.PluginManager
                 if (!forceStartRegardlessStatus && Status == ePluginStatus.STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
 
@@ -257,6 +266,7 @@ namespace VisualHFT.Commons.PluginManager
                 if (!forceStartRegardlessStatus && Status == ePluginStatus.STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
 
@@ -277,6 +287,7 @@ namespace VisualHFT.Commons.PluginManager
                 if (!forceStartRegardlessStatus && Status == ePluginStatus.STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
                 log.Info($"{this.Name} Reconnection successful.");
@@ -310,6 +321,7 @@ namespace VisualHFT.Commons.PluginManager
             {
                 Interlocked.Decrement(ref _pendingReconnectionRequests);
                 _reconnectionSemaphore.Release();
+                _isReconnecting = false;
             }
 
         }

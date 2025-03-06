@@ -1,4 +1,5 @@
-﻿using VisualHFT.Commons.Helpers;
+﻿using VisualHFT.Commons.Exceptions;
+using VisualHFT.Commons.Helpers;
 using VisualHFT.DataRetriever.TestingFramework.Core;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
@@ -542,15 +543,10 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 {
                     _expectedExecutedOrders = mktConnector.ExecutePrivateMessageScenario(eTestingPrivateMessageScenario.SCENARIO_8);
                 }
-                catch (Exception e)
+                catch (ExceptionScenarioNotSupportedByExchange e)
                 {
-                    if (e.Message == "This scenario is not valid for this exchange.")
-                    {
-                        _testOutputHelper.WriteLine(e.Message);
-                        return;
-                    }
-
-                    throw;
+                    _testOutputHelper.WriteLine(e.Message);
+                    return;
                 }
                     
                 var _expectedOrderSent = _expectedExecutedOrders
