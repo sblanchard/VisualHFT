@@ -16,21 +16,25 @@
     <Compile Remove="packages\**" />
     <Compile Remove="VisualHFT.Commons.WPF\**" />
     <Compile Remove="VisualHFT.Commons\**" />
+    <Compile Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <Compile Remove="VisualHFT.Plugins\**" />
     <EmbeddedResource Remove="demoTradingCore\**" />
     <EmbeddedResource Remove="packages\**" />
     <EmbeddedResource Remove="VisualHFT.Commons.WPF\**" />
     <EmbeddedResource Remove="VisualHFT.Commons\**" />
+    <EmbeddedResource Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <EmbeddedResource Remove="VisualHFT.Plugins\**" />
     <None Remove="demoTradingCore\**" />
     <None Remove="packages\**" />
     <None Remove="VisualHFT.Commons.WPF\**" />
     <None Remove="VisualHFT.Commons\**" />
+    <None Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <None Remove="VisualHFT.Plugins\**" />
     <Page Remove="demoTradingCore\**" />
     <Page Remove="packages\**" />
     <Page Remove="VisualHFT.Commons.WPF\**" />
     <Page Remove="VisualHFT.Commons\**" />
+    <Page Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <Page Remove="VisualHFT.Plugins\**" />
   </ItemGroup>
 
@@ -82,12 +86,12 @@
     <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
     <PackageReference Include="MaterialDesignThemes.MahApps" Version="3.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="OxyPlot.Wpf" Version="2.1.2" />
     <PackageReference Include="Prism.Core" Version="8.1.97" />
     <PackageReference Include="PropertyChanged.Fody" Version="4.1.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\oxyplot\Source\OxyPlot.Wpf\OxyPlot.Wpf.csproj" />
     <ProjectReference Include="VisualHFT.Commons.WPF\VisualHFT.Commons.WPF.csproj" />
     <ProjectReference Include="VisualHFT.Commons\VisualHFT.Commons.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Binance\MarketConnectors.Binance.csproj" />
