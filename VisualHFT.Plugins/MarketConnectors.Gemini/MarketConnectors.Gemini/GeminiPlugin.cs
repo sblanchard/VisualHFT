@@ -1,4 +1,5 @@
 ﻿using CryptoExchange.Net.CommonObjects;
+using CryptoExchange.Net.Interfaces;
 using Gemini.Net.Clients;
 using Gemini.Net.Models;
 using MarketConnectors.Gemini.Model;
@@ -11,6 +12,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.Interfaces;
 using VisualHFT.Commons.Model;
 using VisualHFT.Commons.PluginManager;
@@ -49,13 +51,14 @@ namespace MarketConnectors.Gemini
 
         private IDataParser _parser;
         JsonSerializerSettings? _parser_settings = null;
-        WebsocketClient? _ws;
+        WebsocketClient? _socketClient;
         WebsocketClient? _userOrderEvents;
         GeminiHttpClient geminiHttpClient;
         private bool isReconnecting = false;
 
         public GeminiPlugin()
         {
+           
             _parser = new JsonParser();
             _parser_settings = new JsonSerializerSettings
             {
@@ -63,14 +66,12 @@ namespace MarketConnectors.Gemini
                 DateParseHandling = DateParseHandling.None,
                 DateFormatString = "yyyy.MM.dd-HH.mm.ss.ffffff"
             };
-            // Initialize the timer
-            _heartbeatTimer = new Timer(CheckConnectionStatus, null, TimeSpan.Zero, TimeSpan.FromSeconds(5)); // Check every 5 seconds
-
+          
             GeminiSubscription geminiSubscription = new GeminiSubscription();
             geminiSubscription.subscriptions = new List<Subscription>();
 
             geminiHttpClient = new GeminiHttpClient();
-            
+            SetReconnectionAction(InternalStartAsync);
         }
 
         ~GeminiPlugin()
@@ -82,12 +83,78 @@ namespace MarketConnectors.Gemini
         public override async Task StartAsync()
         {
             await base.StartAsync();//call the base first 
+            try
+            {
 
-            await InitializeSnapshotAsync();   
-            await InitializeDeltasAsync();
-            await InitializeUserPrivateOrders();
-             
+                await InternalStartAsync();
+            }
+            catch (Exception ex)
+            {
+                var _error = ex.Message;
+                log.Error(_error, ex);
+                if (_error.IndexOf("[CantConnectError]") > -1)
+                {
+                    Status = ePluginStatus.STOPPED_FAILED;
+                    HelperNotificationManager.Instance.AddNotification(this.Name, _error, HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.PLUGINS);
+
+                    await ClearAsync();
+                    RaiseOnDataReceived(new List<VisualHFT.Model.OrderBook>());
+                    RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED_FAILED));
+                }
+                else
+                {
+                    await HandleConnectionLost(_error, ex);
+
+                }
+            }
+            RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
+            Status = ePluginStatus.STARTED;
+
         }
+
+        public async Task ClearAsync()
+        { 
+            _heartbeatTimer?.Dispose();
+            //CLEAR LOB
+            if (_localOrderBooks != null)
+            {
+                foreach (var lob in _localOrderBooks)
+                {
+                    lob.Value?.Dispose();
+                }
+                _localOrderBooks.Clear();
+            }
+        }
+        private HelperCustomQueue<GeminiResponseInitial> _eventBuffers;
+        public async Task InternalStartAsync()
+        {
+            await ClearAsync();
+
+            _eventBuffers = new HelperCustomQueue<GeminiResponseInitial>($"<GeminiResponseInitial>_{this.Name}", eventBuffers_onReadAction, eventBuffers_onErrorAction);
+
+            await InitializeSnapshotAsync();
+            await InitializeDeltasAsync();
+
+            // Initialize the timer
+            _heartbeatTimer = new Timer(CheckConnectionStatus, null, TimeSpan.Zero, TimeSpan.FromSeconds(5)); // Check every 5 seconds
+
+            await InitializeUserPrivateOrders();
+        }
+
+        private void eventBuffers_onReadAction(GeminiResponseInitial eventData)
+        {
+            var symbol = GetNormalizedSymbol(eventData.symbol);
+            UpdateOrderBook(eventData, symbol,DateTime.Now);
+
+        }
+        private void eventBuffers_onErrorAction(Exception ex)
+        {
+            var _error = $"Will reconnect. Unhandled error in the Market Data Queue: {ex.Message}";
+
+            log.Error(_error, ex);
+            Task.Run(async () => await HandleConnectionLost(_error, ex));
+        }
+
 
         private async Task InitializeDeltasAsync()
         {
@@ -101,10 +168,10 @@ namespace MarketConnectors.Gemini
 
                 var exitEvent = new ManualResetEvent(false);
                 var url = new Uri(_settings.WebSocketHostName);
-                _ws = new WebsocketClient(url);
-                //"X-GEMINI-APIKEY": 
-                _ws.ReconnectTimeout = TimeSpan.FromSeconds(30);
-                _ws.ReconnectionHappened.Subscribe(info =>
+                _socketClient = new WebsocketClient(url);
+
+                _socketClient.ReconnectTimeout = TimeSpan.FromSeconds(10);
+                _socketClient.ReconnectionHappened.Subscribe(info =>
                 {
                     if (info.Type == ReconnectionType.Error)
                     {
@@ -123,7 +190,7 @@ namespace MarketConnectors.Gemini
                         }
                     }
                 });
-                _ws.DisconnectionHappened.Subscribe(disconnected =>
+                _socketClient.DisconnectionHappened.Subscribe(disconnected =>
                 {
                     Status = ePluginStatus.STOPPED;
                     if (isReconnecting)
@@ -132,7 +199,7 @@ namespace MarketConnectors.Gemini
                     {
                         RaiseOnDataReceived(new List<VisualHFT.Model.OrderBook>());
                         RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
-                        base.StopAsync();
+                        
                     }
                     else
                     {
@@ -146,7 +213,7 @@ namespace MarketConnectors.Gemini
                         }
                     }
                 });
-                _ws.MessageReceived.Subscribe(async msg =>
+                _socketClient.MessageReceived.Subscribe(async msg =>
                 {
                     try
                     {
@@ -169,11 +236,11 @@ namespace MarketConnectors.Gemini
                 });
                 try
                 {
-                    await _ws.Start();
+                    await _socketClient.Start();
                     log.Info($"Plugin has successfully started.");
                     RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
                     string jsonToSubscribe = JsonConvert.SerializeObject(geminiSubscription);
-                    _ws.Send(jsonToSubscribe);
+                    _socketClient.Send(jsonToSubscribe);
                     Status = ePluginStatus.STARTED;
                 }
                 catch (Exception ex)
@@ -244,15 +311,43 @@ namespace MarketConnectors.Gemini
 
                     var exitEvent = new ManualResetEvent(false);
                     _userOrderEvents = new WebsocketClient(new Uri(_settings.WebSocketHostName_UserOrder), factory);
-                    _userOrderEvents.ReconnectTimeout = TimeSpan.FromSeconds(30);
+                    _userOrderEvents.ReconnectTimeout = TimeSpan.FromSeconds(10);
                     _userOrderEvents.ReconnectionHappened.Subscribe(info =>
                     {
 
+                        if (info.Type == ReconnectionType.Error)
+                        {
+                            RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
+                            Status = ePluginStatus.STOPPED_FAILED;
+                        }
+                        else if (info.Type == ReconnectionType.Initial)
+                        {
+                             
+                        }
 
                     });
                     _userOrderEvents.DisconnectionHappened.Subscribe(disconnected =>
                     {
-
+                        Status = ePluginStatus.STOPPED;
+                        if (isReconnecting)
+                            return;
+                        if (disconnected.CloseStatus == WebSocketCloseStatus.NormalClosure)
+                        {
+                            RaiseOnDataReceived(new List<VisualHFT.Model.OrderBook>());
+                            RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
+                            base.StopAsync();
+                        }
+                        else
+                        {
+                            var _error = $"Will reconnect. Unhandled error while receiving delta market data.";
+                            log.Error(_error, disconnected.Exception);
+                            if (isReconnecting)
+                            {
+                                isReconnecting = true;
+                                HandleConnectionLost(disconnected.CloseStatusDescription, disconnected.Exception);
+                                isReconnecting = false;
+                            }
+                        }
                     });
                     _userOrderEvents.MessageReceived.Subscribe(async msg =>
                     {
@@ -304,15 +399,24 @@ namespace MarketConnectors.Gemini
             Status = ePluginStatus.STOPPING;
             log.Info($"{this.Name} is stopping.");
 
-            if (_ws != null)
+            await ClearAsync();
+            if (_socketClient != null)
             {
-                await _ws.Stop(WebSocketCloseStatus.NormalClosure, "Manual CLosing");
-                _ws.Dispose();
+                await _socketClient.Stop(WebSocketCloseStatus.NormalClosure, "Manual CLosing");
+                _socketClient.Dispose();
             }
             RaiseOnDataReceived(new List<VisualHFT.Model.OrderBook>());
             RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
             await base.StopAsync();
         }
+        
+        //private void eventBuffers_onErrorAction(Exception ex)
+        //{
+        //    var _error = $"Will reconnect. Unhandled error in the Market Data Queue: {ex.Message}";
+
+        //    log.Error(_error, ex);
+        //    Task.Run(async () => await HandleConnectionLost(_error, ex));
+        //}
 
         private VisualHFT.Model.OrderBook ToOrderBookModel(InitialResponse data, string symbol)
         {
@@ -356,10 +460,7 @@ namespace MarketConnectors.Gemini
                 });
             });
 
-            lob.LoadData(
-                _asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),
-                _bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels)
-                );
+            lob.LoadData(_asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),_bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels));
             return lob;
         }
 
@@ -533,6 +634,89 @@ namespace MarketConnectors.Gemini
             RaiseOnDataReceived(localuserOrder);
         }
 
+
+        private void UpdateOrderBook(GeminiResponseInitial lob_update,string symbol, DateTime serverTime)
+        {
+
+            if (!_localOrderBooks.ContainsKey(symbol))
+                return;
+            var local_lob = _localOrderBooks[symbol];
+            if (local_lob == null)
+            {
+                local_lob = new OrderBook();
+            }
+
+            foreach (var item in lob_update.changes)
+            {
+                if (item[0].ToLower().Equals("buy"))
+                {
+                    local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                    {
+                        Symbol = symbol,
+                        IsBid = true,
+                        LocalTimeStamp = DateTime.Now,
+                        ServerTimeStamp = serverTime,
+                        MDUpdateAction = eMDUpdateAction.New,
+                        Price = double.Parse(item[1]),
+                        Size = double.Parse(item[2]),
+                    });
+                }
+                else if (item[0].ToLower().Equals("sell"))
+                {
+                    local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                    {
+                        Symbol = symbol,
+                        IsBid = false,
+                        LocalTimeStamp = DateTime.Now,
+                        ServerTimeStamp = serverTime,
+                        MDUpdateAction = eMDUpdateAction.New,
+                        Price = double.Parse(item[1]),
+                        Size = double.Parse(item[2]),
+                    });
+                }
+            }
+            RaiseOnDataReceived(local_lob);
+
+            if (lob_update.trades != null)
+            {
+                List<Trade> trades = new List<VisualHFT.Model.Trade>();
+                foreach (var item in lob_update.trades)
+                {
+                    if (item.type == "trade")
+                    {
+                        RaiseOnDataReceived(new Trade()
+                        {
+                            Symbol = GetNormalizedSymbol(item.symbol),
+                            Size = item.quantity,
+                            Price = item.price,
+                            IsBuy = item.side.ToLower() == "buy",
+                            ProviderId = _settings.Provider.ProviderID,
+                            ProviderName = _settings.Provider.ProviderName,
+                            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.timestamp).DateTime
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine("Type not recognized " + item.type);
+                    }
+                }
+            }
+        }
+
+        private void UpdateTrades(GeminiResponseTrade item)
+        {
+
+            RaiseOnDataReceived(new Trade()
+            {
+                Symbol = GetNormalizedSymbol(item.symbol),
+                Size = item.quantity,
+                Price = item.price,
+                IsBuy = item.side.ToLower() == "buy",
+                ProviderId = _settings.Provider.ProviderID,
+                ProviderName = _settings.Provider.ProviderName,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.timestamp).DateTime
+            });
+        }
         private void HandleMessage(string marketData, DateTime serverTime)
         {
             string message = marketData;
@@ -542,69 +726,9 @@ namespace MarketConnectors.Gemini
                 GeminiResponseInitial dataReceived = _parser.Parse<GeminiResponseInitial>(message);
                 string symbol = GetNormalizedSymbol(dataReceived.symbol);
 
-                if (!_localOrderBooks.ContainsKey(symbol))
-                    return;
-                var local_lob = _localOrderBooks[symbol];
-                if (local_lob == null)
-                {
-                    local_lob = new OrderBook();
-                }
-
-                foreach (var item in dataReceived.changes)
-                {
-                    if (item[0].ToLower().Equals("buy"))
-                    {
-                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
-                        {
-                            Symbol = symbol,
-                            IsBid = true,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = serverTime,
-                            MDUpdateAction = eMDUpdateAction.New,
-                            Price = double.Parse(item[1]),
-                            Size = double.Parse(item[2]),
-                        });
-                    }
-                    else if (item[0].ToLower().Equals("sell"))
-                    {
-                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
-                        {
-                            Symbol = symbol,
-                            IsBid = false,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = serverTime,
-                            MDUpdateAction = eMDUpdateAction.New,
-                            Price = double.Parse(item[1]),
-                            Size = double.Parse(item[2]),
-                        });
-                    }
-                }
-                RaiseOnDataReceived(local_lob);
-
-                if (dataReceived.trades != null)
-                {
-                    List<Trade> trades = new List<VisualHFT.Model.Trade>();
-                    foreach (var item in dataReceived.trades)
-                    {
-                        if (item.type == "trade")
-                        {
-                            RaiseOnDataReceived(new Trade()
-                            {
-                                Symbol = GetNormalizedSymbol(item.symbol),
-                                Size = item.quantity,
-                                Price = item.price,
-                                IsBuy = item.side.ToLower() == "buy",
-                                ProviderId = _settings.Provider.ProviderID,
-                                ProviderName = _settings.Provider.ProviderName,
-                                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.timestamp).DateTime
-                            });
-                        }
-                        else
-                        {
-                            Console.WriteLine("Type not recognized " + item.type);
-                        }
-                    }
-                }
+                _eventBuffers.Add(dataReceived);
+                //UpdateOrderBook(dataReceived,symbol,serverTime);
+                
             }
             else if (type.type == "heartbeat")
             {
@@ -614,28 +738,22 @@ namespace MarketConnectors.Gemini
             {
                 List<Trade> trades = new List<VisualHFT.Model.Trade>();
 
-                var item = JsonConvert.DeserializeObject<GeminiResponseTrade>(message);
-                RaiseOnDataReceived(new Trade()
-                {
-                    Symbol = GetNormalizedSymbol(item.symbol),
-                    Size = item.quantity,
-                    Price = item.price,
-                    IsBuy = item.side.ToLower() == "buy",
-                    ProviderId = _settings.Provider.ProviderID,
-                    ProviderName = _settings.Provider.ProviderName,
-                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.timestamp).DateTime
-                });
+                GeminiResponseTrade? item = JsonConvert.DeserializeObject<GeminiResponseTrade>(message);
+                UpdateTrades(item);
+
             }
         }
         private void CheckConnectionStatus(object state)
         {
-            bool isConnected = _ws != null && _ws.IsRunning;
+            bool isConnected = _socketClient != null && _socketClient.IsRunning;
             if (isConnected)
             {
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
             }
             else
-            {
+            { 
+                
+                throw new Exception("The socket seems to be disconnected.");
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
 
             }
@@ -713,7 +831,7 @@ namespace MarketConnectors.Gemini
             {
                 if (disposing)
                 {
-                    _ws?.Dispose();
+                    _socketClient?.Dispose();
                     _heartbeatTimer?.Dispose();
                 }
                 _disposed = true;
