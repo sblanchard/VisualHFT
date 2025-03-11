@@ -31,6 +31,7 @@ using VisualHFT.Model;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
 using CryptoExchange.Net.CommonObjects;
+using VisualHFT.Commons.Exceptions;
 
 namespace MarketConnectors.Bitfinex
 {
@@ -819,17 +820,17 @@ namespace MarketConnectors.Bitfinex
             else if (scenario == eTestingPrivateMessageScenario.SCENARIO_8)
             {
                 _file = "PrivateMessages_Scenario8.json";
-                throw new Exception("This scenario is not valid for this exchange.");
+                throw new ExceptionScenarioNotSupportedByExchange();
             }
             else if (scenario == eTestingPrivateMessageScenario.SCENARIO_9)
             {
                 _file = "PrivateMessages_Scenario9.json";
-                throw new Exception("This scenario is not valid for this exchange.");
+                throw new ExceptionScenarioNotSupportedByExchange();
             }
             else if (scenario == eTestingPrivateMessageScenario.SCENARIO_10)
             {
                 _file = "PrivateMessages_Scenario10.json";
-                throw new Exception("This scenario is not valid for this exchange.");
+                throw new ExceptionScenarioNotSupportedByExchange();
             }
 
             string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"bitfinex_jsonMessages/{_file}"));
