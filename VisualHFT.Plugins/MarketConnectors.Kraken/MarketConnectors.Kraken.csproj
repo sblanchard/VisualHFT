@@ -39,7 +39,7 @@
 
   <ItemGroup>
     <PackageReference Include="KrakenExchange.Net" Version="5.7.1" />
-    <PackageReference Include="log4net" Version="3.0.3" />
+    <PackageReference Include="log4net" Version="3.0.4" />
   </ItemGroup>
 
   <ItemGroup>
