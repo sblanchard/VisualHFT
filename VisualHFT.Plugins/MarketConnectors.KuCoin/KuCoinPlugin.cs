@@ -7,6 +7,7 @@ using MarketConnectors.KuCoin.UserControls;
 using MarketConnectors.KuCoin.ViewModel;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -22,11 +23,21 @@ using VisualHFT.PluginManager;
 using Kucoin.Net.Objects.Models.Spot;
 using Kucoin.Net.Objects.Models.Spot.Socket;
 using CryptoExchange.Net.CommonObjects;
+using CryptoExchange.Net.Converters.JsonNet;
 using Kucoin.Net.Interfaces.Clients;
 using VisualHFT.Commons.Interfaces;
 using Order = CryptoExchange.Net.CommonObjects.Order;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Text;
+using System.Text.Json;
+using Newtonsoft.Json;
+using Kucoin.Net.Enums;
+using Newtonsoft.Json.Serialization;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
+using JsonProperty = Newtonsoft.Json.Serialization.JsonProperty;
+using VisualHFT.Model;
 
 namespace MarketConnectors.KuCoin
 {
@@ -37,7 +48,9 @@ namespace MarketConnectors.KuCoin
         private PlugInSettings _settings;
         private IKucoinSocketClient _socketClient;
         private IKucoinRestClient _restClient;
-        private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
+
+        private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks =
+            new Dictionary<string, VisualHFT.Model.OrderBook>();
 
         private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>> _eventBuffers =
             new Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>>();
@@ -46,7 +59,8 @@ namespace MarketConnectors.KuCoin
             new Dictionary<string, HelperCustomQueue<Tuple<string, KucoinTrade>>>();
 
 
-        private Dictionary<string, VisualHFT.Model.Order> _localUserOrders = new Dictionary<string, VisualHFT.Model.Order>();
+        private Dictionary<string, VisualHFT.Model.Order> _localUserOrders =
+            new Dictionary<string, VisualHFT.Model.Order>();
 
 
         private int pingFailedAttempts = 0;
@@ -54,16 +68,24 @@ namespace MarketConnectors.KuCoin
         private CallResult<UpdateSubscription> deltaSubscription;
         private CallResult<UpdateSubscription> tradesSubscription;
 
-        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        private static readonly log4net.ILog log =
+            log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        private readonly CustomObjectPool<VisualHFT.Model.Trade> tradePool = new CustomObjectPool<VisualHFT.Model.Trade>();//pool of Trade objects
+        private readonly CustomObjectPool<VisualHFT.Model.Trade> tradePool =
+            new CustomObjectPool<VisualHFT.Model.Trade>(); //pool of Trade objects
 
 
         public override string Name { get; set; } = "KuCoin Plugin";
         public override string Version { get; set; } = "1.0.0";
         public override string Description { get; set; } = "Connects to KuCoin websockets.";
         public override string Author { get; set; } = "VisualHFT";
-        public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
+
+        public override ISetting Settings
+        {
+            get => _settings;
+            set => _settings = (PlugInSettings)value;
+        }
+
         public override Action CloseSettingWindow { get; set; }
 
         public KuCoinPlugin()
@@ -73,6 +95,7 @@ namespace MarketConnectors.KuCoin
             SetReconnectionAction(InternalStartAsync);
             log.Info($"{this.Name} has been loaded.");
         }
+
         ~KuCoinPlugin()
         {
             Dispose(false);
@@ -81,27 +104,32 @@ namespace MarketConnectors.KuCoin
         public override async Task StartAsync()
         {
 
-            await base.StartAsync();//call the base first
+            await base.StartAsync(); //call the base first
             _socketClient = new KucoinSocketClient(options =>
             {
-                if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) && !string.IsNullOrEmpty(_settings.APIPassPhrase))
+                if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) &&
+                    !string.IsNullOrEmpty(_settings.APIPassPhrase))
                 {
-                    options.ApiCredentials = new Kucoin.Net.Objects.KucoinApiCredentials(_settings.ApiKey, _settings.ApiSecret, _settings.APIPassPhrase);
+                    options.ApiCredentials = new Kucoin.Net.Objects.KucoinApiCredentials(_settings.ApiKey,
+                        _settings.ApiSecret, _settings.APIPassPhrase);
                 }
+
                 options.Environment = KucoinEnvironment.Live;
             });
 
 
             _restClient = new KucoinRestClient(options =>
             {
-                if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) && !string.IsNullOrEmpty(_settings.APIPassPhrase))
+                if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) &&
+                    !string.IsNullOrEmpty(_settings.APIPassPhrase))
                 {
-                    options.ApiCredentials = new Kucoin.Net.Objects.KucoinApiCredentials(_settings.ApiKey, _settings.ApiSecret, _settings.APIPassPhrase);
+                    options.ApiCredentials = new Kucoin.Net.Objects.KucoinApiCredentials(_settings.ApiKey,
+                        _settings.ApiSecret, _settings.APIPassPhrase);
                 }
 
                 options.Environment = KucoinEnvironment.Live;
             });
-             
+
 
             try
             {
@@ -121,6 +149,7 @@ namespace MarketConnectors.KuCoin
                 await HandleConnectionLost(_error, ex);
             }
         }
+
         private async Task InternalStartAsync()
         {
             await ClearAsync();
@@ -128,11 +157,19 @@ namespace MarketConnectors.KuCoin
             // Initialize event buffer for each symbol
             foreach (var symbol in GetAllNormalizedSymbols())
             {
-                _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>($"<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
-                _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, KucoinTrade>>($"<Tuple<DateTime, string, KucoinTrade>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
+                _eventBuffers.Add(symbol,
+                    new HelperCustomQueue<Tuple<DateTime, string, KucoinStreamOrderBook>>(
+                        $"<Tuple<DateTime, string, KucoinStreamOrderBookChanged>>_{this.Name.Replace(" Plugin", "")}",
+                        eventBuffers_onReadAction, eventBuffers_onErrorAction));
+                _tradesBuffers.Add(symbol,
+                    new HelperCustomQueue<Tuple<string, KucoinTrade>>(
+                        $"<Tuple<DateTime, string, KucoinTrade>>_{this.Name.Replace(" Plugin", "")}",
+                        tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
 
-                _eventBuffers[symbol].PauseConsumer(); //this will allow collecting deltas (without delivering it), until we have the snapshot
+                _eventBuffers[symbol]
+                    .PauseConsumer(); //this will allow collecting deltas (without delivering it), until we have the snapshot
             }
+
             await InitializeDeltasAsync(); //must start collecting deltas before snapshot
             await InitializeSnapshotsAsync();
             await InitializeOpenOrders();
@@ -140,6 +177,7 @@ namespace MarketConnectors.KuCoin
             await InitializePingTimerAsync();
             await InitializeUserPrivateOrders();
         }
+
         public override async Task StopAsync()
         {
             Status = ePluginStatus.STOPPING;
@@ -151,6 +189,7 @@ namespace MarketConnectors.KuCoin
 
             await base.StopAsync();
         }
+
         public async Task ClearAsync()
         {
 
@@ -181,6 +220,7 @@ namespace MarketConnectors.KuCoin
                 {
                     lob.Value?.Dispose();
                 }
+
                 _localOrderBooks.Clear();
             }
         }
@@ -213,14 +253,16 @@ namespace MarketConnectors.KuCoin
                                 {
                                     _normalizedSymbol = GetNormalizedSymbol(trade.Data.Symbol);
                                 }
+
                                 _traderQueueRef.Add(
-                                       new Tuple<string, KucoinTrade>(_normalizedSymbol, trade1));
+                                    new Tuple<string, KucoinTrade>(_normalizedSymbol, trade1));
 
                             }
                             catch (Exception ex)
                             {
 
-                                var _error = $"Will reconnect. Unhandled error while receiving trading data for {_normalizedSymbol}.";
+                                var _error =
+                                    $"Will reconnect. Unhandled error while receiving trading data for {_normalizedSymbol}.";
                                 log.Error(_error, ex);
                                 Task.Run(async () => await HandleConnectionLost(_error, ex));
                             }
@@ -232,7 +274,8 @@ namespace MarketConnectors.KuCoin
                 }
                 else
                 {
-                    var _error = $"Unsuccessful trades subscription for {_normalizedSymbol} error: {tradesSubscription.Error}";
+                    var _error =
+                        $"Unsuccessful trades subscription for {_normalizedSymbol} error: {tradesSubscription.Error}";
                     throw new Exception(_error);
                 }
             }
@@ -240,7 +283,8 @@ namespace MarketConnectors.KuCoin
 
         private async Task InitializeOpenOrders()
         {
-            if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) && !string.IsNullOrEmpty(_settings.APIPassPhrase))
+            if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) &&
+                !string.IsNullOrEmpty(_settings.APIPassPhrase))
             {
                 var orders = await _restClient.SpotApi.CommonSpotClient.GetOpenOrdersAsync();
                 if (orders != null)
@@ -269,7 +313,7 @@ namespace MarketConnectors.KuCoin
                                 if (item.behavior.ToLower().Equals("immediate-or-cancel"))
                                 {
                                     localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
-                                }   
+                                }
                                 else if (item.behavior.ToLower().Equals("fill-or-kill"))
                                 {
                                     localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
@@ -309,14 +353,17 @@ namespace MarketConnectors.KuCoin
                             localuserOrder.BestBid = (double)item.Price;
                             localuserOrder.Side = eORDERSIDE.Buy;
                         }
+
                         if (item.Side == CommonOrderSide.Sell)
                         {
                             localuserOrder.Side = eORDERSIDE.Sell;
                             localuserOrder.BestAsk = (double)item.Price;
                             localuserOrder.Quantity = (double)item.Quantity;
                         }
+
                         localuserOrder.LastUpdated = DateTime.Now;
-                        localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
+                        localuserOrder.FilledPercentage =
+                            Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
                         RaiseOnDataReceived(localuserOrder);
 
                     }
@@ -324,272 +371,18 @@ namespace MarketConnectors.KuCoin
             }
         }
 
-        private async Task UpdateUserOrder(KucoinStreamOrderNewUpdate item)
-        {
-            VisualHFT.Model.Order localuserOrder;
-            if (!this._localUserOrders.ContainsKey(item.OrderId))
-            {
-                localuserOrder = new VisualHFT.Model.Order();
-                localuserOrder.ClOrdId = item.OrderId;
-                localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
-                localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-
-                localuserOrder.OrderID = item.OrderId.ToString().GetHashCode();
-                //localuserOrder.OrderID = long.Parse(item.OrderId);
-                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
-                localuserOrder.ProviderName = _settings.Provider.ProviderName;
-                localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
-
-                if (item.OrderType == OrderType.Market && item.Side == OrderSide.Buy)
-                {
-                    localuserOrder.Quantity = item.OriginalValue.ToDouble();
-                }
-                localuserOrder.PricePlaced = (double)item.Price;
-                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
-                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
-                /*
-                if (!string.IsNullOrEmpty(item.behaviour))
-                {
-                    if (item.behavior.ToLower().Equals("immediate-or-cancel"))
-                    {
-                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
-                    }   
-                    else if (item.behavior.ToLower().Equals("fill-or-kill"))
-                    {
-                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
-                    }
-                    else if (item.behavior.ToLower().Equals("maker-or-cancel"))
-                    {
-                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
-                    }
-                }
-                */
-                this._localUserOrders.Add(item.OrderId, localuserOrder);
-            }
-            else
-            {
-                localuserOrder = this._localUserOrders[item.OrderId];
-            }
-
-
-            if (item.OrderType == OrderType.Market)
-            {
-                localuserOrder.OrderType = eORDERTYPE.MARKET;
-            }
-            else if (item.OrderType == OrderType.Limit)
-            {
-                localuserOrder.OrderType = eORDERTYPE.LIMIT;
-
-            }
-            else
-            {
-                localuserOrder.OrderType = eORDERTYPE.PEGGED;
-            }
-
-
-            if (item.Side == OrderSide.Buy)
-            {
-                localuserOrder.FilledPrice = item.Price.ToDouble();
-                localuserOrder.PricePlaced = item.Price.ToDouble();
-                localuserOrder.BestBid = item.Price.ToDouble();
-                localuserOrder.Side = eORDERSIDE.Buy;
-            }
-            if (item.Side == OrderSide.Sell)
-            {
-                localuserOrder.Side = eORDERSIDE.Sell;
-                localuserOrder.BestAsk = item.Price.ToDouble();
-                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
-            }
-            if (item.Side == OrderSide.Sell)
-            {
-                localuserOrder.Side = eORDERSIDE.Sell;
-                localuserOrder.BestAsk = item.Price.ToDouble();
-                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
-            }
-
-            if (item.UpdateType == MatchUpdateType.Received)
-            {
-                if (item.Status == ExtendedOrderStatus.Open)
-                {
-                    localuserOrder.Status = eORDERSTATUS.NEW;
-                }
-                if (item.Status == ExtendedOrderStatus.Match)
-                {
-                    localuserOrder.Status = eORDERSTATUS.NEW;
-                }
-                if (item.Status == ExtendedOrderStatus.Done)
-                {
-                    localuserOrder.Status = eORDERSTATUS.CANCELED;
-                }
-            }
-
-            if (item.UpdateType == MatchUpdateType.Filled)
-            { 
-                localuserOrder.Status = eORDERSTATUS.FILLED;
-            }
-            if (item.UpdateType == MatchUpdateType.Canceled)
-            {
-                localuserOrder.Status = eORDERSTATUS.CANCELED;
-            }
-
-            localuserOrder.LastUpdated = DateTime.Now;
-            localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
-            RaiseOnDataReceived(localuserOrder);
-        }
-        private async Task UpdateUserOrder(KucoinStreamOrderUpdate item)
-        {
-            VisualHFT.Model.Order localuserOrder;
-            if (!this._localUserOrders.ContainsKey(item.OrderId))
-            {
-                localuserOrder = new VisualHFT.Model.Order();
-                localuserOrder.ClOrdId = item.OrderId;
-                localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
-                localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-
-                localuserOrder.OrderID = item.OrderId.ToString().GetHashCode();
-                //localuserOrder.OrderID = long.Parse(item.OrderId);
-                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
-                localuserOrder.ProviderName = _settings.Provider.ProviderName;
-                localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
-
-                if (item.OrderType == OrderType.Market && item.Side == OrderSide.Buy)
-                {
-                    localuserOrder.Quantity = item.OriginalValue.ToDouble();
-                }
-                localuserOrder.PricePlaced = (double)item.Price;
-                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
-                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
-                /*
-                if (!string.IsNullOrEmpty(item.behaviour))
-                {
-                    if (item.behavior.ToLower().Equals("immediate-or-cancel"))
-                    {
-                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
-                    }   
-                    else if (item.behavior.ToLower().Equals("fill-or-kill"))
-                    {
-                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
-                    }
-                    else if (item.behavior.ToLower().Equals("maker-or-cancel"))
-                    {
-                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
-                    }
-                }
-                */
-                this._localUserOrders.Add(item.OrderId, localuserOrder);
-            }
-            else
-            {
-                localuserOrder = this._localUserOrders[item.OrderId];
-            }
-
-
-            if (item.OrderType == OrderType.Market)
-            {
-                localuserOrder.OrderType = eORDERTYPE.MARKET;
-            }
-            else if (item.OrderType == OrderType.Limit)
-            {
-                localuserOrder.OrderType = eORDERTYPE.LIMIT;
-
-            }
-            else
-            {
-                localuserOrder.OrderType = eORDERTYPE.PEGGED;
-            }
-
-
-            if (item.Side == OrderSide.Buy)
-            {
-                localuserOrder.FilledPrice = item.Price.ToDouble();
-                localuserOrder.PricePlaced = item.Price.ToDouble();
-                localuserOrder.BestBid = item.Price.ToDouble();
-                localuserOrder.Side = eORDERSIDE.Buy;
-            }
-            if (item.Side == OrderSide.Sell)
-            {
-                localuserOrder.Side = eORDERSIDE.Sell;
-                localuserOrder.BestAsk = item.Price.ToDouble();
-                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
-            }
-            if (item.UpdateType == MatchUpdateType.Received)
-            {
-                if (item.Status == ExtendedOrderStatus.Open)
-                {
-                    localuserOrder.Status = eORDERSTATUS.NEW;
-                }
-                if (item.Status == ExtendedOrderStatus.Match)
-                {
-                    localuserOrder.Status = eORDERSTATUS.NEW;
-                }
-                if (item.Status == ExtendedOrderStatus.Done)
-                {
-                    localuserOrder.Status = eORDERSTATUS.CANCELED;
-                }
-            }
-
-            if (item.UpdateType == MatchUpdateType.Update)
-            {
-                if (item.Status == ExtendedOrderStatus.Open)
-                {
-                    localuserOrder.Status = eORDERSTATUS.NEW;
-                }
-                if (item.Status == ExtendedOrderStatus.Match)
-                {
-                    localuserOrder.Status = eORDERSTATUS.NEW;
-                }
-                if (item.Status == ExtendedOrderStatus.Done)
-                {
-                    localuserOrder.Status = eORDERSTATUS.CANCELED;
-                }
-            }
-
-            if (item.UpdateType == MatchUpdateType.Filled)
-            {
-                localuserOrder.PricePlaced = item.Price.ToDouble();
-                localuserOrder.FilledPrice=item.Price.ToDouble();
-                localuserOrder.FilledQuantity = (double)item.QuantityFilled;
-                localuserOrder.Status = eORDERSTATUS.FILLED;
-            }
-            if (item.UpdateType == MatchUpdateType.Canceled)
-            {
-                localuserOrder.Status = eORDERSTATUS.CANCELED;
-            }
-
-            localuserOrder.LastUpdated = DateTime.Now;
-            localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
-            RaiseOnDataReceived(localuserOrder);
-        }
         private async Task InitializeUserPrivateOrders()
         {
-            if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) && !string.IsNullOrEmpty(_settings.APIPassPhrase))
+            if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) &&
+                !string.IsNullOrEmpty(_settings.APIPassPhrase))
             {
-                await _socketClient.SpotApi.SubscribeToOrderUpdatesAsync(async neworder =>
-            {
-                log.Info(neworder.Data);
-                if (neworder.Data != null)
-                {
-                    KucoinStreamOrderNewUpdate item = neworder.Data;
-                    await UpdateUserOrder(item);
-                }
-            }, async onOrderData =>
-            {
-                if (onOrderData.Data != null)
-                {
-                    KucoinStreamOrderUpdate item = onOrderData.Data; 
-                    await UpdateUserOrder(item);
-                }
-            },
-
-            onTradeData =>
-            {
-
-            });
-
+                await _socketClient.SpotApi.SubscribeToOrderUpdatesAsync(
+                    async neworder => { await UpdateUserOrder(neworder.Data); },
+                    async onOrderData => { await UpdateUserOrder(onOrderData.Data); },
+                    async onTradeData => { await UpdateUserOrder(onTradeData.Data); });
             }
         }
+
         private async Task InitializeDeltasAsync()
         {
 
@@ -612,9 +405,11 @@ namespace MarketConnectors.KuCoin
                                 }
                                 else
                                 {
-                                    if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
+                                    if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) >
+                                        1)
                                     {
-                                        var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
+                                        var _msg =
+                                            $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
                                         log.Warn(_msg);
                                         HelperNotificationManager.Instance.AddNotification(this.Name, _msg,
                                             HelprNorificationManagerTypes.WARNING,
@@ -633,7 +428,8 @@ namespace MarketConnectors.KuCoin
                                     _normalizedSymbol = GetNormalizedSymbol(data.Symbol);
 
 
-                                var _error = $"Will reconnect. Unhandled error while receiving delta market data for {_normalizedSymbol}.";
+                                var _error =
+                                    $"Will reconnect. Unhandled error while receiving delta market data for {_normalizedSymbol}.";
                                 log.Error(_error, ex);
                                 Task.Run(async () => await HandleConnectionLost(_error, ex));
                             }
@@ -645,11 +441,13 @@ namespace MarketConnectors.KuCoin
                 }
                 else
                 {
-                    var _error = $"Unsuccessful deltas subscription for {normalizedSymbol} error: {deltaSubscription.Error}";
+                    var _error =
+                        $"Unsuccessful deltas subscription for {normalizedSymbol} error: {deltaSubscription.Error}";
                     throw new Exception(_error);
                 }
             }
         }
+
         private async Task InitializeSnapshotsAsync()
         {
             try
@@ -662,10 +460,14 @@ namespace MarketConnectors.KuCoin
                     {
                         _localOrderBooks.Add(normalizedSymbol, null);
                     }
+
                     log.Info($"{this.Name}: Getting snapshot {normalizedSymbol} level 2");
 
                     // Fetch initial depth snapshot 
-                    var depthSnapshot = await _restClient.SpotApi.ExchangeData.GetAggregatedPartialOrderBookAsync(symbol, 20);//.ExchangeData.GetAggregatedFullOrderBookAsync(symbol);
+                    var depthSnapshot =
+                        await _restClient.SpotApi.ExchangeData
+                            .GetAggregatedPartialOrderBookAsync(symbol,
+                                20); //.ExchangeData.GetAggregatedFullOrderBookAsync(symbol);
                     if (depthSnapshot.Success)
                     {
                         _localOrderBooks[normalizedSymbol] = ToOrderBookModel(depthSnapshot.Data, normalizedSymbol);
@@ -674,7 +476,8 @@ namespace MarketConnectors.KuCoin
                     }
                     else
                     {
-                        var _error = $"Unsuccessful snapshot request for {normalizedSymbol} error: {depthSnapshot.ResponseStatusCode} - {depthSnapshot.Error}";
+                        var _error =
+                            $"Unsuccessful snapshot request for {normalizedSymbol} error: {depthSnapshot.ResponseStatusCode} - {depthSnapshot.Error}";
                         throw new Exception(_error);
                     }
 
@@ -685,6 +488,7 @@ namespace MarketConnectors.KuCoin
 
             }
         }
+
         private async Task InitializePingTimerAsync()
         {
             _timerPing?.Stop();
@@ -700,6 +504,7 @@ namespace MarketConnectors.KuCoin
         {
             UpdateOrderBook(eventData.Item3, eventData.Item2, eventData.Item1);
         }
+
         private void eventBuffers_onErrorAction(Exception ex)
         {
             var _error = $"Will reconnect. Unhandled error in the Market Data Queue: {ex.Message}";
@@ -707,6 +512,7 @@ namespace MarketConnectors.KuCoin
             log.Error(_error, ex);
             Task.Run(async () => await HandleConnectionLost(_error, ex));
         }
+
         private void tradesBuffers_onReadAction(Tuple<string, KucoinTrade> item)
         {
             var trade = tradePool.Get();
@@ -722,6 +528,7 @@ namespace MarketConnectors.KuCoin
             RaiseOnDataReceived(trade);
             tradePool.Return(trade);
         }
+
         private void tradesBuffers_onErrorAction(Exception ex)
         {
             var _error = $"Will reconnect. Unhandled error in the Trades Queue: {ex.Message}";
@@ -732,6 +539,7 @@ namespace MarketConnectors.KuCoin
 
 
         #region Websocket Deltas Callbacks
+
         private void AttachEventHandlers(UpdateSubscription data)
         {
             if (data == null)
@@ -743,6 +551,7 @@ namespace MarketConnectors.KuCoin
             data.ActivityPaused += deltaSubscription_ActivityPaused;
             data.ActivityUnpaused += deltaSubscription_ActivityUnpaused;
         }
+
         private void UnattachEventHandlers(UpdateSubscription data)
         {
             if (data == null)
@@ -755,38 +564,49 @@ namespace MarketConnectors.KuCoin
             data.ActivityPaused -= deltaSubscription_ActivityPaused;
             data.ActivityUnpaused -= deltaSubscription_ActivityUnpaused;
         }
+
         private void deltaSubscription_ActivityUnpaused()
         {
             //throw new NotImplementedException();
         }
+
         private void deltaSubscription_ActivityPaused()
         {
             //throw new NotImplementedException();
         }
+
         private void deltaSubscription_ConnectionRestored(TimeSpan obj)
         {
             //throw new NotImplementedException();
         }
+
         private void deltaSubscription_ConnectionClosed()
         {
-            if (Status != ePluginStatus.STOPPING && Status != ePluginStatus.STOPPED) //avoid executing this if we are actually trying to disconnect.
-                Task.Run(async () => await HandleConnectionLost("Websocket has been closed from the server (no informed reason)."));
+            if (Status != ePluginStatus.STOPPING &&
+                Status != ePluginStatus.STOPPED) //avoid executing this if we are actually trying to disconnect.
+                Task.Run(async () =>
+                    await HandleConnectionLost("Websocket has been closed from the server (no informed reason)."));
         }
+
         private void deltaSubscription_ConnectionLost()
         {
-            Task.Run(async () => await HandleConnectionLost("Websocket connection has been lost (no informed reason)."));
+            Task.Run(async () =>
+                await HandleConnectionLost("Websocket connection has been lost (no informed reason)."));
         }
+
         private void deltaSubscription_Exception(Exception obj)
         {
             string _error = $"Websocket error: {obj.Message}";
             log.Error(_error, obj);
-            HelperNotificationManager.Instance.AddNotification(this.Name, _error, HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.PLUGINS);
+            HelperNotificationManager.Instance.AddNotification(this.Name, _error, HelprNorificationManagerTypes.ERROR,
+                HelprNorificationManagerCategories.PLUGINS);
 
             Task.Run(StopAsync);
 
             Status = ePluginStatus.STOPPED_FAILED;
             RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED_FAILED));
         }
+
         #endregion
 
         private void UpdateOrderBook(KucoinStreamOrderBook lob_update, string symbol, DateTime ts)
@@ -801,6 +621,7 @@ namespace MarketConnectors.KuCoin
             {
                 local_lob = new VisualHFT.Model.OrderBook();
             }
+
             if (lob_update.SequenceStart > local_lob.Sequence &&
                 lob_update.SequenceStart != local_lob.Sequence + 1)
                 throw new Exception("Detected sequence gap.");
@@ -837,6 +658,7 @@ namespace MarketConnectors.KuCoin
 
                 local_lob.Sequence = item.Sequence;
             }
+
             foreach (var item in lob_update.Changes.Asks)
             {
                 if (item.Sequence <= local_lob.Sequence)
@@ -859,23 +681,26 @@ namespace MarketConnectors.KuCoin
                     {
                         MDUpdateAction = eMDUpdateAction.Delete,
                         Price = (double)item.Price,
-                        Size = (double)item.Quantity,
+                        //Size = (double)item.Quantity,
                         IsBid = false,
                         LocalTimeStamp = DateTime.Now,
                         ServerTimeStamp = ts,
                         Symbol = symbol
                     });
+
                 local_lob.Sequence = item.Sequence;
             }
 
 
             RaiseOnDataReceived(local_lob);
         }
+
         private async Task DoPingAsync()
         {
             try
             {
-                if (Status == ePluginStatus.STOPPED || Status == ePluginStatus.STOPPING || Status == ePluginStatus.STOPPED_FAILED)
+                if (Status == ePluginStatus.STOPPED || Status == ePluginStatus.STOPPING ||
+                    Status == ePluginStatus.STOPPED_FAILED)
                     return; //do not ping if any of these statues
 
                 bool isConnected = _socketClient.CurrentConnections > 0;
@@ -908,7 +733,8 @@ namespace MarketConnectors.KuCoin
 
                 if (++pingFailedAttempts >= 5) //5 attempts
                 {
-                    var _error = $"Will reconnect. Unhandled error in DoPingAsync. Initiating reconnection. {ex.Message}";
+                    var _error =
+                        $"Will reconnect. Unhandled error in DoPingAsync. Initiating reconnection. {ex.Message}";
 
                     log.Error(_error, ex);
 
@@ -917,6 +743,7 @@ namespace MarketConnectors.KuCoin
             }
 
         }
+
         private VisualHFT.Model.OrderBook ToOrderBookModel(KucoinOrderBook data, string symbol)
         {
             var identifiedPriceDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.Asks.Select(x => x.Price));
@@ -963,10 +790,106 @@ namespace MarketConnectors.KuCoin
             lob.LoadData(
                 _asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),
                 _bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels)
-                );
+            );
             return lob;
         }
 
+
+        private VisualHFT.Model.Order GetOrCreateUserOrder(KucoinStreamOrderBaseUpdate item)
+        {
+            VisualHFT.Model.Order localuserOrder;
+            if (!this._localUserOrders.ContainsKey(item.OrderId))
+            {
+                localuserOrder = new VisualHFT.Model.Order();
+                localuserOrder.OrderID = Math.Abs(item.OrderId.ToString().GetHashCode());
+                localuserOrder.ClOrdId = item.OrderId;
+                localuserOrder.CreationTimeStamp = item.OrderTime.Value;
+
+                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                if (item.OriginalQuantity != 0)
+                    localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+                else if (item.OrderType == OrderType.Market && item.OriginalValue != 0)
+                {
+                    localuserOrder.Quantity = item.OriginalValue.ToDouble();
+                }
+                if (item.OrderType != OrderType.Market)
+                {
+                    localuserOrder.PricePlaced = item.Price.ToDouble();
+                }
+
+                localuserOrder.Side = item.Side == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell;
+                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+
+                if (item.OrderType == OrderType.Market || item.OrderType == OrderType.MarketStop)
+                    localuserOrder.OrderType = eORDERTYPE.MARKET;
+                else
+                    localuserOrder.OrderType = eORDERTYPE.LIMIT;
+                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC; //default
+
+
+                this._localUserOrders.Add(item.OrderId, localuserOrder);
+            }
+            else
+            {
+                localuserOrder = this._localUserOrders[item.OrderId];
+            }
+            if (item.Status == ExtendedOrderStatus.New || item.Status == ExtendedOrderStatus.Open)
+                localuserOrder.Status = eORDERSTATUS.NEW;
+            return localuserOrder;
+        }
+
+
+        private async Task UpdateUserOrder(KucoinStreamOrderNewUpdate item)
+        {
+            VisualHFT.Model.Order localuserOrder = GetOrCreateUserOrder(item);
+
+            localuserOrder.LastUpdated = DateTime.Now;
+            RaiseOnDataReceived(localuserOrder);
+        }
+        private async Task UpdateUserOrder(KucoinStreamOrderUpdate item)
+        {
+            VisualHFT.Model.Order localuserOrder = GetOrCreateUserOrder(item);
+            localuserOrder.FilledQuantity = item.QuantityFilled.ToDouble();
+            if (item.UpdateType == MatchUpdateType.Update)
+            {
+                localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+                localuserOrder.PricePlaced = item.Price.ToDouble();
+            }
+
+            localuserOrder.FilledQuantity = item.QuantityFilled.ToDouble();
+            localuserOrder.FilledPrice = item.Price.ToDouble();
+            if (localuserOrder.FilledQuantity > 0)
+                localuserOrder.Status = (localuserOrder.PendingQuantity > 0 ? eORDERSTATUS.PARTIALFILLED : eORDERSTATUS.FILLED);
+
+            if (item.UpdateType == MatchUpdateType.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+
+            localuserOrder.LastUpdated = DateTime.Now;
+            RaiseOnDataReceived(localuserOrder);
+        }
+        private async Task UpdateUserOrder(KucoinStreamOrderMatchUpdate item)
+        {
+            VisualHFT.Model.Order localuserOrder = GetOrCreateUserOrder(item);
+            localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+            localuserOrder.PricePlaced = item.Price.ToDouble();
+            localuserOrder.FilledQuantity = item.QuantityFilled.ToDouble();
+            localuserOrder.FilledPrice = item.MatchPrice.ToDouble();
+            if (item.UpdateType.HasValue && item.UpdateType == MatchUpdateType.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+            else 
+            {
+                if (localuserOrder.FilledQuantity > 0)
+                    localuserOrder.Status = (localuserOrder.PendingQuantity > 0 ? eORDERSTATUS.PARTIALFILLED : eORDERSTATUS.FILLED);
+            }
+            localuserOrder.LastUpdated = DateTime.Now;
+            RaiseOnDataReceived(localuserOrder);
+
+        }
 
         protected override void Dispose(bool disposing)
         {
@@ -1169,22 +1092,37 @@ namespace MarketConnectors.KuCoin
                 throw new Exception("Messages were not collected for this scenario.");
             }
 
-
             string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"kucoin_jsonMessages/{_file}"));
 
+
+
+
             //DESERIALIZE EXCHANGES MODEL
-            List<KucoinStreamOrderUpdate> modelList = new List<KucoinStreamOrderUpdate>();
-            var dataEvents = new List<KucoinStreamOrderUpdate>();
+            List<KucoinStreamOrderBaseUpdate> modelList = new List<KucoinStreamOrderBaseUpdate>();
             var jsonArray = JArray.Parse(jsonString);
-            foreach (JToken jsonObject in jsonArray)
+
+            foreach (var jsonObject in jsonArray)
             {
                 JToken dataToken = jsonObject["data"];
                 string dataJsonString = dataToken.ToString();
-              
-                KucoinStreamOrderUpdate _data = JsonConvert.DeserializeObject<KucoinStreamOrderUpdate>(dataJsonString);
-                if (_data != null)
-                    modelList.Add(_data);
+                var baseUpdate = JsonParser.Parse<KucoinStreamOrderBaseUpdate>(dataJsonString);
+                if (baseUpdate.UpdateType == MatchUpdateType.Received || baseUpdate.UpdateType == MatchUpdateType.Open)
+                {
+                    var item = JsonParser.Parse<KucoinStreamOrderNewUpdate>(dataJsonString);
+                    modelList.Add(item);
+                }
+                else if (baseUpdate.UpdateType == MatchUpdateType.Match)
+                {
+                    var item = JsonParser.Parse<KucoinStreamOrderMatchUpdate>(dataJsonString);
+                    modelList.Add(item);
+                }
+                else
+                {
+                    var item = JsonParser.Parse<KucoinStreamOrderUpdate>(dataJsonString);
+                    modelList.Add(item);
+                }
             }
+
             //END DESERIALIZE EXCHANGES MODEL
 
 
@@ -1194,13 +1132,19 @@ namespace MarketConnectors.KuCoin
                 throw new Exception("No data was found in the json file.");
             foreach (var item in modelList)
             {
-                UpdateUserOrder(item);
+                if (item is KucoinStreamOrderNewUpdate)
+                    UpdateUserOrder(item as KucoinStreamOrderNewUpdate);
+                else if (item is KucoinStreamOrderMatchUpdate)
+                    UpdateUserOrder(item as KucoinStreamOrderMatchUpdate);
+                else
+                    UpdateUserOrder(item as KucoinStreamOrderUpdate);
             }
             //END UPDATE VISUALHFT CORE
 
+
             var dicOrders = new Dictionary<string, VisualHFT.Model.Order>(); //we need to use dictionary to identify orders (because exchanges orderId is string)
 
-            foreach (KucoinStreamOrderUpdate item in modelList)
+            foreach (var item in modelList)
             {
 
                 VisualHFT.Model.Order localuserOrder;
@@ -1208,123 +1152,62 @@ namespace MarketConnectors.KuCoin
                 {
                     localuserOrder = new VisualHFT.Model.Order();
                     localuserOrder.ClOrdId = item.OrderId;
-                    localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
                     localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-
-                    localuserOrder.OrderID = item.OrderId.ToString().GetHashCode();
-
+                    localuserOrder.OrderID = this._localUserOrders[item.OrderId].OrderID; //DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                     localuserOrder.ProviderName = _settings.Provider.ProviderName;
-                    localuserOrder.CreationTimeStamp = item.OrderTime.Value;
-                    localuserOrder.Quantity = item.OriginalQuantity.ToDouble() ;
-
-                    if (item.OrderType == OrderType.Market && item.Side == OrderSide.Buy)
+                    if (item.OriginalQuantity != 0)
+                        localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+                    else if (item.OrderType == OrderType.Market && item.OriginalValue != 0)
                     {
                         localuserOrder.Quantity = item.OriginalValue.ToDouble();
                     }
-
-                    localuserOrder.PricePlaced = item.Price.ToDouble();
+                    if (item.OrderType != OrderType.Market)
+                    {
+                        localuserOrder.PricePlaced = item.Price.ToDouble();
+                    }
                     localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
                     localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
-                    /*
-                    if (!string.IsNullOrEmpty(item.behaviour))
-                    {
-                        if (item.behavior.ToLower().Equals("immediate-or-cancel"))
-                        {
-                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
-                        }   
-                        else if (item.behavior.ToLower().Equals("fill-or-kill"))
-                        {
-                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
-                        }
-                        else if (item.behavior.ToLower().Equals("maker-or-cancel"))
-                        {
-                            localuserOrder.TimeInForce = eORDERTIMEINFORCE.MOK;
-                        }
-                    }
-                    */
+                    localuserOrder.Side = item.Side == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell;
+                    localuserOrder.OrderType = item.OrderType == OrderType.Market ? eORDERTYPE.MARKET : eORDERTYPE.LIMIT;
+
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                    localuserOrder.LastUpdated = DateTime.Now;
                     dicOrders.Add(item.OrderId, localuserOrder);
                 }
                 else
                 {
                     localuserOrder = dicOrders[item.OrderId];
                 }
-
-
-                if (item.OrderType == OrderType.Market)
-                {
-                    localuserOrder.OrderType = eORDERTYPE.MARKET;
-                }
-                else if (item.OrderType == OrderType.Limit)
-                {
-                    localuserOrder.OrderType = eORDERTYPE.LIMIT;
-
-                }
-                else
-                {
-                    localuserOrder.OrderType = eORDERTYPE.PEGGED;
-                }
-
-
-                if (item.Side == OrderSide.Buy)
-                {
-                    localuserOrder.FilledPrice = item.Price.ToDouble();
-                    localuserOrder.PricePlaced = item.Price.ToDouble();
-                    localuserOrder.BestBid = item.Price.ToDouble();
-                    localuserOrder.Side = eORDERSIDE.Buy;
-                }
-                if (item.Side == OrderSide.Sell)
-                {
-                    localuserOrder.Side = eORDERSIDE.Sell;
-                    localuserOrder.BestAsk = item.Price.ToDouble();
-                    localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
-                }
-
-                if (item.UpdateType == MatchUpdateType.Received)
-                {
-                    if (item.Status == ExtendedOrderStatus.Open)
-                    {
-                        localuserOrder.Status = eORDERSTATUS.NEW;
-                    }
-                    if (item.Status == ExtendedOrderStatus.Match)
-                    {
-                        localuserOrder.Status = eORDERSTATUS.NEW;
-                    }
-                    if (item.Status == ExtendedOrderStatus.Done)
-                    {
-                        localuserOrder.Status = eORDERSTATUS.FILLED;
-                    }
-                }
-                if (item.UpdateType == MatchUpdateType.Update)
-                {
-                    if (item.Status == ExtendedOrderStatus.Open)
-                    {
-                        localuserOrder.Status = eORDERSTATUS.NEW;
-                    }
-                    if (item.Status == ExtendedOrderStatus.Match)
-                    {
-                        localuserOrder.Status = eORDERSTATUS.NEW;
-                    }
-                    if (item.Status == ExtendedOrderStatus.Done)
-                    {
-                        localuserOrder.Status = eORDERSTATUS.FILLED;
-                    }
-                }
-
-                if (item.UpdateType == MatchUpdateType.Filled)
-                {
-                    localuserOrder.PricePlaced = item.Price.ToDouble();
-                    localuserOrder.FilledPrice = item.Price.ToDouble();
-                    localuserOrder.FilledQuantity = (double)item.QuantityFilled;
-                    localuserOrder.Status = eORDERSTATUS.FILLED;
-                }
-                if (item.UpdateType == MatchUpdateType.Canceled)
-                { 
+                if (item.UpdateType == MatchUpdateType.Received || item.UpdateType == MatchUpdateType.Open)
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                else if (item.UpdateType == MatchUpdateType.Canceled)
                     localuserOrder.Status = eORDERSTATUS.CANCELED;
+                else if (item.UpdateType == MatchUpdateType.Update)
+                {
+                    localuserOrder.Quantity = item.OriginalQuantity.ToDouble();
+                    if (item.OrderType != OrderType.Market)
+                    {
+                        localuserOrder.PricePlaced = item.Price.ToDouble();
+                    }
                 }
+                if (item is KucoinStreamOrderMatchUpdate matchedItem)
+                {
+                    localuserOrder.FilledPrice = matchedItem.MatchPrice.ToDouble();
+                    localuserOrder.FilledQuantity = matchedItem.QuantityFilled.ToDouble();
+                    if (localuserOrder.FilledQuantity > 0)
+                        localuserOrder.Status = localuserOrder.PendingQuantity == 0 ? eORDERSTATUS.FILLED : eORDERSTATUS.PARTIALFILLED;
+                }
+                else if (item is KucoinStreamOrderUpdate newUpdate)
+                {
+                    localuserOrder.FilledPrice = newUpdate.Price.ToDouble();
+                    localuserOrder.FilledQuantity = newUpdate.QuantityFilled.ToDouble();
+                    if (localuserOrder.FilledQuantity > 0 && localuserOrder.Status != eORDERSTATUS.CANCELED)
+                        localuserOrder.Status = localuserOrder.PendingQuantity == 0 ? eORDERSTATUS.FILLED : eORDERSTATUS.PARTIALFILLED;
+                }
+                //|| item is 
 
                 localuserOrder.LastUpdated = DateTime.Now;
-                localuserOrder.FilledPercentage = Math.Round((100 / localuserOrder.Quantity) * localuserOrder.FilledQuantity, 2);
                 //END CREATE MODEL TO RETURN
             }
 
@@ -1332,4 +1215,5 @@ namespace MarketConnectors.KuCoin
 
         }
     }
+
 }

@@ -48,8 +48,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Kucoin.Net" Version="5.24.0" />
-    <PackageReference Include="log4net" Version="3.0.3" />
+    <PackageReference Include="Kucoin.Net" Version="6.0.1" />
+    <PackageReference Include="log4net" Version="3.0.4" />
   </ItemGroup>
 
   <ItemGroup>
