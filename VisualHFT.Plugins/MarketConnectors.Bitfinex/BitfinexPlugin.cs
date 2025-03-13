@@ -384,7 +384,7 @@ namespace MarketConnectors.Bitfinex
             trade.ProviderId = _settings.Provider.ProviderID;
             trade.ProviderName = _settings.Provider.ProviderName;
             trade.IsBuy = item.Item2.Quantity > 0;
-            trade.MarketMidPrice = _localOrderBooks[item.Item1].MidPrice;
+            trade.MarketMidPrice = _localOrderBooks[item.Item1]?.MidPrice ?? 0;
 
             RaiseOnDataReceived(trade);
             tradePool.Return(trade);
