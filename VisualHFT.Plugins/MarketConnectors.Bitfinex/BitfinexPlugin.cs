@@ -12,11 +12,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Bitfinex.Net.ExtensionMethods;
-using Bitfinex.Net.Interfaces.Clients;
 using CryptoExchange.Net.Converters.JsonNet;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.UserSettings;
@@ -27,11 +24,10 @@ using CryptoExchange.Net.Objects.Sockets;
 using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using VisualHFT.Commons.Interfaces;
-using VisualHFT.Model;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
-using CryptoExchange.Net.CommonObjects;
 using VisualHFT.Commons.Exceptions;
+using CryptoExchange.Net.Interfaces;
 
 namespace MarketConnectors.Bitfinex
 {
@@ -43,11 +39,8 @@ namespace MarketConnectors.Bitfinex
         private BitfinexSocketClient _socketClient;
         private BitfinexRestClient _restClient;
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
-        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, BitfinexRawOrderBookEntry>>> _eventBuffers =
-            new Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, BitfinexRawOrderBookEntry>>>();
-
-        private Dictionary<string, HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>> _tradesBuffers =
-            new Dictionary<string, HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>>();
+        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>> _eventBuffers = new();
+        private Dictionary<string, HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>> _tradesBuffers = new();
 
         private int pingFailedAttempts = 0;
         private System.Timers.Timer _timerPing;
@@ -94,8 +87,6 @@ namespace MarketConnectors.Bitfinex
                 options.Environment = BitfinexEnvironment.Live;
             });
 
-            var account = await _restClient.SpotApi.Account.GetBalancesAsync(CancellationToken.None);
-
             try
             {
                 await InternalStartAsync();
@@ -104,8 +95,6 @@ namespace MarketConnectors.Bitfinex
                 log.Info($"Plugin has successfully started.");
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
                 Status = ePluginStatus.STARTED;
-
-
             }
             catch (Exception ex)
             {
@@ -121,8 +110,8 @@ namespace MarketConnectors.Bitfinex
             // Initialize event buffer for each symbol
             foreach (var symbol in GetAllNormalizedSymbols())
             {
-                _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, BitfinexRawOrderBookEntry>>($"<Tuple<DateTime, string, BitfinexOrderBookEntry>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
-                _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>($"<Tuple<DateTime, string, BitfinexOrderBookEntry>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
+                _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>($"<Tuple<DateTime, string, BitfinexOrderBookEntry>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
+                _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>($"<Tuple<DateTime, string, BitfinexTradeSimple>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
             }
 
             await InitializeSnapshotsAsync();
@@ -292,9 +281,10 @@ namespace MarketConnectors.Bitfinex
             foreach (var symbol in GetAllNonNormalizedSymbols())
             {
                 var normalizedSymbol = GetNormalizedSymbol(symbol);
-                log.Info($"{this.Name}: sending WS Trades Subscription {normalizedSymbol} ");
-                deltaSubscription = await _socketClient.SpotApi.SubscribeToRawOrderBookUpdatesAsync(
+                log.Info($"{this.Name}: sending WS Deltas Subscription {normalizedSymbol} ");
+                deltaSubscription = await _socketClient.SpotApi.SubscribeToOrderBookUpdatesAsync(
                     symbol,
+                    Precision.PrecisionLevel0, Frequency.Realtime,
                     _settings.DepthLevels,
                     data =>
                     {
@@ -312,7 +302,7 @@ namespace MarketConnectors.Bitfinex
                                     foreach (var item in data.Data)
                                     {
                                         _eventBuffers[normalizedSymbol].Add(
-                                            new Tuple<DateTime, string, BitfinexRawOrderBookEntry>(
+                                            new Tuple<DateTime, string, BitfinexOrderBookEntry>(
                                                 data.ReceiveTime.ToLocalTime(), normalizedSymbol, item));
                                     }
                                 }
@@ -349,7 +339,7 @@ namespace MarketConnectors.Bitfinex
                 log.Info($"{this.Name}: Getting snapshot {normalizedSymbol} level 2");
 
                 // Fetch initial depth snapshot
-                var depthSnapshot = await _restClient.SpotApi.ExchangeData.GetRawOrderBookAsync(symbol, _settings.DepthLevels);
+                var depthSnapshot = await _restClient.SpotApi.ExchangeData.GetOrderBookAsync(symbol, Precision.PrecisionLevel0, _settings.DepthLevels);
                 if (depthSnapshot.Success)
                 {
                     _localOrderBooks[normalizedSymbol] = ToOrderBookModel(depthSnapshot.Data, normalizedSymbol);
@@ -373,7 +363,7 @@ namespace MarketConnectors.Bitfinex
             _timerPing.Enabled = true; // Start the timer
         }
 
-        private void eventBuffers_onReadAction(Tuple<DateTime, string, BitfinexRawOrderBookEntry> eventData)
+        private void eventBuffers_onReadAction(Tuple<DateTime, string, BitfinexOrderBookEntry> eventData)
         {
             UpdateOrderBook(eventData.Item3, eventData.Item2, eventData.Item1);
         }
@@ -467,50 +457,6 @@ namespace MarketConnectors.Bitfinex
         #endregion
 
 
-        private void UpdateOrderBook(BitfinexRawOrderBookEntry lob_update, string symbol, DateTime ts)
-        {
-            if (!_localOrderBooks.ContainsKey(symbol))
-                return;
-            if (lob_update == null)
-                return;
-
-            var local_lob = _localOrderBooks[symbol];
-
-            if (local_lob != null)
-            {
-                if (lob_update.Price == 0) //remove
-                {
-                    bool isBid = lob_update.Quantity > 0;
-                    var delta = new DeltaBookItem()
-                    {
-                        EntryID = lob_update.OrderId.ToString(),
-                        IsBid = isBid,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = ts,
-                        Symbol = local_lob.Symbol,
-                        MDUpdateAction = eMDUpdateAction.Delete,
-                    };
-                    local_lob.DeleteLevel(delta);
-                }
-                else
-                {
-                    bool isBid = lob_update.Quantity > 0;
-                    var delta = new DeltaBookItem()
-                    {
-                        EntryID = lob_update.OrderId.ToString(),
-                        Price = (double)lob_update.Price,
-                        Size = (double)Math.Abs(lob_update.Quantity),
-                        IsBid = isBid,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = ts,
-                        Symbol = local_lob.Symbol,
-                        MDUpdateAction = eMDUpdateAction.New,
-                    };
-                    local_lob.AddOrUpdateLevel(delta);
-                }
-            }
-            RaiseOnDataReceived(local_lob);
-        }
         private async Task DoPingAsync()
         {
             try
@@ -557,7 +503,7 @@ namespace MarketConnectors.Bitfinex
             }
 
         }
-        private VisualHFT.Model.OrderBook ToOrderBookModel(BitfinexRawOrderBook data, string symbol)
+        private VisualHFT.Model.OrderBook ToOrderBookModel(BitfinexOrderBook data, string symbol)
         {
             var identifiedPriceDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.Asks.Select(x => x.Price));
 
@@ -576,7 +522,6 @@ namespace MarketConnectors.Bitfinex
                     LocalTimeStamp = DateTime.Now,
                     ServerTimeStamp = DateTime.Now,
                     Symbol = symbol,
-                    EntryID = x.OrderId.ToString(),
                     MDUpdateAction = eMDUpdateAction.New,
                 });
             });
@@ -590,14 +535,13 @@ namespace MarketConnectors.Bitfinex
                     LocalTimeStamp = DateTime.Now,
                     ServerTimeStamp = DateTime.Now,
                     Symbol = symbol,
-                    EntryID = x.OrderId.ToString(),
                     MDUpdateAction = eMDUpdateAction.New,
                 });
             });
 
             return lob;
         }
-        private void UpdateOrderBookFromWS(IEnumerable<BitfinexRawOrderBookEntry> data, string symbol)
+        private void UpdateOrderBookFromWS(IEnumerable<BitfinexOrderBookEntry> data, string symbol)
         {
             if (!_localOrderBooks.TryGetValue(symbol, out VisualHFT.Model.OrderBook? lob))
             {
@@ -615,10 +559,53 @@ namespace MarketConnectors.Bitfinex
                     LocalTimeStamp = DateTime.Now,
                     ServerTimeStamp = DateTime.Now,
                     Symbol = symbol,
-                    EntryID = x.OrderId.ToString(),
                     MDUpdateAction = eMDUpdateAction.New,
                 });
             });
+        }
+        private void UpdateOrderBook(BitfinexOrderBookEntry lob_update, string symbol, DateTime ts)
+        {
+            if (!_localOrderBooks.ContainsKey(symbol))
+                return;
+            if (lob_update == null)
+                return;
+
+            var local_lob = _localOrderBooks[symbol];
+
+            if (local_lob != null)
+            {
+                bool isBid = lob_update.Quantity > 0;
+
+                if (lob_update.Count == 0) //remove
+                {
+                    var delta = new DeltaBookItem()
+                    {
+                        Price = (double)lob_update.Price,
+                        Size = (double)Math.Abs(lob_update.Quantity),
+                        IsBid = isBid,
+                        LocalTimeStamp = DateTime.Now,
+                        ServerTimeStamp = ts,
+                        Symbol = local_lob.Symbol,
+                        MDUpdateAction = eMDUpdateAction.Delete,
+                    };
+                    local_lob.DeleteLevel(delta);
+                }
+                else
+                {
+                    var delta = new DeltaBookItem()
+                    {
+                        Price = (double)lob_update.Price,
+                        Size = (double)Math.Abs(lob_update.Quantity),
+                        IsBid = isBid,
+                        LocalTimeStamp = DateTime.Now,
+                        ServerTimeStamp = ts,
+                        Symbol = local_lob.Symbol,
+                        MDUpdateAction = eMDUpdateAction.Change,
+                    };
+                    local_lob.AddOrUpdateLevel(delta);
+                }
+            }
+            RaiseOnDataReceived(local_lob);
         }
 
 
@@ -727,9 +714,9 @@ namespace MarketConnectors.Bitfinex
         //FOR UNIT TESTING PURPOSES
         public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
         {
-            var localModel = new BitfinexRawOrderBook();
-            localModel.Asks = snapshotModel.Asks.Select(x => new BitfinexRawOrderBookEntry() { OrderId = x.EntryID.ToInt(), Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
-            localModel.Bids = snapshotModel.Bids.Select(x => new BitfinexRawOrderBookEntry() { OrderId = x.EntryID.ToInt(), Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
+            var localModel = new BitfinexOrderBook();
+            localModel.Asks = snapshotModel.Asks.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
+            localModel.Bids = snapshotModel.Bids.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
             _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
             var symbol = snapshotModel.Symbol;
 
@@ -781,20 +768,30 @@ namespace MarketConnectors.Bitfinex
             //transform to BitfinexOrderBookEntry
             bidDeltaModel?.ForEach(x =>
             {
-                UpdateOrderBook(new BitfinexRawOrderBookEntry()
+                decimal _qty = 0;
+                if (x.Size.HasValue)
+                    _qty = x.Size.ToDecimal();
+                else if (!x.Size.HasValue && x.MDUpdateAction == eMDUpdateAction.Delete)
+                    _qty = 1;
+                UpdateOrderBook(new BitfinexOrderBookEntry()
                 {
-                    OrderId = x.EntryID.ToInt(),
-                    Price = x.MDUpdateAction == eMDUpdateAction.Delete? 0 : x.Price.ToDecimal(),
-                    Quantity = x.MDUpdateAction == eMDUpdateAction.Delete ? 1 : x.Size.ToDecimal()
+                    Price = x.Price.ToDecimal(),
+                    Quantity = _qty,
+                    Count = x.MDUpdateAction == eMDUpdateAction.Delete ? 0 : 1
                 }, symbol, ts);
             });
             askDeltaModel?.ForEach(x =>
             {
-                UpdateOrderBook(new BitfinexRawOrderBookEntry()
+                decimal _qty = 0;
+                if (x.Size.HasValue)
+                    _qty = x.Size.ToDecimal();
+                else if (!x.Size.HasValue && x.MDUpdateAction == eMDUpdateAction.Delete)
+                    _qty = 1;
+                UpdateOrderBook(new BitfinexOrderBookEntry()
                 {
-                    OrderId = x.EntryID.ToInt(),
-                    Price = x.MDUpdateAction == eMDUpdateAction.Delete ? 0 : x.Price.ToDecimal(),
-                    Quantity = x.MDUpdateAction == eMDUpdateAction.Delete ? -1 : -x.Size.ToDecimal()
+                    Price = x.Price.ToDecimal(),
+                    Quantity = -_qty,
+                    Count = x.MDUpdateAction == eMDUpdateAction.Delete ? 0 : 1
                 }, symbol, ts);
             });
         }
