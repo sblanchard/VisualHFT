@@ -8,6 +8,8 @@ using Xunit.Abstractions;
 
 namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 {
+
+
     public class PrivateMessageTests
     {
         private readonly ITestOutputHelper _testOutputHelper;
@@ -23,10 +25,11 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void Test_PrivateMessage_Scenario1()
         {
-            HelperPosition.Instance.Reset();
+            
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                HelperPosition.Instance.Reset();
                 var CONNECTOR_NAME = mktConnector.GetType().Name;
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
@@ -92,11 +95,11 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void Test_PrivateMessage_Scenario2()
         {
-            HelperPosition.Instance.Reset();
 
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                HelperPosition.Instance.Reset();
                 var CONNECTOR_NAME = mktConnector.GetType().Name;
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
@@ -161,11 +164,12 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void Test_PrivateMessage_Scenario3()
         {
-            HelperPosition.Instance.Reset();
 
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                HelperPosition.Instance.Reset();
+                
                 var CONNECTOR_NAME = mktConnector.GetType().Name;
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
@@ -230,11 +234,11 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void Test_PrivateMessage_Scenario4()
         {
-            HelperPosition.Instance.Reset();
-
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                HelperPosition.Instance.Reset();
+
                 var CONNECTOR_NAME = mktConnector.GetType().Name;
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
@@ -300,11 +304,11 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void Test_PrivateMessage_Scenario5()
         {
-            HelperPosition.Instance.Reset();
-
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                HelperPosition.Instance.Reset();
+
                 var CONNECTOR_NAME = mktConnector.GetType().Name;
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
@@ -376,11 +380,11 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             //3. Order cancelled
 
 
-            HelperPosition.Instance.Reset();
-
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
            foreach (var mktConnector in marketConnectors) //run the same test for each plugin
            {
+               HelperPosition.Instance.Reset();
+
                var CONNECTOR_NAME = mktConnector.GetType().Name;
                _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 
@@ -529,11 +533,11 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             //3. Expecting a fill
 
 
-            HelperPosition.Instance.Reset();
-
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
             foreach (var mktConnector in marketConnectors) //run the same test for each plugin
             {
+                HelperPosition.Instance.Reset();
+
                 var CONNECTOR_NAME = mktConnector.GetType().Name;
                 _testOutputHelper.WriteLine($"TESTING IN {CONNECTOR_NAME}");
 

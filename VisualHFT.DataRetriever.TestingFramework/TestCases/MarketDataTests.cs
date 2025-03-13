@@ -635,74 +635,74 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 // Change the bid at price 1.00004 (originally EntryID "7") to have a new size of 150
                 // Add a new bid at price 1.00006 with size 50
                 var bidDeltaModel = new List<DeltaBookItem>
-        {
-            new DeltaBookItem
-            {
-                EntryID = "6",
-                Symbol = snapshotModel.Symbol,
-                IsBid = true,
-                Price = 1.00005,
-                MDUpdateAction = eMDUpdateAction.Delete,
-                Sequence = ++startingSequence
-            },
-            new DeltaBookItem
-            {
-                EntryID = "7",
-                Symbol = snapshotModel.Symbol,
-                IsBid = true,
-                Price = 1.00004,
-                Size = 150,
-                MDUpdateAction = eMDUpdateAction.Change,
-                Sequence = ++startingSequence
-            },
-            new DeltaBookItem
-            {
-                EntryID = "newID",
-                Symbol = snapshotModel.Symbol,
-                IsBid = true,
-                Price = 1.00006,
-                Size = 50,
-                MDUpdateAction = eMDUpdateAction.New,
-                Sequence = ++startingSequence
-            }
-        };
+                {
+                    new DeltaBookItem
+                    {
+                        EntryID = "6",
+                        Symbol = snapshotModel.Symbol,
+                        IsBid = true,
+                        Price = 1.00005,
+                        MDUpdateAction = eMDUpdateAction.Delete,
+                        Sequence = ++startingSequence
+                    },
+                    new DeltaBookItem
+                    {
+                        EntryID = "7",
+                        Symbol = snapshotModel.Symbol,
+                        IsBid = true,
+                        Price = 1.00004,
+                        Size = 150,
+                        MDUpdateAction = eMDUpdateAction.Change,
+                        Sequence = ++startingSequence
+                    },
+                    new DeltaBookItem
+                    {
+                        EntryID = "newID",
+                        Symbol = snapshotModel.Symbol,
+                        IsBid = true,
+                        Price = 1.00006,
+                        Size = 50,
+                        MDUpdateAction = eMDUpdateAction.New,
+                        Sequence = ++startingSequence
+                    }
+                };
 
                 // --- ASK DELTAS ---
                 // Delete the ask at price 1.00010 (originally EntryID "1")
                 // Change the ask at price 1.00009 (originally EntryID "2") to have a new size of 120
                 // Add a new ask at price 1.00005 with size 60
                 var askDeltaModel = new List<DeltaBookItem>
-        {
-            new DeltaBookItem
-            {
-                EntryID = "1",
-                Symbol = snapshotModel.Symbol,
-                IsBid = false,
-                Price = 1.00010,
-                MDUpdateAction = eMDUpdateAction.Delete,
-                Sequence = ++startingSequence
-            },
-            new DeltaBookItem
-            {
-                EntryID = "2",
-                Symbol = snapshotModel.Symbol,
-                IsBid = false,
-                Price = 1.00009,
-                Size = 120,
-                MDUpdateAction = eMDUpdateAction.Change,
-                Sequence = ++startingSequence
-            },
-            new DeltaBookItem
-            {
-                EntryID = "newID",
-                Symbol = snapshotModel.Symbol,
-                IsBid = false,
-                Price = 1.00005,
-                Size = 60,
-                MDUpdateAction = eMDUpdateAction.New,
-                Sequence = ++startingSequence
-            }
-        };
+                {
+                    new DeltaBookItem
+                    {
+                        EntryID = "1",
+                        Symbol = snapshotModel.Symbol,
+                        IsBid = false,
+                        Price = 1.00010,
+                        MDUpdateAction = eMDUpdateAction.Delete,
+                        Sequence = ++startingSequence
+                    },
+                    new DeltaBookItem
+                    {
+                        EntryID = "2",
+                        Symbol = snapshotModel.Symbol,
+                        IsBid = false,
+                        Price = 1.00009,
+                        Size = 120,
+                        MDUpdateAction = eMDUpdateAction.Change,
+                        Sequence = ++startingSequence
+                    },
+                    new DeltaBookItem
+                    {
+                        EntryID = "newID",
+                        Symbol = snapshotModel.Symbol,
+                        IsBid = false,
+                        Price = 1.00005,
+                        Size = 60,
+                        MDUpdateAction = eMDUpdateAction.New,
+                        Sequence = ++startingSequence
+                    }
+                };
 
                 // Act: Inject the snapshot and then apply the combined delta changes.
                 try
