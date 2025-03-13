@@ -90,9 +90,9 @@ namespace VisualHFT.Helpers
 
         public void Reset()
         {
-            foreach (var subscriber in _subscribers)
+            lock (_lockObj)
             {
-                Unsubscribe(subscriber);
+                _subscribers.Clear();
             }
         }
     }

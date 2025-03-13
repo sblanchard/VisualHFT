@@ -23,11 +23,13 @@ namespace VisualHFT.Model
         public OrderBook()
         {
             _data = new OrderBookData();
+            FilterBidAskByMaxDepth = true;
         }
 
         public OrderBook(string symbol, int priceDecimalPlaces, int maxDepth)
         {
             _data = new OrderBookData(symbol, priceDecimalPlaces, maxDepth);
+            FilterBidAskByMaxDepth = true;
         }
 
         ~OrderBook()
@@ -93,7 +95,7 @@ namespace VisualHFT.Model
                 {
                     if (_data.Asks == null)
                         return null;
-                    if (FilterBidAskByMaxDepth)
+                    if (MaxDepth > 0 && FilterBidAskByMaxDepth)
                         return _data.Asks.Take(MaxDepth);
                     else
                         return _data.Asks;
@@ -110,7 +112,7 @@ namespace VisualHFT.Model
                 {
                     if (_data.Bids == null)
                         return null;
-                    if (FilterBidAskByMaxDepth)
+                    if (MaxDepth >0 && FilterBidAskByMaxDepth)
                         return _data.Bids.Take(MaxDepth);
                     else
                         return _data.Bids;
