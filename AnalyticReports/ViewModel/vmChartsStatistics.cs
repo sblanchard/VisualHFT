@@ -23,7 +23,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
 
         public void LoadData(List<VisualHFT.Model.Position> signals)
         {
-            heldBars = (from x in signals.Where(s => s.CloseTimeStamp != null)
+            /*heldBars = (from x in signals.Where(s => s.CloseTimeStamp != null)
                             group x by x.CloseTimeStamp.Subtract(x.CreationTimeStamp).TotalSeconds.ToInt() into m
                             select new cheldBars(
                                 m.Key,
@@ -45,6 +45,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
                             m.Count(y => y.PipsPnLInCurrency < 0),
                             m.Count()
                                         )).ToList().OrderByDescending(x => x.TotalCount).Take(20).ToList();
+            */
 
             List<double[]> aRanges = new List<double[]>();
             aRanges.Add(new double[] { double.MinValue, 0 });
@@ -72,7 +73,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
                     _label = r[0].ToString() + "-" + r[1].ToString();
 
                 var tempVal = (from x in signals
-                               where (double)x.PipsPnLInCurrency >= r[0] && (double)x.PipsPnLInCurrency < r[1]
+                               //where (double)x.PipsPnLInCurrency >= r[0] && (double)x.PipsPnLInCurrency < r[1]
                                group x by _label into m
                                select new cListPLRanges(
                                 m.Key,
@@ -81,7 +82,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
                 ListPLRanges.AddRange(tempVal);
             }
 
-            PLRangeDuration = signals.OrderBy(x => x.CloseTimeStamp.Subtract(x.CreationTimeStamp).TotalSeconds).Select(x => new cPLRangeDuration(x.CloseTimeStamp.Subtract(x.CreationTimeStamp).TotalSeconds, (double)x.PipsPnLInCurrency)).ToList();
+            /*PLRangeDuration = signals.OrderBy(x => x.CloseTimeStamp.Subtract(x.CreationTimeStamp).TotalSeconds).Select(x => new cPLRangeDuration(x.CloseTimeStamp.Subtract(x.CreationTimeStamp).TotalSeconds, (double)x.PipsPnLInCurrency)).ToList();
 
             regressionLineData = HelperMath.LinearRegression((from x in signals select new System.Drawing.PointF((float)x.CloseTimeStamp.Subtract(x.CreationTimeStamp).TotalSeconds, (float)x.PipsPnLInCurrency)).ToList());
 
@@ -91,7 +92,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
 
             MFE = (from x in HelperAnalytics.GetMaximumFavorableExcursion(signals) select new ScatterChartData(x.Key.ToDouble(), (double)x.Value.GetPipsPnL, "")).ToList();
 
-            regressionLineDataMFE = HelperMath.LinearRegression((from x in MFE select new System.Drawing.PointF((float)x.XValue, (float)x.YValue)).ToList());
+            regressionLineDataMFE = HelperMath.LinearRegression((from x in MFE select new System.Drawing.PointF((float)x.XValue, (float)x.YValue)).ToList());*/
 
             RaisePropertyChanged(String.Empty);
         }

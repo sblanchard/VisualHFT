@@ -29,7 +29,7 @@ namespace VisualHFT.Helpers
             List<KeyValuePair<decimal, VisualHFT.Model.Position>> aRet = new List<KeyValuePair<decimal, VisualHFT.Model.Position>>();
             foreach (VisualHFT.Model.Position s in aSignal)
             {
-                aRet.Add(new KeyValuePair<decimal, VisualHFT.Model.Position>(s.MaxDrowdown, s));
+                //aRet.Add(new KeyValuePair<decimal, VisualHFT.Model.Position>(s.MaxDrowdown, s));
             }
             return aRet;
         }
@@ -38,7 +38,7 @@ namespace VisualHFT.Helpers
             List<KeyValuePair<decimal, VisualHFT.Model.Position>> aRet = new List<KeyValuePair<decimal, VisualHFT.Model.Position>>();
             foreach (VisualHFT.Model.Position s in aSignal)
             {
-                aRet.Add(new KeyValuePair<decimal, VisualHFT.Model.Position>(s.UnrealizedPnL, s));
+                //aRet.Add(new KeyValuePair<decimal, VisualHFT.Model.Position>(s.UnrealizedPnL, s));
             }
             return aRet;
         }
@@ -177,8 +177,8 @@ namespace VisualHFT.Helpers
         public static double GetIntradaySharpeRatio(List<VisualHFT.Model.Position> aSignal)
         {
             double qtyTrades = aSignal.Count();
-            double meanPnL = aSignal.Average(x => (double)x.PipsPnLInCurrency.Value);
-            double stdev = aSignal.Select(x => (double)x.PipsPnLInCurrency.Value).StdDev();
+            double meanPnL = 0; //aSignal.Average(x => (double)x.PipsPnLInCurrency.Value);
+            double stdev = 0; //aSignal.Select(x => (double)x.PipsPnLInCurrency.Value).StdDev();
 
             double SHARPE = Math.Sqrt(qtyTrades) * (meanPnL / stdev);
             return SHARPE;
@@ -207,13 +207,13 @@ namespace VisualHFT.Helpers
              * METHOD from 
              * http://www.wisestocktrader.com/indicators/1784-z-score-for-backtesting
             */
-            double winCount = aSignal.Where(s => s.PipsPnLInCurrency.Value >= 0).Count();
-            double lossCount = aSignal.Where(s => s.PipsPnLInCurrency.Value < 0).Count();
+            double winCount = aSignal.Count; //.Where(s => s.PipsPnLInCurrency.Value >= 0).Count();
+            double lossCount = aSignal.Count; //.Where(s => s.PipsPnLInCurrency.Value < 0).Count();
             double totalRuns = 0, w = 0, l = 0;
 
             foreach (Position s in aSignal)
             {
-                if (s.GetPipsPnL > 0)
+                /*if (s.GetPipsPnL > 0)
                 {
                     if (w == 0) totalRuns++;
                     w++;
@@ -224,7 +224,7 @@ namespace VisualHFT.Helpers
                     if (l == 0) totalRuns++;
                     l++;
                     w = 0;
-                }
+                }*/
             }
 
             double N = aSignal.Count;
@@ -287,7 +287,7 @@ namespace VisualHFT.Helpers
         public static List<int> GetConsecutiveWins(List<VisualHFT.Model.Position> aSignal)
         {
             List<int> aRet = new List<int>();
-            int iCount = 0;
+            /*int iCount = 0;
             bool lastWasWin = false;
             foreach (Position s in aSignal)
             {
@@ -300,14 +300,14 @@ namespace VisualHFT.Helpers
                     iCount = 0;
                 }
                 lastWasWin = s.PipsPnLInCurrency.Value >= 0;
-            }
+            }*/
             return aRet;
         }
         public static List<int> GetConsecutiveLosses(List<VisualHFT.Model.Position> aSignal)
         {
             List<int> aRet = new List<int>();
             int iCount = 0;
-            bool lastWasLoss = false;
+            /*bool lastWasLoss = false;
             foreach (Position s in aSignal)
             {
                 if (lastWasLoss && s.PipsPnLInCurrency.Value < 0)
@@ -319,18 +319,19 @@ namespace VisualHFT.Helpers
                     iCount = 0;
                 }
                 lastWasLoss = s.PipsPnLInCurrency.Value < 0;
-            }
+            }*/
             return aRet;
         }
         public static double GetExpectancy(List<VisualHFT.Model.Position> aSignal)
         {
 			//(Average Winner x Win Rate) – (Average Loser x Loss Rate)
-			var avgWinner = (double)aSignal.Where(x => x.PipsPnLInCurrency.HasValue && x.PipsPnLInCurrency.Value >= 0).DefaultIfEmpty(new VisualHFT.Model.Position() { PipsPnLInCurrency = 0 }).Average(x => x.PipsPnLInCurrency.Value);
+			/*var avgWinner = (double)aSignal.Where(x => x.PipsPnLInCurrency.HasValue && x.PipsPnLInCurrency.Value >= 0).DefaultIfEmpty(new VisualHFT.Model.Position() { PipsPnLInCurrency = 0 }).Average(x => x.PipsPnLInCurrency.Value);
             var avgLosser = (double) aSignal.Where(x => x.PipsPnLInCurrency.HasValue && x.PipsPnLInCurrency.Value < 0).DefaultIfEmpty(new VisualHFT.Model.Position() { PipsPnLInCurrency = 0 }).Average(x => Math.Abs(x.PipsPnLInCurrency.Value));
             var winRate = (double)aSignal.Where(x => x.PipsPnLInCurrency.HasValue && x.PipsPnLInCurrency.Value >= 0).Count() / aSignal.Count();
             var lossRate = (double)aSignal.Where(x => x.PipsPnLInCurrency.HasValue && x.PipsPnLInCurrency.Value < 0).Count() / aSignal.Count();
 
-            return (avgWinner * winRate) - (avgLosser * lossRate);
+            return (avgWinner * winRate) - (avgLosser * lossRate);*/
+            return 0;
         }        
 
 		public static cEquity GetAverageProfitByHour(List<VisualHFT.Model.Position> aSignal)

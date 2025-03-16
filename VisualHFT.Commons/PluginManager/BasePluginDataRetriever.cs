@@ -5,6 +5,7 @@ using System.Text;
 using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.Studies;
 using VisualHFT.DataRetriever;
+using VisualHFT.DataTradeRetriever;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
@@ -121,7 +122,7 @@ namespace VisualHFT.Commons.PluginManager
         {
             if (_ARE_ALL_DATA_RETRIEVERS_ENABLE || overrideDisabiityFromOtherDataRetrievers)
             {
-                HelperCommon.EXECUTEDORDERS.AddOrder(executedOrderModel);
+                HelperPosition.Instance.UpdateData(executedOrderModel);
             }
         }
         protected virtual void RaiseOnDataReceived(List<Strategy> strategies, bool overrideDisabiityFromOtherDataRetrievers = false)
@@ -177,7 +178,7 @@ namespace VisualHFT.Commons.PluginManager
                     }
                     break;
                 case "ExecutedOrder":
-                    HelperCommon.EXECUTEDORDERS.AddOrder(e.ParsedModel as VisualHFT.Model.Order);
+                    HelperPosition.Instance.UpdateData(e.ParsedModel as VisualHFT.Model.Order);
                     break;
                 //case "Execution":
                 //    ParseExecution(e.ParsedModel as VisualHFT.Model.Execution);
@@ -207,20 +208,27 @@ namespace VisualHFT.Commons.PluginManager
         {
             _internalStartAsync = internalStartAsync;
         }
+
+        private bool _isReconnecting = false;
         protected async Task HandleConnectionLost(string reason = null, Exception exception = null, bool forceStartRegardlessStatus = false)
         {
+            if (_isReconnecting)
+                return;
+            _isReconnecting = true;
             if (!forceStartRegardlessStatus)
             {
                 if (Status == ePluginStatus
                         .STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
 
                 if (Status == ePluginStatus.STOPPING)
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPING");
+                    _isReconnecting = false;
                     return;
                 }
             }
@@ -233,6 +241,7 @@ namespace VisualHFT.Commons.PluginManager
             {
                 Interlocked.Decrement(ref _pendingReconnectionRequests);
                 log.Warn($"{this.Name} Too many pending requests.");
+                _isReconnecting = false;
                 return;
             }
 
@@ -245,6 +254,7 @@ namespace VisualHFT.Commons.PluginManager
                 if (!forceStartRegardlessStatus && Status == ePluginStatus.STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
 
@@ -256,6 +266,7 @@ namespace VisualHFT.Commons.PluginManager
                 if (!forceStartRegardlessStatus && Status == ePluginStatus.STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
 
@@ -276,6 +287,7 @@ namespace VisualHFT.Commons.PluginManager
                 if (!forceStartRegardlessStatus && Status == ePluginStatus.STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {
                     log.Debug($"{this.Name} Skip reconnection because Status = STOPPED_FAILED");
+                    _isReconnecting = false;
                     return;
                 }
                 log.Info($"{this.Name} Reconnection successful.");
@@ -309,6 +321,7 @@ namespace VisualHFT.Commons.PluginManager
             {
                 Interlocked.Decrement(ref _pendingReconnectionRequests);
                 _reconnectionSemaphore.Release();
+                _isReconnecting = false;
             }
 
         }
@@ -420,6 +433,35 @@ namespace VisualHFT.Commons.PluginManager
         #endregion
 
         protected int RecognizeDecimalPlacesAutomatically(IEnumerable<decimal> values)
+        {
+            int maxDecimalPlaces = 0;
+            NumberFormatInfo nfi = CultureInfo.CurrentCulture.NumberFormat;
+
+            foreach (decimal value in values)
+            {
+                // Convert the value to a string using the current culture's number format
+                string valueAsString = value.ToString(CultureInfo.CurrentCulture);
+
+                // Find the decimal separator of the current culture
+                string decimalSeparator = nfi.NumberDecimalSeparator;
+                int indexOfDecimal = valueAsString.IndexOf(decimalSeparator);
+
+                if (indexOfDecimal != -1)
+                {
+                    // Count the decimal places after the decimal separator
+                    int decimalPlaces = valueAsString.Substring(indexOfDecimal + decimalSeparator.Length).TrimEnd('0').Length;
+
+                    // Update maxDecimalPlaces if this value has more decimal places
+                    if (decimalPlaces > maxDecimalPlaces)
+                    {
+                        maxDecimalPlaces = decimalPlaces;
+                    }
+                }
+            }
+
+            return Math.Max(1, maxDecimalPlaces);
+        }
+        protected int RecognizeDecimalPlacesAutomatically(IEnumerable<double> values)
         {
             int maxDecimalPlaces = 0;
             NumberFormatInfo nfi = CultureInfo.CurrentCulture.NumberFormat;

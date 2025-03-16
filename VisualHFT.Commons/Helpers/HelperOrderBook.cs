@@ -71,6 +71,7 @@ namespace VisualHFT.Helpers
                             log.Error(ex);
                             OnException?.Invoke(new VisualHFT.Commons.Model.ErrorEventArgs(ex, subscriber.Target));
                         });
+                        throw;
                     }
                 }
             }
@@ -84,6 +85,14 @@ namespace VisualHFT.Helpers
             foreach (var e in data)
             {
                 DispatchToSubscribers(e);
+            }
+        }
+
+        public void Reset()
+        {
+            lock (_lockObj)
+            {
+                _subscribers.Clear();
             }
         }
     }

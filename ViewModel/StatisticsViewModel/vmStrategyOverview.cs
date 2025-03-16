@@ -142,17 +142,17 @@ namespace VisualHFT.ViewModel.StatisticsViewModel
         {
             foreach (var position in pos)
                 _positions.Add(position);
-            CalculatePositionStats();
+            //CalculatePositionStats();
         }
         public void AddNewPosition(VisualHFT.Model.Position p)
         {
             _positions.Add(p);
-            CalculatePositionStats();
+            //CalculatePositionStats();
         }
         public void ClearPositions()
         {
             _positions.Clear();
-            CalculatePositionStats();
+            //CalculatePositionStats();
         }
         #endregion
         void BlankFields()
@@ -177,6 +177,7 @@ namespace VisualHFT.ViewModel.StatisticsViewModel
             };
             EquityChartPoints = new List<ChartDateCategoryDataPoint>();
         }
+        /*
         void CalculatePositionStats()
         {
             if (_positions == null || !_positions.Any())
@@ -257,6 +258,7 @@ namespace VisualHFT.ViewModel.StatisticsViewModel
                 Console.WriteLine(ex.ToString());
             }
         }
+        */
 
     }
 }

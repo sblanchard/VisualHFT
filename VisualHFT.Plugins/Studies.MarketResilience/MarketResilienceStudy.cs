@@ -77,17 +77,17 @@ namespace VisualHFT.Studies
 
         public eLOBSIDE GetBookRecoverySide(OrderBook currentOrderBook)
         {
-            double bestBid = currentOrderBook.GetTOB(true).Price.Value;
-            double bestAsk = currentOrderBook.GetTOB(false).Price.Value;
+            double? bestBid = currentOrderBook.GetTOB(true)?.Price.Value;
+            double? bestAsk = currentOrderBook.GetTOB(false)?.Price.Value;
 
             if (_depletionSide == eLOBSIDE.BID)
             {
                 // Check if bids have recovered
-                if (bestBid >= _depletionInitialPrice)
+                if (bestBid.HasValue && bestBid >= _depletionInitialPrice)
                 {
                     return eLOBSIDE.BID; // Bids have recovered
                 }
-                else
+                else if (bestAsk.HasValue)
                 {
                     return eLOBSIDE.ASK; // Asks have taken over
                 }
@@ -95,11 +95,11 @@ namespace VisualHFT.Studies
             else if (_depletionSide == eLOBSIDE.ASK)
             {
                 // Check if asks have recovered
-                if (bestAsk <= _depletionInitialPrice)
+                if (bestAsk.HasValue && bestAsk <= _depletionInitialPrice)
                 {
                     return eLOBSIDE.ASK; // Asks have recovered
                 }
-                else
+                else if (bestBid.HasValue)
                 {
                     return eLOBSIDE.BID; // Bids have taken over
                 }

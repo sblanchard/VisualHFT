@@ -43,7 +43,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
                 throw new Exception("No signals found.");
 
             Position oSignal = this.Signals[0];
-            if (oSignal != null)
+            /*if (oSignal != null)
             {
                 double totalCount = this.Signals.Count;
                 decimal totalReturn = this.Signals.Sum(s => s.GetPipsPnL);
@@ -146,7 +146,7 @@ namespace VisualHFT.AnalyticReports.ViewModel
                 #endregion
 
                 RaisePropertyChanged(String.Empty);
-            }
+            }*/
         }
     }
 }

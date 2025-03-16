@@ -65,11 +65,11 @@ namespace VisualHFT.Commons.Pools
                     var typeName = typeof(T).Name;
                     var stackTrace = new StackTrace();
                     var callingMethod = stackTrace.GetFrame(2).GetMethod();
-                    var caller = callingMethod.ReflectedType != null
+                    /*var caller = callingMethod.ReflectedType != null
                         ? callingMethod.ReflectedType.Name
-                        : "Unknown" + "." + callingMethod.Name;
+                        : "Unknown" + "." + callingMethod.Name;*/
 
-                    log.Warn($"CustomObjectPool<{typeName}>: called by {caller} {ProviderName} - utilization: {_utilizationPercentage.ToString("p2")}");
+                    log.Warn($"CustomObjectPool<{typeName}> -> {ProviderName}-> {callingMethod.ToString()} - utilization: {_utilizationPercentage.ToString("p2")}");
                     _lastUpdateLog = DateTime.Now;
                 }
             }

@@ -16,21 +16,29 @@
     <Compile Remove="packages\**" />
     <Compile Remove="VisualHFT.Commons.WPF\**" />
     <Compile Remove="VisualHFT.Commons\**" />
+    <Compile Remove="VisualHFT.DataRetriever.TestingFramework\**" />
+    <Compile Remove="VisualHFT.MarketConnectors.Test\**" />
     <Compile Remove="VisualHFT.Plugins\**" />
     <EmbeddedResource Remove="demoTradingCore\**" />
     <EmbeddedResource Remove="packages\**" />
     <EmbeddedResource Remove="VisualHFT.Commons.WPF\**" />
     <EmbeddedResource Remove="VisualHFT.Commons\**" />
+    <EmbeddedResource Remove="VisualHFT.DataRetriever.TestingFramework\**" />
+    <EmbeddedResource Remove="VisualHFT.MarketConnectors.Test\**" />
     <EmbeddedResource Remove="VisualHFT.Plugins\**" />
     <None Remove="demoTradingCore\**" />
     <None Remove="packages\**" />
     <None Remove="VisualHFT.Commons.WPF\**" />
     <None Remove="VisualHFT.Commons\**" />
+    <None Remove="VisualHFT.DataRetriever.TestingFramework\**" />
+    <None Remove="VisualHFT.MarketConnectors.Test\**" />
     <None Remove="VisualHFT.Plugins\**" />
     <Page Remove="demoTradingCore\**" />
     <Page Remove="packages\**" />
     <Page Remove="VisualHFT.Commons.WPF\**" />
     <Page Remove="VisualHFT.Commons\**" />
+    <Page Remove="VisualHFT.DataRetriever.TestingFramework\**" />
+    <Page Remove="VisualHFT.MarketConnectors.Test\**" />
     <Page Remove="VisualHFT.Plugins\**" />
   </ItemGroup>
 
@@ -73,17 +81,17 @@
 	</ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Fody" Version="6.8.1">
+    <PackageReference Include="Fody" Version="6.9.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="log4net" Version="2.0.17" />
-    <PackageReference Include="MaterialDesignColors" Version="3.1.0" />
-    <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
-    <PackageReference Include="MaterialDesignThemes.MahApps" Version="3.1.0" />
+    <PackageReference Include="log4net" Version="3.0.4" />
+    <PackageReference Include="MaterialDesignColors" Version="5.2.1" />
+    <PackageReference Include="MaterialDesignThemes" Version="5.2.1" />
+    <PackageReference Include="MaterialDesignThemes.MahApps" Version="5.2.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="OxyPlot.Wpf" Version="2.1.2" />
-    <PackageReference Include="Prism.Core" Version="8.1.97" />
+    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
+    <PackageReference Include="Prism.Core" Version="9.0.537" />
     <PackageReference Include="PropertyChanged.Fody" Version="4.1.0" />
   </ItemGroup>
 
@@ -92,6 +100,11 @@
     <ProjectReference Include="VisualHFT.Commons\VisualHFT.Commons.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Binance\MarketConnectors.Binance.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Bitfinex\MarketConnectors.Bitfinex.csproj" />
+    <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.BitStamp\MarketConnectors.BitStamp.csproj" />
+    <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Coinbase\MarketConnectors.Coinbase.csproj" />
+    <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Gemini\MarketConnectors.Gemini\MarketConnectors.Gemini.csproj" />
+    <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Kraken\MarketConnectors.Kraken.csproj" />
+    <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.KuCoin\MarketConnectors.KuCoin.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.LOBImbalance\Studies.LOBImbalance.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.MarketResilience\Studies.MarketResilience.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.MarketTradingRatios\Studies.MarketTradingRatios.csproj" />
@@ -102,6 +115,7 @@
     <Content Include="App.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="VisualHFT.Plugins\MarketConnectors.Kraken\README.md.bak" />
     <Resource Include="Images\database.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>
