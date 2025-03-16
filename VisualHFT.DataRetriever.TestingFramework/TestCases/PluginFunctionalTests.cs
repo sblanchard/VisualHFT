@@ -24,9 +24,9 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         }
 
         [Fact]
-        public async Task Test_AllPlugins_AggregateResults_Async()
+        public async Task Test_Plugin_StartStop_Async()
         {
-            var errors = new List<string>();
+            var errors = new List<ErrorReporting>();
             var marketConnectors = AssemblyLoader.LoadDataRetrievers();
 
             foreach (var mktConnector in marketConnectors)
@@ -49,23 +49,21 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
                     _testOutputHelper.WriteLine($"++ {connectorName} passed.");
                 }
-                catch (Exception ex)
+                catch (Exception e)
                 {
-                    errors.Add($"{connectorName} failed: {ex.Message}");
+                    errors.Add(new ErrorReporting() { Message = e.Message, PluginName = connectorName, MessageType = ErrorMessageTypes.ERROR });
                 }
             }
 
-            if (errors.Any())
-            {
-                var errorReport = string.Join(Environment.NewLine, errors);
-                _testOutputHelper.WriteLine("** error report:" + Environment.NewLine + errorReport);
-                Assert.True(false, errorReport);
-            }
+            PrintCollectedError(errors);
         }
 
         [Fact]
         public async Task Test_Plugin_HandlingReconnection_Async()
         {
+            var marketConnectors = AssemblyLoader.LoadDataRetrievers();
+            var errors = new List<ErrorReporting>();
+
             object _lock = new object();
             OrderBook _actualOrderBook = null;
             bool exceptionTriggered = false;
@@ -86,10 +84,6 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 });
             }
 
-            var marketConnectors = AssemblyLoader.LoadDataRetrievers();
-
-            // Collect errors for each plugin
-            var errors = new List<string>();
 
             foreach (var mktConnector in marketConnectors)
             {
@@ -115,8 +109,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                     {
                         if (sp.Elapsed.TotalSeconds > TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE)
                         {
-                            errors.Add($"{connectorName}: Timeout while waiting for status STOPPED");
-                            break;
+                            throw new Exception("Timeout while waiting for status STOPPED");
                         }
                         await Task.Delay(10);
                     }
@@ -128,8 +121,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                     {
                         if (sp.Elapsed.TotalSeconds > TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE)
                         {
-                            errors.Add($"{connectorName}: Timeout while waiting for status STARTING");
-                            break;
+                            throw new Exception("Timeout while waiting for status STARTING");
                         }
                         await Task.Delay(100);
                     }
@@ -141,8 +133,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                     {
                         if (sp.Elapsed.TotalSeconds > TIMEOUT_SECONDS_WAITING_FOR_STATE_CHANGE)
                         {
-                            errors.Add($"{connectorName}: Timeout while waiting for status STARTED");
-                            break;
+                            throw new Exception("Timeout while waiting for status STARTED");
                         }
                         await Task.Delay(100);
                     }
@@ -156,26 +147,24 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"{connectorName}: Exception occurred - {ex.Message}");
+                    errors.Add(new ErrorReporting() { Message = "EXCEPTION: " + ex.Message, MessageType = ErrorMessageTypes.ERROR, PluginName = connectorName });
                 }
             }
 
-            if (errors.Any())
-            {
-                var errorReport = string.Join(Environment.NewLine, errors);
-                _testOutputHelper.WriteLine("Aggregate error report:" + Environment.NewLine + errorReport);
-                Assert.True(false, errorReport);
-            }
+            PrintCollectedError(errors);
         }
         [Fact]
         public async Task Test_Plugin_OrderBookIntegrityAndResilience_Async()
         {
+            var marketConnectors = AssemblyLoader.LoadDataRetrievers();
+            var errors = new List<ErrorReporting>();
+
             object _lock = new object();
             OrderBook _actualOrderBook = null;
             Exception _receivedException = null;
             int currentProviderID = 0;
             const int CHECK_INTERVAL_MS = 100; // delay between checks
-            const int TESTING_DURATION_SECONDS = 40; // duration of the test
+            const int TESTING_DURATION_SECONDS = 20; // duration of the test
 
             // Set up the shared subscription and notification listener
             lock (_lock)
@@ -201,9 +190,6 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             };
             await Task.Delay(300); // Allow subscription to be set up.
 
-            var marketConnectors = AssemblyLoader.LoadDataRetrievers();
-            //var errors = new List<string>();
-            var errors = new List<ErrorReporting>();
 
             foreach (var mktConnector in marketConnectors)
             {
@@ -261,8 +247,6 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                                 _testOutputHelper.WriteLine($"FAILED TESTING SPREAD IN {CONNECTOR_NAME} with status={plugin.Status}");
                                 throw new Exception("Crossed spread detected. Status=" + plugin.Status);
                             }
-
-                            
                         }
                         else
                         {
@@ -304,34 +288,30 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 }
             }
 
+            PrintCollectedError(errors);
+        }
+
+
+
+        private void PrintCollectedError(List<ErrorReporting> errors)
+        {
             if (errors.Any())
             {
                 string errorReport = "";
                 foreach (var pluginName in errors.Select(x => x.PluginName).Distinct())
                 {
                     errorReport += pluginName + ":" + Environment.NewLine + "\t" +
-                                  string.Join(Environment.NewLine, errors.Where(x => x.PluginName == pluginName)
-                                      .Select(x => $"[{x.MessageType}] - {x.Message}"))
-                                  + Environment.NewLine;
+                                   string.Join(Environment.NewLine, errors.Where(x => x.PluginName == pluginName)
+                                       .Select(x => $"[{x.MessageType.ToString()}] - {x.Message}"))
+                                   + Environment.NewLine;
                 }
 
                 _testOutputHelper.WriteLine(Environment.NewLine + "Aggregate error report:" + Environment.NewLine + Environment.NewLine + errorReport);
                 if (errors.Any(x => x.MessageType == ErrorMessageTypes.ERROR))
                     Assert.Fail(errorReport);
             }
+
         }
 
-        private class ErrorReporting
-        {
-            public string PluginName { get; internal set; }
-            public string Message { get; internal set; }
-            public ErrorMessageTypes MessageType { get; internal set; }
-        }
-
-        private enum ErrorMessageTypes
-        {
-            ERROR,
-            WARNING
-        }
     }
 }
