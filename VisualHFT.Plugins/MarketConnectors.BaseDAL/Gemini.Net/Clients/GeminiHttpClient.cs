@@ -38,10 +38,10 @@ namespace Gemini.Net.Clients
 
 
 
-        public async Task<InitialResponse> InitializeSnapshotAsync(string symbol)
+        public async Task<InitialResponse> InitializeSnapshotAsync(string symbol, int depth)
         {
             InitialResponse resp = new InitialResponse();
-            var response = await geminiClient.GetAsync("book/"+symbol);
+            var response = await geminiClient.GetAsync($"book/{symbol}?limit_bids={depth}&limit_asks={depth}");
             if (response != null)
             {
                 string json = await response.Content.ReadAsStringAsync();

@@ -14,7 +14,7 @@ namespace Gemini.Net.Clients
     {
         WebsocketClient socket;
 
-        public event EventHandler<GemeniTradeResponse> ClientConnected;
+        public event EventHandler<GeminiResponseTrade> ClientConnected;
         public event EventHandler<EventArgs> ClientDisconnected;
         public event EventHandler<EventArgs> OnDataReceived;
 
@@ -27,7 +27,7 @@ namespace Gemini.Net.Clients
             //socket.NativeClient.Options.SetRequestHeader();
             socket.ReconnectionHappened.Subscribe(data =>
             {
-                GemeniTradeResponse trade = new GemeniTradeResponse();
+                GeminiResponseTrade trade = new GeminiResponseTrade();
                 ClientConnected.Invoke(socket, trade);
             });
             

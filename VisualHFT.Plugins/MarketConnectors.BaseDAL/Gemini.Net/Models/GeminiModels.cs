@@ -49,21 +49,7 @@ namespace Gemini.Net.Models
     {
         public List<List<string>> changes { get; set; }
         public string symbol { get; set; }
-        public List<GemeniTradeResponse> trades { get; set; }
-        public string type { get; set; }
-    }
-
-
-
-    public class GemeniTradeResponse
-    {
-        public long event_id { get; set; }
-        public decimal price { get; set; }
-        public decimal quantity { get; set; }
-        public string side { get; set; }
-        public string symbol { get; set; }
-        public long tid { get; set; }
-        public long timestamp { get; set; }
+        public List<GeminiResponseTrade> trades { get; set; }
         public string type { get; set; }
     }
 
