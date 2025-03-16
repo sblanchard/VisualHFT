@@ -845,6 +845,10 @@ namespace MarketConnectors.Gemini
 
         public void InjectSnapshot(OrderBook snapshotModel, long sequence)
         {
+            //1. Call snapshot: creates the local order book, but it won't add any item to it
+            //2. Call deltas: it will add the items to the local order book
+
+
             var localModel = new InitialResponse(); //transform to local model
             localModel.asks = snapshotModel.Asks.Select(x => new Ask()
             {
@@ -868,13 +872,31 @@ namespace MarketConnectors.Gemini
             }
             else
                 _localOrderBooks[symbol] = ToOrderBookModel(localModel, symbol);
+
+            //once called snapshots, we need to update the LOB
+            List<List<string>> changes = new List<List<string>>();
+            snapshotModel.Asks.ToList().ForEach(x =>
+            {
+                changes.Add(new List<string>() { "sell", x.Price.Value.ToString(), x.Size.Value.ToString() });
+            });
+            snapshotModel.Bids.ToList().ForEach(x =>
+            {
+                changes.Add(new List<string>() { "buy", x.Price.Value.ToString(), x.Size.Value.ToString() });
+            });
+
+            UpdateOrderBook(new GeminiResponseInitial()
+            {
+                symbol = symbol,
+                type = "l2_updates", //no need here
+                changes = changes,
+            }, symbol, DateTime.Now);
+
             _localOrderBooks[symbol].Sequence = sequence;// Gemini does not provide sequence numbers
 
 
             RaiseOnDataReceived(_localOrderBooks[symbol]);
 
         }
-
         public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
         {
             throw new VisualHFT.Commons.Exceptions.ExceptionDeltasNotSupportedByExchange();
