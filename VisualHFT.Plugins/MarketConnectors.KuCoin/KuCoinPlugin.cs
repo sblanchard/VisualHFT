@@ -7,7 +7,6 @@ using MarketConnectors.KuCoin.UserControls;
 using MarketConnectors.KuCoin.ViewModel;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -23,21 +22,10 @@ using VisualHFT.PluginManager;
 using Kucoin.Net.Objects.Models.Spot;
 using Kucoin.Net.Objects.Models.Spot.Socket;
 using CryptoExchange.Net.CommonObjects;
-using CryptoExchange.Net.Converters.JsonNet;
 using Kucoin.Net.Interfaces.Clients;
 using VisualHFT.Commons.Interfaces;
 using Order = CryptoExchange.Net.CommonObjects.Order;
 using Newtonsoft.Json.Linq;
-using System.Text;
-using System.Text.Json;
-using Newtonsoft.Json;
-using Kucoin.Net.Enums;
-using Newtonsoft.Json.Serialization;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text.Json.Serialization;
-using JsonProperty = Newtonsoft.Json.Serialization.JsonProperty;
-using VisualHFT.Model;
 
 namespace MarketConnectors.KuCoin
 {
@@ -389,7 +377,7 @@ namespace MarketConnectors.KuCoin
             foreach (var symbol in GetAllNonNormalizedSymbols())
             {
                 var normalizedSymbol = GetNormalizedSymbol(symbol);
-                log.Info($"{this.Name}: sending WS Trades Subscription {normalizedSymbol} ");
+                log.Info($"{this.Name}: sending WS Delta Subscription {normalizedSymbol} ");
                 deltaSubscription = await _socketClient.SpotApi.SubscribeToAggregatedOrderBookUpdatesAsync(
                     symbol,
                     data =>
@@ -622,77 +610,71 @@ namespace MarketConnectors.KuCoin
                 local_lob = new VisualHFT.Model.OrderBook();
             }
 
-            if (lob_update.SequenceStart > local_lob.Sequence &&
-                lob_update.SequenceStart != local_lob.Sequence + 1)
+            if (lob_update.SequenceStart > local_lob.Sequence + 1)
                 throw new Exception("Detected sequence gap.");
 
-            foreach (var item in lob_update.Changes.Bids)
+            if (lob_update.SequenceStart <= local_lob.Sequence + 1 && lob_update.SequenceEnd > local_lob.Sequence)
             {
-                if (item.Sequence <= local_lob.Sequence)
-                    continue;
-
-                if (item.Quantity != 0)
+                foreach (var item in lob_update.Changes.Bids)
                 {
-                    local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                    if (item.Quantity != 0 && item.Price > 0)
                     {
-                        MDUpdateAction = eMDUpdateAction.None,
-                        Price = (double)item.Price,
-                        Size = (double)item.Quantity,
-                        IsBid = true,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = ts,
-                        Symbol = symbol
-                    });
+                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                        {
+                            MDUpdateAction = eMDUpdateAction.None,
+                            Price = (double)item.Price,
+                            Size = (double)item.Quantity,
+                            IsBid = true,
+                            LocalTimeStamp = DateTime.Now,
+                            ServerTimeStamp = ts,
+                            Symbol = symbol
+                        });
+                    }
+                    else if (item.Quantity == 0 && item.Price > 0)
+                    {
+                        local_lob.DeleteLevel(new DeltaBookItem()
+                        {
+                            MDUpdateAction = eMDUpdateAction.Delete,
+                            Price = (double)item.Price,
+                            IsBid = true,
+                            LocalTimeStamp = DateTime.Now,
+                            ServerTimeStamp = ts,
+                            Symbol = symbol
+                        });
+                    }
                 }
-                else
-                    local_lob.DeleteLevel(new DeltaBookItem()
-                    {
-                        MDUpdateAction = eMDUpdateAction.Delete,
-                        Price = (double)item.Price,
-                        //Size = (double)item.Quantity,
-                        IsBid = true,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = ts,
-                        Symbol = symbol
-                    });
 
-                local_lob.Sequence = item.Sequence;
-            }
-
-            foreach (var item in lob_update.Changes.Asks)
-            {
-                if (item.Sequence <= local_lob.Sequence)
-                    continue;
-                if (item.Quantity != 0)
+                foreach (var item in lob_update.Changes.Asks)
                 {
-                    local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                    if (item.Quantity != 0 && item.Price > 0)
                     {
-                        MDUpdateAction = eMDUpdateAction.None,
-                        Price = (double)item.Price,
-                        Size = (double)item.Quantity,
-                        IsBid = false,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = ts,
-                        Symbol = symbol
-                    });
+                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                        {
+                            MDUpdateAction = eMDUpdateAction.None,
+                            Price = (double)item.Price,
+                            Size = (double)item.Quantity,
+                            IsBid = false,
+                            LocalTimeStamp = DateTime.Now,
+                            ServerTimeStamp = ts,
+                            Symbol = symbol
+                        });
+                    }
+                    else if (item.Quantity == 0 && item.Price > 0)
+                    {
+                        local_lob.DeleteLevel(new DeltaBookItem()
+                        {
+                            MDUpdateAction = eMDUpdateAction.Delete,
+                            Price = (double)item.Price,
+                            IsBid = false,
+                            LocalTimeStamp = DateTime.Now,
+                            ServerTimeStamp = ts,
+                            Symbol = symbol
+                        });
+                    }
                 }
-                else
-                    local_lob.DeleteLevel(new DeltaBookItem()
-                    {
-                        MDUpdateAction = eMDUpdateAction.Delete,
-                        Price = (double)item.Price,
-                        //Size = (double)item.Quantity,
-                        IsBid = false,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = ts,
-                        Symbol = symbol
-                    });
-
-                local_lob.Sequence = item.Sequence;
+                local_lob.Sequence = lob_update.SequenceEnd;
+                RaiseOnDataReceived(local_lob);
             }
-
-
-            RaiseOnDataReceived(local_lob);
         }
 
         private async Task DoPingAsync()
@@ -954,7 +936,7 @@ namespace MarketConnectors.KuCoin
             {
                 ApiKey = "",
                 ApiSecret = "",
-                DepthLevels = 50,
+                DepthLevels = 25,
                 Provider = new VisualHFT.Model.Provider() { ProviderID = 4, ProviderName = "KuCoin" },
                 Symbols = new List<string>() { "BTC-USDT(BTC/USD)" } // Add more symbols as needed
             };
@@ -1056,7 +1038,7 @@ namespace MarketConnectors.KuCoin
                 Timestamp = DateTime.Now
             };
             localModel.SequenceStart = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));
-
+            localModel.SequenceEnd = Math.Max(bidDeltaModel.Max(x => x.Sequence), askDeltaModel.Max(x => x.Sequence));
             UpdateOrderBook(localModel, symbol, ts);
         }
 
