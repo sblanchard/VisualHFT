@@ -127,6 +127,27 @@ For project questions use the repository’s forums or any of my social media pr
 
 
 # Release notes
+### Mar 16 2025
+**Enhancements**
+- **New Plugins Added:**
+  - BitStamp
+  - Gemini
+  - Kraken
+  - KuCoin
+
+- **Plugin Improvements:**
+  - Enhanced plugin lifecycle, allowing each plugin to have its own autonomy without affecting the core system (reconnection, auto stopping, etc.).
+  - Improved error handling within plugins.
+  - Introduced a new module to handle all exceptions and notifications from plugins and the core system without disrupting operations.
+
+- **Performance Improvements:**
+  - Incorporated custom queues that improve performance and throughput by 40%.
+  - Implemented custom object pools, enhancing memory allocation throughout the system.
+  - Re-organized data structures and code for better usage, with significant improvements in performance and memory handling.
+  - Optimized order book data structures for faster lookups and updates.
+
+For detailed changes, refer to [pull request #41](https://github.com/visualHFT/VisualHFT/pull/41) and [pull request #36](https://github.com/visualHFT/VisualHFT/pull/36).
+
 ### Jun 26 2024
 **Enhancements**
 - **Performance Improvements:**
