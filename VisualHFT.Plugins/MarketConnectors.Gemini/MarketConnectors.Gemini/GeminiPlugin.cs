@@ -1,5 +1,4 @@
 ﻿using CryptoExchange.Net.CommonObjects;
-using CryptoExchange.Net.Interfaces;
 using Gemini.Net.Clients;
 using Gemini.Net.Models;
 using MarketConnectors.Gemini.Model;
@@ -16,10 +15,8 @@ using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.Interfaces;
 using VisualHFT.Commons.Model;
 using VisualHFT.Commons.PluginManager;
-using VisualHFT.DataRetriever;
 using VisualHFT.DataRetriever.DataParsers;
 using VisualHFT.Enums;
-using VisualHFT.Model;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
 using Websocket.Client;
@@ -39,6 +36,7 @@ namespace MarketConnectors.Gemini
 
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
         private Dictionary<string, VisualHFT.Model.Order> _localUserOrders = new Dictionary<string, VisualHFT.Model.Order>();
+        private HelperCustomQueue<GeminiResponseInitial> _eventBuffers;
 
 
         private PlugInSettings? _settings;
@@ -50,7 +48,6 @@ namespace MarketConnectors.Gemini
         public override Action? CloseSettingWindow { get; set; }
 
         private IDataParser _parser;
-        JsonSerializerSettings? _parser_settings = null;
         WebsocketClient? _socketClient;
         WebsocketClient? _userOrderEvents;
         GeminiHttpClient geminiHttpClient;
@@ -60,12 +57,6 @@ namespace MarketConnectors.Gemini
         {
            
             _parser = new JsonParser();
-            _parser_settings = new JsonSerializerSettings
-            {
-                Converters = new List<JsonConverter> { new CustomDateConverter() },
-                DateParseHandling = DateParseHandling.None,
-                DateFormatString = "yyyy.MM.dd-HH.mm.ss.ffffff"
-            };
           
             GeminiSubscription geminiSubscription = new GeminiSubscription();
             geminiSubscription.subscriptions = new List<Subscription>();
@@ -125,7 +116,6 @@ namespace MarketConnectors.Gemini
                 _localOrderBooks.Clear();
             }
         }
-        private HelperCustomQueue<GeminiResponseInitial> _eventBuffers;
         public async Task InternalStartAsync()
         {
             await ClearAsync();
@@ -220,6 +210,7 @@ namespace MarketConnectors.Gemini
                         string data = msg.ToString();
                         HandleMessage(data, DateTime.Now);
                         RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
+
                     }
                     catch (Exception ex)
                     {
@@ -385,7 +376,7 @@ namespace MarketConnectors.Gemini
                 {
                     _localOrderBooks.Add(normalizedSymbol, null);
                 }
-                var response = await geminiHttpClient.InitializeSnapshotAsync(symbol);
+                var response = await geminiHttpClient.InitializeSnapshotAsync(symbol, _settings.DepthLevels);
                 if (response != null)
                 {
                     _localOrderBooks[normalizedSymbol] = ToOrderBookModel(response, normalizedSymbol);
@@ -410,13 +401,6 @@ namespace MarketConnectors.Gemini
             await base.StopAsync();
         }
         
-        //private void eventBuffers_onErrorAction(Exception ex)
-        //{
-        //    var _error = $"Will reconnect. Unhandled error in the Market Data Queue: {ex.Message}";
-
-        //    log.Error(_error, ex);
-        //    Task.Run(async () => await HandleConnectionLost(_error, ex));
-        //}
 
         private VisualHFT.Model.OrderBook ToOrderBookModel(InitialResponse data, string symbol)
         {
@@ -426,10 +410,20 @@ namespace MarketConnectors.Gemini
             lob.ProviderID = _settings.Provider.ProviderID;
             lob.ProviderName = _settings.Provider.ProviderName;
             lob.SizeDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.asks.Select(x => x.amount));
+            lob.FilterBidAskByMaxDepth = true;
+            
 
+            /*
+                Initialize the Limit Order Book "only" in this method.
+                Do not load the snapshot data, since it will be given at deltas subscription in the first message.
+                So, just initialize the LOB hete
+             */
+
+
+            /*
             var _asks = new List<VisualHFT.Model.BookItem>();
             var _bids = new List<VisualHFT.Model.BookItem>();
-            data.asks.ToList().ForEach(x =>
+            data.asks.ForEach(x =>
             {
                 _asks.Add(new VisualHFT.Model.BookItem()
                 {
@@ -442,9 +436,10 @@ namespace MarketConnectors.Gemini
                     PriceDecimalPlaces = lob.PriceDecimalPlaces,
                     SizeDecimalPlaces = lob.SizeDecimalPlaces,
                     ProviderID = lob.ProviderID,
+                    LayerName = "snapshot"
                 });
             });
-            data.bids.ToList().ForEach(x =>
+            data.bids.ForEach(x =>
             {
                 _bids.Add(new VisualHFT.Model.BookItem()
                 {
@@ -457,10 +452,11 @@ namespace MarketConnectors.Gemini
                     PriceDecimalPlaces = lob.PriceDecimalPlaces,
                     SizeDecimalPlaces = lob.SizeDecimalPlaces,
                     ProviderID = lob.ProviderID,
+                    LayerName = "snapshot"
                 });
             });
-
             lob.LoadData(_asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),_bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels));
+            */
             return lob;
         }
 
@@ -641,38 +637,57 @@ namespace MarketConnectors.Gemini
             if (!_localOrderBooks.ContainsKey(symbol))
                 return;
             var local_lob = _localOrderBooks[symbol];
-            if (local_lob == null)
+            if (local_lob == null)//check if the order book is not initialized
             {
                 local_lob = new OrderBook();
             }
 
+
             foreach (var item in lob_update.changes)
             {
-                if (item[0].ToLower().Equals("buy"))
+                bool isBid = item[0].ToLower().Equals("buy");
+                double.TryParse(item[1], out double _price);
+                double.TryParse(item[2], out double _qty);
+
+                if (isBid)
                 {
-                    local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                    if (_qty == 0)
                     {
-                        Symbol = symbol,
-                        IsBid = true,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = serverTime,
-                        MDUpdateAction = eMDUpdateAction.New,
-                        Price = double.Parse(item[1]),
-                        Size = double.Parse(item[2]),
-                    });
+                        local_lob.DeleteLevel(new DeltaBookItem() { Symbol = symbol, Price = _price, IsBid = true, LocalTimeStamp = DateTime.Now, ServerTimeStamp = DateTime.Now, MDUpdateAction = eMDUpdateAction.Delete});
+                    }
+                    else
+                    {
+                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                        {
+                            Symbol = symbol,
+                            IsBid = true,
+                            LocalTimeStamp = DateTime.Now,
+                            ServerTimeStamp = serverTime,
+                            MDUpdateAction = eMDUpdateAction.New,
+                            Price = _price,
+                            Size = _qty,
+                        });
+                    }
                 }
-                else if (item[0].ToLower().Equals("sell"))
+                else
                 {
-                    local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                    if (_qty == 0)
                     {
-                        Symbol = symbol,
-                        IsBid = false,
-                        LocalTimeStamp = DateTime.Now,
-                        ServerTimeStamp = serverTime,
-                        MDUpdateAction = eMDUpdateAction.New,
-                        Price = double.Parse(item[1]),
-                        Size = double.Parse(item[2]),
-                    });
+                        local_lob.DeleteLevel(new DeltaBookItem() { Symbol = symbol, Price = _price, IsBid = false, LocalTimeStamp = DateTime.Now, ServerTimeStamp = DateTime.Now, MDUpdateAction = eMDUpdateAction.Delete });
+                    }
+                    else
+                    {
+                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                        {
+                            Symbol = symbol,
+                            IsBid = false,
+                            LocalTimeStamp = DateTime.Now,
+                            ServerTimeStamp = serverTime,
+                            MDUpdateAction = eMDUpdateAction.New,
+                            Price = _price,
+                            Size = _qty,
+                        });
+                    }
                 }
             }
             RaiseOnDataReceived(local_lob);
@@ -684,16 +699,7 @@ namespace MarketConnectors.Gemini
                 {
                     if (item.type == "trade")
                     {
-                        RaiseOnDataReceived(new Trade()
-                        {
-                            Symbol = GetNormalizedSymbol(item.symbol),
-                            Size = item.quantity,
-                            Price = item.price,
-                            IsBuy = item.side.ToLower() == "buy",
-                            ProviderId = _settings.Provider.ProviderID,
-                            ProviderName = _settings.Provider.ProviderName,
-                            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.timestamp).DateTime
-                        });
+                        UpdateTrades(item);
                     }
                     else
                     {
@@ -725,10 +731,7 @@ namespace MarketConnectors.Gemini
             {
                 GeminiResponseInitial dataReceived = _parser.Parse<GeminiResponseInitial>(message);
                 string symbol = GetNormalizedSymbol(dataReceived.symbol);
-
                 _eventBuffers.Add(dataReceived);
-                //UpdateOrderBook(dataReceived,symbol,serverTime);
-                
             }
             else if (type.type == "heartbeat")
             {
@@ -736,11 +739,12 @@ namespace MarketConnectors.Gemini
             }
             else if (type.type == "trade")
             {
-                List<Trade> trades = new List<VisualHFT.Model.Trade>();
-
                 GeminiResponseTrade? item = JsonConvert.DeserializeObject<GeminiResponseTrade>(message);
                 UpdateTrades(item);
-
+            }
+            else
+            {
+                throw new Exception("Type not recognized " + type.type);
             }
         }
         private void CheckConnectionStatus(object state)
@@ -803,7 +807,8 @@ namespace MarketConnectors.Gemini
                 WebSocketHostName = "wss://api.gemini.com/v2/marketdata?heartbeat=true",
                 WebSocketHostName_UserOrder = "wss://api.gemini.com/v1/order/events?heartbeat=true",
                 Provider = new VisualHFT.Model.Provider() { ProviderID = 5, ProviderName = "Gemini" },
-                Symbols = new List<string>() { "BTCUSD(BTC/USD)", "ETHUSD(ETH/USD)" } // Add more symbols as needed
+                Symbols = new List<string>() { "BTCUSD(BTC/USD)", "ETHUSD(ETH/USD)" }, // Add more symbols as needed
+                DepthLevels = 20
             };
             SaveToUserSettings(_settings);
         }
@@ -873,37 +878,6 @@ namespace MarketConnectors.Gemini
         public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
         {
             throw new VisualHFT.Commons.Exceptions.ExceptionDeltasNotSupportedByExchange();
-        }
-        public string ConvertToJson(List<DeltaBookItem> asks, List<DeltaBookItem> bids, string symbol)
-        {
-            var changes = new List<object[]>();
-
-            foreach (var item in bids)
-            {
-                if (item.MDUpdateAction == eMDUpdateAction.New || item.MDUpdateAction == eMDUpdateAction.Change)
-                {
-                    changes.Add(new object[] { "buy", item.Price, item.Size });
-                }
-            }
-
-            foreach (var item in asks)
-            {
-                if (item.MDUpdateAction == eMDUpdateAction.New || item.MDUpdateAction == eMDUpdateAction.Change)
-                {
-                    changes.Add(new object[] { "sell", item.Price, item.Size });
-                }
-            }
-
-            // Create the final JSON structure, *including* the type field
-            var result = new
-            {
-                type = "l2_updates",          // Add the type field here
-                symbol = symbol,
-                auction_events = new List<object>(),
-                changes = changes
-            };
-
-            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = false });
         }
         public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
         {
