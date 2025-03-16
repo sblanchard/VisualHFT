@@ -4,6 +4,7 @@ using VisualHFT.Helpers;
 using VisualHFT.Studies;
 using VisualHFT.Enums;
 using VisualHFT.Model;
+using System.Linq;
 
 namespace VisualHFT.Model
 {
@@ -28,6 +29,8 @@ namespace VisualHFT.Model
 
         public OrderBook(string symbol, int priceDecimalPlaces, int maxDepth)
         {
+            if (maxDepth <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxDepth), "maxDepth must be greater than zero.");
             _data = new OrderBookData(symbol, priceDecimalPlaces, maxDepth);
             FilterBidAskByMaxDepth = true;
         }
@@ -398,21 +401,49 @@ namespace VisualHFT.Model
 
             lock (_data.Lock)
             {
+                // Check if it is appropriate to add a new item to the Limit Order Book (LOB). 
+                // If the item exceeds the depth scope defined by MaxDepth, it should not be added.
+                // If the item is within the acceptable depth, truncate the LOB to ensure it adheres to the MaxDepth limit.
+                bool willNewItemFallOut = false;
+
+                
                 var list = item.IsBid.Value ? _data.Bids : _data.Asks;
-                if (string.IsNullOrEmpty(_poolBookItems.ProviderName))
-                    _poolBookItems.ProviderName = _data.ProviderName;
-                var _level = _poolBookItems.Get();
-                _level.EntryID = item.EntryID;
-                _level.Price = item.Price;
-                _level.IsBid = item.IsBid.Value;
-                _level.LocalTimeStamp = item.LocalTimeStamp;
-                _level.ProviderID = _data.ProviderID;
-                _level.ServerTimeStamp = item.ServerTimeStamp;
-                _level.Size = item.Size;
-                _level.Symbol = _data.Symbol;
-                _level.PriceDecimalPlaces = this.PriceDecimalPlaces;
-                _level.SizeDecimalPlaces = this.SizeDecimalPlaces;
-                list.Add(_level);
+                var listCount = list.Count();
+                if (item.IsBid.Value)
+                {
+                    willNewItemFallOut = listCount > this.MaxDepth && item.Price < list.Min(x => x.Price);
+                }
+                else
+                {
+                    willNewItemFallOut = listCount > this.MaxDepth && item.Price > list.Max(x => x.Price);
+                }
+
+                if (!willNewItemFallOut)
+                {
+                    if (string.IsNullOrEmpty(_poolBookItems.ProviderName))
+                        _poolBookItems.ProviderName = _data.ProviderName;
+                    var _level = _poolBookItems.Get();
+                    _level.EntryID = item.EntryID;
+                    _level.Price = item.Price;
+                    _level.IsBid = item.IsBid.Value;
+                    _level.LocalTimeStamp = item.LocalTimeStamp;
+                    _level.ProviderID = _data.ProviderID;
+                    _level.ServerTimeStamp = item.ServerTimeStamp;
+                    _level.Size = item.Size;
+                    _level.Symbol = _data.Symbol;
+                    _level.PriceDecimalPlaces = this.PriceDecimalPlaces;
+                    _level.SizeDecimalPlaces = this.SizeDecimalPlaces;
+                    list.Add(_level);
+                    listCount++;
+
+                    //truncate last item if we exceeded the MaxDepth
+                    if (listCount > this.MaxDepth)
+                    {
+                        _poolBookItems.Return(list.TakeLast(listCount - this.MaxDepth));
+                        list.TruncateItemsAfterPosition(MaxDepth-1);
+                    }
+                }
+
             }
         }
         public virtual void UpdateLevel(DeltaBookItem item)

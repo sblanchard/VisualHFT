@@ -138,6 +138,7 @@ namespace VisualHFT.Commons.Helpers
 
             try
             {
+                // Wait for the task to complete within the timeout period.
                 _taskConsumer?.Wait(TimeSpan.FromSeconds(3));
             }
             catch (AggregateException ex)
@@ -149,8 +150,11 @@ namespace VisualHFT.Commons.Helpers
             }
             finally
             {
-                _taskConsumer?.Dispose(); //if this line fails, is mostly because a deadlock (from the caller class) is preventing RunConsumer to finish. 
-
+                // Only dispose if the task has reached a final state.
+                if (_taskConsumer != null && _taskConsumer.IsCompleted)
+                {
+                    _taskConsumer.Dispose();
+                }
                 // Dispose of old resources
                 _ctx.Dispose();
                 if (restart)
@@ -162,6 +166,7 @@ namespace VisualHFT.Commons.Helpers
                 }
             }
         }
+
 
 
         protected virtual void Dispose(bool disposing)
