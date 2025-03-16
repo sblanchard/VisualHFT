@@ -41,13 +41,7 @@ namespace MarketConnectors.Gemini
 
         private Timer _heartbeatTimer;
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
-
-        private DataEventArgs tradeDataEvent = new DataEventArgs() { DataType = "Trades" }; //reusable object. So we avoid allocations
-        private DataEventArgs marketDataEvent = new DataEventArgs() { DataType = "Market" };//reusable object. So we avoid allocations
-        private DataEventArgs heartbeatDataEvent = new DataEventArgs() { DataType = "HeartBeats" };//reusable object. So we avoid allocations
-
 
 
         private PlugInSettings? _settings;
@@ -95,7 +89,7 @@ namespace MarketConnectors.Gemini
             foreach (var symbol in symbols)
             {
 
-                channelsToSubscribe.Add("order_book_" + symbol);
+                channelsToSubscribe.Add("diff_order_book_" + symbol);
                 channelsToSubscribe.Add("live_trades_" + symbol);
             }
             try
@@ -103,6 +97,7 @@ namespace MarketConnectors.Gemini
                 await Task.Run(async () =>
                 {
                     var exitEvent = new ManualResetEvent(false);
+                    //https://www.bitstamp.net/websocket/v2/
                     var url = new Uri(_settings.WebSocketHostName);
                     using (_ws = new WebsocketClient(url))
                     {
@@ -217,7 +212,14 @@ namespace MarketConnectors.Gemini
             lob.ProviderID = _settings.Provider.ProviderID;
             lob.ProviderName = _settings.Provider.ProviderName;
             lob.SizeDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.asks.Select(x => double.Parse(x[1])));
+            /*
+                Initialize the Limit Order Book "only" in this method.
+                Do not load the snapshot data, since it will be given at deltas subscription in the first message.
+                So, just initialize the LOB hete
+             */
 
+
+            /*
             var _asks = new List<VisualHFT.Model.BookItem>();
             var _bids = new List<VisualHFT.Model.BookItem>();
             data.asks.ToList().ForEach(x =>
@@ -255,6 +257,7 @@ namespace MarketConnectors.Gemini
                 _asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),
                 _bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels)
                 );
+            */
             return lob;
         }
 
@@ -267,8 +270,6 @@ namespace MarketConnectors.Gemini
                 BitStampOrderBook type = JsonConvert.DeserializeObject<BitStampOrderBook>(message);
                 if (type.@event.ToLower().Equals("data"))
                 {
-                    List<OrderBook> events = new List<OrderBook>();
-
                     string symbol = string.Empty;
                     if (type.channel.Split('_').Length > 3)
                     {
@@ -287,76 +288,66 @@ namespace MarketConnectors.Gemini
                     {
                         local_lob = new OrderBook();
                     }
-                    OrderBook book = new VisualHFT.Model.OrderBook();
-                    book.ProviderID = _settings.Provider.ProviderID;
-                    book.ProviderName = _settings.Provider.ProviderName;
-                    book.Symbol = symbol;
                     foreach (var item in type.data.bids)
                     {
-                        BookItem bookItem = new BookItem();
-                        bookItem.Symbol = symbol;
-                        bookItem.ProviderID = _settings.Provider.ProviderID;
-                        bookItem.IsBid = true;
-                        bookItem.Price = double.Parse(item[0]);
-                        bookItem.Size = double.Parse(item[1]);
-                        bookItem.LocalTimeStamp = DateTime.Now;
-                        bookItem.ServerTimeStamp = serverTime;
-                        book.Asks.Add(bookItem);
-
-                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                        var _price = double.Parse(item[0]);
+                        var _size = double.Parse(item[1]);
+                        if (_size != 0)
                         {
-                            MDUpdateAction = eMDUpdateAction.None,
-                            Price = bookItem.Price,
-                            Size = bookItem.Size,
-                            IsBid = true,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = bookItem.ServerTimeStamp,
-                            Symbol = symbol
-                        });
+                            local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.None,
+                                Price = _price,
+                                Size = _size,
+                                IsBid = true,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = serverTime,
+                                Symbol = symbol
+                            });
+                        }
+                        else
+                        {
+                            local_lob.DeleteLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.Delete,
+                                Price = _price,
+                                IsBid = true,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = serverTime,
+                                Symbol = symbol
+                            });
+                        }
                     }
                     foreach (var item in type.data.asks)
                     {
-                        book.Symbol = symbol;
-                        BookItem bookItem = new BookItem();
-                        bookItem.Symbol = symbol;
-                        bookItem.IsBid = false;
-                        bookItem.Price = double.Parse(item[0]);
-                        bookItem.Size = double.Parse(item[1]);
-                        bookItem.LocalTimeStamp = DateTime.Now;
-                        bookItem.ServerTimeStamp = serverTime;
-                        bookItem.ProviderID = _settings.Provider.ProviderID;
-                        book.Bids.Add(bookItem);
-
-                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                        var _price = double.Parse(item[0]);
+                        var _size = double.Parse(item[1]);
+                        if (_size != 0)
                         {
-                            MDUpdateAction = eMDUpdateAction.None,
-                            Price = bookItem.Price,
-                            Size = bookItem.Size,
-                            IsBid = false,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = bookItem.ServerTimeStamp,
-                            Symbol = symbol
-                        });
+                            local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.None,
+                                Price = _price,
+                                Size = _size,
+                                IsBid = false,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = serverTime,
+                                Symbol = symbol
+                            });
+                        }
+                        else
+                        {
+                            local_lob.DeleteLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.Delete,
+                                Price = _price,
+                                IsBid = false,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = serverTime,
+                                Symbol = symbol
+                            });
+                        }
                     }
-
-                    //marketDataEvent.ParsedModel = _parser.Parse<IEnumerable<OrderBook>>(dataReceived.events, _parser_settings);
-                    var identifiedPriceDecimalPlaces = RecognizeDecimalPlacesAutomatically(book.Asks.Where(x => x.Price.HasValue).Select(x => x.Price.Value));
-                    var identifiedSizeDecimalPlaces = RecognizeDecimalPlacesAutomatically(book.Asks.Where(x => x.Size.HasValue).Select(x => x.Size.Value));
-                    book.SizeDecimalPlaces = identifiedSizeDecimalPlaces;
-                    book.PriceDecimalPlaces = identifiedPriceDecimalPlaces;
-                    foreach (var bookItem in book.Asks)
-                    {
-                        bookItem.SizeDecimalPlaces = identifiedSizeDecimalPlaces;
-                        bookItem.PriceDecimalPlaces = identifiedPriceDecimalPlaces;
-                    }
-                    foreach (var bookItem in book.Bids)
-                    {
-                        bookItem.SizeDecimalPlaces = identifiedSizeDecimalPlaces;
-                        bookItem.PriceDecimalPlaces = identifiedPriceDecimalPlaces;
-                    }
-                    events.Add(book);
-
-                    marketDataEvent.ParsedModel = events;
                     RaiseOnDataReceived(local_lob);
 
                     //if (dataReceived.trades != null && dataReceived.trades.Count > 0)
@@ -388,8 +379,7 @@ namespace MarketConnectors.Gemini
             }
             else if (data.@event == "heartbeat")
             {
-                RaiseOnDataReceived(heartbeatDataEvent);
-
+                RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
             }
             else if (data.@event == "trade")
             {
@@ -397,7 +387,6 @@ namespace MarketConnectors.Gemini
                 BitStampTrade type = JsonConvert.DeserializeObject<BitStampTrade>(message);
                 if (type != null && type.data != null)
                 {
-                    List<Trade> trades = new List<Trade>();
                     string symbol = string.Empty;
                     if (type.channel.Split('_').Length > 3)
                     {
@@ -422,10 +411,9 @@ namespace MarketConnectors.Gemini
                     {
                         trade.IsBuy = false;
                     }
-                    trades.Add(trade);
-                    tradeDataEvent.ParsedModel = trades;
+                    RaiseOnDataReceived(trade);
                 }
-                RaiseOnDataReceived(tradeDataEvent);
+                
             }
         }
         private void CheckConnectionStatus(object state)
@@ -485,6 +473,7 @@ namespace MarketConnectors.Gemini
                 ApiSecret = "",
                 HostName = "https://www.bitstamp.net/api/v2/",
                 WebSocketHostName = "wss://ws.bitstamp.net",
+                DepthLevels = 10,
                 Provider = new VisualHFT.Model.Provider() { ProviderID = 6, ProviderName = "BitStamp" },
                 Symbols = new List<string>() { "btcusd(BTC/USD)", "ethusd(ETH/USD)" } // Add more symbols as needed
             };
