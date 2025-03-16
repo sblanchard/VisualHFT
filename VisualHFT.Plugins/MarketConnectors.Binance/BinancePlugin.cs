@@ -235,7 +235,6 @@ namespace MarketConnectors.Binance
             log.Info($"{this.Name}: sending WS Trades Subscription to all symbols.");
             deltaSubscription = await _socketClient.SpotApi.ExchangeData.SubscribeToOrderBookUpdatesAsync(
                 GetAllNonNormalizedSymbols(),
-                //DEPTH_LEVELS,
                 _settings.UpdateIntervalMs,
                 data =>
                 {
