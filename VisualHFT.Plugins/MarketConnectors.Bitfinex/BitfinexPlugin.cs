@@ -136,12 +136,12 @@ namespace MarketConnectors.Bitfinex
 
             UnattachEventHandlers(deltaSubscription?.Data);
             UnattachEventHandlers(tradesSubscription?.Data);
-            if (_socketClient != null)
-                await _socketClient.UnsubscribeAllAsync();
             if (deltaSubscription != null && deltaSubscription.Data != null)
                 await deltaSubscription.Data.CloseAsync();
             if (tradesSubscription != null && tradesSubscription.Data != null)
                 await tradesSubscription.Data.CloseAsync();
+            if (_socketClient != null)
+                await _socketClient.UnsubscribeAllAsync();
             _timerPing?.Stop();
             _timerPing?.Dispose();
 
@@ -281,6 +281,9 @@ namespace MarketConnectors.Bitfinex
             foreach (var symbol in GetAllNonNormalizedSymbols())
             {
                 var normalizedSymbol = GetNormalizedSymbol(symbol);
+                if (!_eventBuffers.ContainsKey(normalizedSymbol))
+                    _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>($"<Tuple<DateTime, string, BitfinexOrderBookEntry>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
+
                 log.Info($"{this.Name}: sending WS Deltas Subscription {normalizedSymbol} ");
                 deltaSubscription = await _socketClient.SpotApi.SubscribeToOrderBookUpdatesAsync(
                     symbol,
@@ -295,7 +298,7 @@ namespace MarketConnectors.Bitfinex
                             {
                                 if (data.UpdateType == SocketUpdateType.Snapshot)
                                 {
-                                    UpdateOrderBookFromWS(data.Data, normalizedSymbol);
+                                    UpdateOrderBookSnapshot(data.Data, normalizedSymbol);
                                 }
                                 else
                                 {
@@ -541,7 +544,7 @@ namespace MarketConnectors.Bitfinex
 
             return lob;
         }
-        private void UpdateOrderBookFromWS(IEnumerable<BitfinexOrderBookEntry> data, string symbol)
+        private void UpdateOrderBookSnapshot(IEnumerable<BitfinexOrderBookEntry> data, string symbol)
         {
             if (!_localOrderBooks.TryGetValue(symbol, out VisualHFT.Model.OrderBook? lob))
             {
