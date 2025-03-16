@@ -24,6 +24,7 @@ using Kraken.Net.Objects.Models.Socket;
 using VisualHFT.Commons.Interfaces;
 using Newtonsoft.Json.Linq;
 using System.IO;
+using VisualHFT.Model;
 
 namespace MarketConnectors.Kraken
 {
@@ -35,11 +36,8 @@ namespace MarketConnectors.Kraken
         private KrakenSocketClient _socketClient;
         private KrakenRestClient _restClient;
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
-        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KrakenBookUpdate>>> _eventBuffers =
-            new Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KrakenBookUpdate>>>();
-
-        private Dictionary<string, HelperCustomQueue<Tuple<string, KrakenTradeUpdate>>> _tradesBuffers =
-            new Dictionary<string, HelperCustomQueue<Tuple<string, KrakenTradeUpdate>>>();
+        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, KrakenBookUpdate>>> _eventBuffers = new();
+        private Dictionary<string, HelperCustomQueue<Tuple<string, KrakenTradeUpdate>>> _tradesBuffers = new();
 
         private int pingFailedAttempts = 0;
         private System.Timers.Timer _timerPing;
@@ -50,7 +48,7 @@ namespace MarketConnectors.Kraken
 
         private Dictionary<string, VisualHFT.Model.Order> _localUserOrders = new Dictionary<string, VisualHFT.Model.Order>();
 
-        private readonly CustomObjectPool<VisualHFT.Model.Trade> tradePool = new CustomObjectPool<VisualHFT.Model.Trade>();//pool of Trade objects
+        private CustomObjectPool<VisualHFT.Model.Trade> tradePool = new CustomObjectPool<VisualHFT.Model.Trade>();//pool of Trade objects
 
 
         public override string Name { get; set; } = "Kraken Plugin";
@@ -89,7 +87,6 @@ namespace MarketConnectors.Kraken
                 options.Environment = KrakenEnvironment.Live;
             });
 
-            var balance = await _restClient.SpotApi.Account.GetBalancesAsync();
 
             try
             {
@@ -137,7 +134,8 @@ namespace MarketConnectors.Kraken
 
             await base.StopAsync();
         }
-        public async Task ClearAsync()
+
+        private async Task ClearAsync()
         {
 
             UnattachEventHandlers(deltaSubscription?.Data);
@@ -159,6 +157,8 @@ namespace MarketConnectors.Kraken
                 q.Value.Clear();
             _tradesBuffers.Clear();
 
+            tradePool.Dispose();
+            tradePool = new CustomObjectPool<Trade>();
 
             //CLEAR LOB
             if (_localOrderBooks != null)
@@ -318,7 +318,7 @@ namespace MarketConnectors.Kraken
             foreach (var symbol in GetAllNonNormalizedSymbols())
             {
                 var normalizedSymbol = GetNormalizedSymbol(symbol);
-                log.Info($"{this.Name}: sending WS Trades Subscription {normalizedSymbol} ");
+                log.Info($"{this.Name}: sending WS Delta Subscription {normalizedSymbol} ");
 
                 deltaSubscription = await _socketClient.SpotApi.SubscribeToAggregatedOrderBookUpdatesAsync(
                     symbol,
@@ -338,9 +338,14 @@ namespace MarketConnectors.Kraken
                                         log.Warn(_msg);
                                         HelperNotificationManager.Instance.AddNotification(this.Name, _msg, HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
                                     }
+
                                     _eventBuffers[normalizedSymbol].Add(
                                         new Tuple<DateTime, string, KrakenBookUpdate>(
                                             data.ReceiveTime.ToLocalTime(), normalizedSymbol, data.Data));
+                                }
+                                else
+                                {
+                                    UpdateOrderBookSnapshot(data.Data, normalizedSymbol);
                                 }
                             }
                             catch (Exception ex)
@@ -355,7 +360,7 @@ namespace MarketConnectors.Kraken
                                 Task.Run(async () => await HandleConnectionLost(_error, ex));
                             }
                         }
-                    }, null, new CancellationToken());
+                    }, null, CancellationToken.None);
                 if (deltaSubscription.Success)
                 {
                     AttachEventHandlers(deltaSubscription.Data);
@@ -497,73 +502,6 @@ namespace MarketConnectors.Kraken
         #endregion
 
 
-        private void UpdateOrderBook(KrakenBookUpdate lob_update, string symbol, DateTime ts)
-        {
-            if (!_localOrderBooks.ContainsKey(symbol))
-                return;
-
-            var local_lob = _localOrderBooks[symbol];
-
-            if (local_lob != null)
-            {
-                foreach (var item in lob_update.Bids)
-                {
-                    if (item.Quantity != 0)
-                    {
-                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
-                        {
-                            MDUpdateAction = eMDUpdateAction.None,
-                            Price = (double)item.Price,
-                            Size = (double)item.Quantity,
-                            IsBid = true,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = ts,
-                            Symbol = symbol
-                        });
-                    }
-                    else
-                        local_lob.DeleteLevel(new DeltaBookItem()
-                        {
-                            MDUpdateAction = eMDUpdateAction.Delete,
-                            Price = (double)item.Price,
-                            //Size = (double)item.Quantity,
-                            IsBid = true,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = ts,
-                            Symbol = symbol
-                        });
-                }
-                foreach (var item in lob_update.Asks)
-                {
-                    if (item.Quantity != 0)
-                    {
-                        local_lob.AddOrUpdateLevel(new DeltaBookItem()
-                        {
-                            MDUpdateAction = eMDUpdateAction.None,
-                            Price = (double)item.Price,
-                            Size = (double)item.Quantity,
-                            IsBid = false,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = ts,
-                            Symbol = symbol
-                        });
-                    }
-                    else
-                        local_lob.DeleteLevel(new DeltaBookItem()
-                        {
-                            MDUpdateAction = eMDUpdateAction.Delete,
-                            Price = (double)item.Price,
-                            //Size = (double)item.Quantity,
-                            IsBid = false,
-                            LocalTimeStamp = DateTime.Now,
-                            ServerTimeStamp = ts,
-                            Symbol = symbol
-                        });
-                }
-
-                RaiseOnDataReceived(local_lob);
-            }
-        }
         private async Task DoPingAsync()
         {
             try
@@ -658,7 +596,157 @@ namespace MarketConnectors.Kraken
                 );
             return lob;
         }
+        private void UpdateOrderBookSnapshot(KrakenBookUpdate data, string symbol)
+        {
+            if (!_localOrderBooks.TryGetValue(symbol, out VisualHFT.Model.OrderBook? lob))
+            {
+                return;
+            }
+            lob.Clear(); //reset order book
+            foreach (var ask in data.Asks)
+            {
+                lob.AddOrUpdateLevel(new DeltaBookItem()
+                {
+                    IsBid = false,
+                    Price = (double)ask.Price,
+                    Size = (double)Math.Abs(ask.Quantity),
+                    LocalTimeStamp = DateTime.Now,
+                    ServerTimeStamp = DateTime.Now,
+                    Symbol = symbol,
+                    MDUpdateAction = eMDUpdateAction.New,
+                });
+            }
+            foreach (var bid in data.Bids)
+            {
+                lob.AddOrUpdateLevel(new DeltaBookItem()
+                {
+                    IsBid = true,
+                    Price = (double)bid.Price,
+                    Size = (double)Math.Abs(bid.Quantity),
+                    LocalTimeStamp = DateTime.Now,
+                    ServerTimeStamp = DateTime.Now,
+                    Symbol = symbol,
+                    MDUpdateAction = eMDUpdateAction.New,
+                });
+            }
+        }
+        private void UpdateOrderBook(KrakenBookUpdate lob_update, string symbol, DateTime ts)
+        {
+            if (!_localOrderBooks.TryGetValue(symbol, out VisualHFT.Model.OrderBook? local_lob))
+                return;
+            if (local_lob != null)
+            {
+                try
+                {
+                    foreach (var item in lob_update.Bids)
+                    {
+                        if (item.Quantity != 0)
+                        {
+                            local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.New,
+                                Price = (double)item.Price,
+                                Size = (double)item.Quantity,
+                                IsBid = true,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = ts,
+                                Symbol = symbol
+                            });
+                        }
+                        else if (item.Quantity == 0)
+                            local_lob.DeleteLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.Delete,
+                                Price = (double)item.Price,
+                                IsBid = true,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = ts,
+                                Symbol = symbol
+                            });
+                    }
+                    foreach (var item in lob_update.Asks)
+                    {
+                        if (item.Quantity != 0)
+                        {
+                            local_lob.AddOrUpdateLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.New,
+                                Price = (double)item.Price,
+                                Size = (double)item.Quantity,
+                                IsBid = false,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = ts,
+                                Symbol = symbol
+                            });
+                        }
+                        else if (item.Quantity == 0)
+                            local_lob.DeleteLevel(new DeltaBookItem()
+                            {
+                                MDUpdateAction = eMDUpdateAction.Delete,
+                                Price = (double)item.Price,
+                                IsBid = false,
+                                LocalTimeStamp = DateTime.Now,
+                                ServerTimeStamp = ts,
+                                Symbol = symbol
+                            });
+                    }
 
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    throw;
+                }
+
+
+                //CHECK IF THE CHECKSUM IS THE SAME
+                /*var localCheckSum = GenerateLOBChecksum(local_lob);
+                if (lob_update.Checksum != localCheckSum)
+                {
+                    return;
+                }*/
+
+                RaiseOnDataReceived(local_lob);
+            }
+        }
+
+        private string FormatValue(string strValue)
+        {
+            // Convert using InvariantCulture to ensure dot is used as decimal separator
+            //string strValue = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // Remove the decimal point
+            strValue = strValue.Replace(".", "");
+            // Remove all leading zeros
+            strValue = strValue.TrimStart('0');
+            // Ensure that an empty string becomes "0"
+            return string.IsNullOrEmpty(strValue) ? "0" : strValue;
+        }
+        private string GenerateLevelString(IEnumerable<VisualHFT.Model.BookItem> levels)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            foreach (var item in levels)
+            {
+                // Format price and size following the instructions
+                string formattedPrice = FormatValue(item.FormattedPrice);
+                string formattedSize = FormatValue(item.FormattedSize);
+                sb.Append(formattedPrice);
+                sb.Append(formattedSize);
+            }
+            return sb.ToString();
+        }
+
+        private long GenerateLOBChecksum(VisualHFT.Model.OrderBook lob)
+        {
+
+            string asksString = GenerateLevelString(lob.Asks.Take(10));
+            string bidsString = GenerateLevelString(lob.Bids.Take(10));
+
+            // 1. Generate the concatenated checksum string from asks and bids
+            string checksumInput = asksString + bidsString;
+
+            // 2. Compute and return the CRC32 checksum of the concatenated string
+            return Crc32Calculator.ComputeCrc32(checksumInput);
+        }
         protected override void Dispose(bool disposing)
         {
             if (!_disposed)
@@ -779,11 +867,16 @@ namespace MarketConnectors.Kraken
             }
             else
                 _localOrderBooks[symbol] = ToOrderBookModel(localModel, symbol);
-
+            //then this method is called from the delta websocket
+            UpdateOrderBookSnapshot(new KrakenBookUpdate()
+            {
+                Symbol = symbol,
+                Asks = snapshotModel.Asks.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList(),
+                Bids = snapshotModel.Bids.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList()
+            }, symbol);
             _localOrderBooks[symbol].Sequence = sequence;// KRAKEN does not provide sequence numbers
 
             RaiseOnDataReceived(_localOrderBooks[symbol]);
-
         }
 
         public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
