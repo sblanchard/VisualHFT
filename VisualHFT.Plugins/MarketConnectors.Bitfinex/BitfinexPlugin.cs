@@ -114,10 +114,10 @@ namespace MarketConnectors.Bitfinex
                 _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>($"<Tuple<DateTime, string, BitfinexTradeSimple>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
             }
 
+            await InitializeDeltasAsync();
             await InitializeSnapshotsAsync();
             await InitializeTradesAsync();
             await InitializeUserPrivateOrders();
-            await InitializeDeltasAsync();
             await InitializePingTimerAsync();
         }
         public override async Task StopAsync()
@@ -133,24 +133,23 @@ namespace MarketConnectors.Bitfinex
         }
         public async Task ClearAsync()
         {
-
             UnattachEventHandlers(deltaSubscription?.Data);
             UnattachEventHandlers(tradesSubscription?.Data);
+            if (_socketClient != null)
+                await _socketClient.UnsubscribeAllAsync();
             if (deltaSubscription != null && deltaSubscription.Data != null)
                 await deltaSubscription.Data.CloseAsync();
             if (tradesSubscription != null && tradesSubscription.Data != null)
                 await tradesSubscription.Data.CloseAsync();
-            if (_socketClient != null)
-                await _socketClient.UnsubscribeAllAsync();
             _timerPing?.Stop();
             _timerPing?.Dispose();
 
             foreach (var q in _eventBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _eventBuffers.Clear();
 
             foreach (var q in _tradesBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _tradesBuffers.Clear();
 
 
@@ -281,9 +280,6 @@ namespace MarketConnectors.Bitfinex
             foreach (var symbol in GetAllNonNormalizedSymbols())
             {
                 var normalizedSymbol = GetNormalizedSymbol(symbol);
-                if (!_eventBuffers.ContainsKey(normalizedSymbol))
-                    _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>($"<Tuple<DateTime, string, BitfinexOrderBookEntry>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
-
                 log.Info($"{this.Name}: sending WS Deltas Subscription {normalizedSymbol} ");
                 deltaSubscription = await _socketClient.SpotApi.SubscribeToOrderBookUpdatesAsync(
                     symbol,
