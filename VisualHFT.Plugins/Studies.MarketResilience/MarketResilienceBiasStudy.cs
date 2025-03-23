@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Studies.MarketResilience.Model;
+using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.Enums;
+using VisualHFT.Helpers;
 using VisualHFT.Model;
 using VisualHFT.PluginManager;
 using VisualHFT.Studies.MarketResilience.Model;
@@ -15,8 +18,8 @@ namespace VisualHFT.Studies
     {
         private bool _disposed = false; // to track whether the object has been disposed
         private PlugInSettings _settings;
-        private MarketResilienceStudy _MARKETRESILIENCE;
-
+        private MarketResilienceWithBias _mrBiasCalc;
+        private HelperCustomQueue<OrderBook> _QUEUE;
 
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
@@ -37,7 +40,8 @@ namespace VisualHFT.Studies
 
         public MarketResilienceBiasStudy()
         {
-            _MARKETRESILIENCE = new MarketResilienceStudy();
+            _mrBiasCalc = new MarketResilienceWithBias();
+            _QUEUE = new HelperCustomQueue<OrderBook>($"<OrderBook>_{this.Name}", QUEUE_onRead, QUEUE_onError);
         }
 
         ~MarketResilienceBiasStudy()
@@ -49,10 +53,13 @@ namespace VisualHFT.Studies
         public override async Task StartAsync()
         {
             await base.StartAsync();//call the base first
+            
+            _mrBiasCalc.Reset();
+            _QUEUE.Clear();
+            HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
+            HelperTrade.Instance.Subscribe(TRADE_OnDataReceived);
 
-            _MARKETRESILIENCE.Settings = _settings;
-            _MARKETRESILIENCE.OnCalculated += _MARKETRESILIENCE_OnCalculated;
-            await _MARKETRESILIENCE.StartAsync();
+
 
             log.Info($"{this.Name} Plugin has successfully started.");
             Status = ePluginStatus.STARTED;
@@ -63,45 +70,54 @@ namespace VisualHFT.Studies
             Status = ePluginStatus.STOPPING;
             log.Info($"{this.Name} is stopping.");
 
-            _MARKETRESILIENCE.OnCalculated -= _MARKETRESILIENCE_OnCalculated;
+            HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
+            HelperTrade.Instance.Unsubscribe(TRADE_OnDataReceived);
 
             await base.StopAsync();
         }
 
-        private void _MARKETRESILIENCE_OnCalculated(object? sender, BaseStudyModel model)
+
+
+        private void LIMITORDERBOOK_OnDataReceived(OrderBook e)
         {
-            if (model == null)
+            /*
+             * ***************************************************************************************************
+             * TRANSFORM the incoming object (decouple it)
+             * DO NOT hold this call back, since other components depends on the speed of this specific call back.
+             * DO NOT BLOCK
+             * IDEALLY, USE QUEUES TO DECOUPLE
+             * ***************************************************************************************************
+             */
+
+            if (e == null)
                 return;
-            //No need to check the provider/symbol, since this event is subscribed with local settings
-
-
-            eORDERSIDE _valueBias = eORDERSIDE.None; //unkonw
-            string _valueFormatted = "-"; //unknown
-            string _valueColor = "White";
-            if (model.Tag == "Buy")
-                _valueBias = eORDERSIDE.Buy;
-            else if (model.Tag == "Sell")
-                _valueBias = eORDERSIDE.Sell;
-
-            if (_valueBias == eORDERSIDE.None)
+            if (_settings.Provider.ProviderID != e.ProviderID || _settings.Symbol != e.Symbol)
                 return;
 
-            _valueFormatted = _valueBias == eORDERSIDE.Buy ? "↑" : "↓";
-            _valueColor = _valueBias == eORDERSIDE.Buy ? "Green" : "Red";
-
-
-
-            var newItem = new BaseStudyModel()
-            {
-                Value = _valueBias == eORDERSIDE.Buy? 1: -1,
-                ValueFormatted = _valueFormatted,
-                ValueColor = _valueColor,
-                Timestamp = HelperTimeProvider.Now,
-                MarketMidPrice = model.MarketMidPrice
-            };
-
-            AddCalculation(newItem);
+            var currentLOB = new OrderBook();
+            currentLOB.ShallowCopyFrom(e, null);
+            _QUEUE.Add(currentLOB);
         }
+        private void TRADE_OnDataReceived(Trade e)
+        {
+            _mrBiasCalc.OnTrade(e);
+            DoCalculationAndSend();
+        }
+        private void QUEUE_onRead(OrderBook e)
+        {
+            _mrBiasCalc.OnOrderBookUpdate(e);
+            DoCalculationAndSend();
+        }
+        private void QUEUE_onError(Exception ex)
+        {
+            var _error = $"Unhandled error in the Queue: {ex.Message}";
+            log.Error(_error, ex);
+            HelperNotificationManager.Instance.AddNotification(this.Name, _error,
+                HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.PLUGINS, ex);
+
+            Task.Run(() => HandleRestart(_error, ex));
+        }
+
         protected override void onDataAggregation(BaseStudyModel existing, BaseStudyModel newItem, int counterAggreated)
         {
             //Aggregation: last
@@ -113,6 +129,31 @@ namespace VisualHFT.Studies
         }
 
 
+        protected void DoCalculationAndSend()
+        {
+            if (Status != VisualHFT.PluginManager.ePluginStatus.STARTED) return;
+
+            // Trigger any events or updates based on the new T2O ratio
+            eMarketBias _valueBias = _mrBiasCalc.CurrentMarketBias;
+            string _valueFormatted = "-"; //unknown
+            string _valueColor = "White";
+            
+
+            _valueFormatted = _valueBias == eMarketBias.Bullish ? "↑" : (_valueBias == eMarketBias.Bearish ? "↓" : "-");
+            _valueColor = _valueBias == eMarketBias.Bullish ? "Green" : (_valueBias == eMarketBias.Bearish ? "Red" : "White");
+
+            var newItem = new BaseStudyModel
+            {
+                Value = _valueBias == eMarketBias.Bullish? 1: (_valueBias == eMarketBias.Bearish? -1: 0),
+                ValueFormatted = _valueFormatted,
+                ValueColor = _valueColor,
+                MarketMidPrice = (decimal)_mrBiasCalc.MidMarketPrice,
+                Timestamp = HelperTimeProvider.Now
+            };
+
+            AddCalculation(newItem);
+        }
+
 
         protected virtual void Dispose(bool disposing)
         {
@@ -122,8 +163,11 @@ namespace VisualHFT.Studies
 
                 if (disposing)
                 {
-                    _MARKETRESILIENCE.OnCalculated -= _MARKETRESILIENCE_OnCalculated;
-                    _MARKETRESILIENCE.Dispose();
+                    HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
+                    HelperTrade.Instance.Unsubscribe(TRADE_OnDataReceived);
+                    _QUEUE.Dispose();
+                    _mrBiasCalc.Dispose();
+                    base.Dispose();
                 }
 
             }

@@ -20,6 +20,14 @@ namespace VisualHFT.Model
         protected CustomObjectPool<BookItem> _poolBookItems
             = new CustomObjectPool<BookItem>(2000);
 
+        // Add counters for level changes
+        private long _addedLevels = 0;
+        private long _deletedLevels = 0;
+        private long _updatedLevels = 0;
+        // Properties to expose counters
+        public long AddedLevels => _addedLevels;
+        public long DeletedLevels => _deletedLevels;
+        public long UpdatedLevels => _updatedLevels;
 
         public OrderBook()
         {
@@ -349,6 +357,8 @@ namespace VisualHFT.Model
                     i++;
                 }
             }
+
+            GetAndResetChangeCounts();
         }
 
 
@@ -435,7 +445,7 @@ namespace VisualHFT.Model
                     _level.SizeDecimalPlaces = this.SizeDecimalPlaces;
                     list.Add(_level);
                     listCount++;
-
+                    Interlocked.Increment(ref _addedLevels);
                     //truncate last item if we exceeded the MaxDepth
                     if (listCount > this.MaxDepth)
                     {
@@ -453,6 +463,11 @@ namespace VisualHFT.Model
                 (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Update(x => x.Price == item.Price,
                     existingItem =>
                     {
+                        if (existingItem.Size > item.Size) //added
+                            Interlocked.Increment(ref _addedLevels);
+                        else if (existingItem.Size < item.Size) //deleted
+                            Interlocked.Increment(ref _deletedLevels);
+
                         existingItem.Price = item.Price;
                         existingItem.Size = item.Size;
                         existingItem.LocalTimeStamp = item.LocalTimeStamp;
@@ -486,10 +501,18 @@ namespace VisualHFT.Model
                 {
                     (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Remove(_itemToDelete);
                     _poolBookItems.Return(_itemToDelete);
+                    Interlocked.Increment(ref _deletedLevels);
                 }
             }
         }
-
+        public (long added, long deleted, long updated) GetAndResetChangeCounts()
+        {
+            var result = (_addedLevels, _deletedLevels, _updatedLevels);
+            _addedLevels = 0;
+            _deletedLevels = 0;
+            _updatedLevels = 0;
+            return result;
+        }
 
         protected virtual void Dispose(bool disposing)
         {

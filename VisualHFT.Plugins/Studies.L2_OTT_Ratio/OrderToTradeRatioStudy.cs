@@ -5,53 +5,61 @@ using VisualHFT.Commons.PluginManager;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
+using VisualHFT.PluginManager;
 using VisualHFT.Studies.MarketRatios.Model;
 using VisualHFT.Studies.MarketRatios.UserControls;
 using VisualHFT.Studies.MarketRatios.ViewModel;
 using VisualHFT.UserSettings;
-using VisualHFT.PluginManager;
+using System.Collections.Generic;
+using VisualHFT.Commons.Helpers;
 
 namespace VisualHFT.Studies
 {
     /// <summary>
-    /// Trade To Order Ratio Study
+    /// The Order to Trade Ratio (OTR) 
+    /// It is calculated by dividing the number of market orders events (new/update/delete) by the number of trades executed. 
+    /// This ratio is often used by regulators to identify potentially manipulative or disruptive trading behavior. 
     /// 
-    /// **Description:** The T2O ratio measures the proportion of executed trades to placed orders in the market.
-    /// **Calculation:** It's calculated by dividing the number of executed trades by the total number of orders (including unexecuted ones) in a given time frame.
-    /// **Usefulness:** A high T2O ratio may indicate strong demand or supply at certain price levels, while a low ratio may suggest indecision or lack of conviction in the market.
+    /// A high OTR may indicate that a trader is placing a large number of orders but executing very few, which could be a sign of market manipulation tactics like layering or spoofing.
+    /// 
     /// </summary>
-    public class TradeToOrderRatioStudy : BasePluginStudy
+    public class OrderToTradeRatioStudy : BasePluginStudy
     {
         private bool _disposed = false; // to track whether the object has been disposed
         private PlugInSettings _settings;
 
-        private decimal total_L2OrderSize_Ini = 0;
-        private decimal total_L2OrderSize_End = 0;
-        private decimal totalExecutedTradeSize = 0;
+        private long _orderEvents = 0;  
+        private long _tradeCount = 0;
+        private object _lock = new object();
         private decimal _lastMarketMidPrice = 0; //keep track of market price
-
 
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
 
-        public override string Name { get; set; } = "Trade To Order Ratio Study Plugin";
+        public override string Name { get; set; } = "L2 Order To Trade Ratio Study Plugin";
         public override string Version { get; set; } = "1.0.0";
-        public override string Description { get; set; } = "Volume - Trade To Order Ratio.";
+        public override string Description { get; set; } = "L2 Order To Trade Ratio.";
         public override string Author { get; set; } = "VisualHFT";
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }
-        public override string TileTitle { get; set; } = "TTO";
-        public override string TileToolTip { get; set; } = "The <b>TTO</b> (Volume - Trade To Order Ratio) value is a key metric that measures the efficiency of trading by comparing the number of executed trades to the number of orders placed.<br/><br/>" +
-                "<b>TTO</b> is calculation as follows: <i>TTO Ratio=Number of Executed Trades / Number of Orders Placed</i><br/>";
-
-        public TradeToOrderRatioStudy()
+        public override string TileTitle { get; set; } = "L2-OTT";
+        public override string TileToolTip { get; set; } = "The <b>L2 OTT</b> (Level 2 Order-to-Trade Ratio) is a metric used to analyze order book activity and its relationship to executed trades. <br/> It's calculated using <i>aggregated Level 2 market data</i>, which provides snapshots of the total order volume at each price level, rather than individual order actions.  Because of this, the L2 OTT represents the <b>net change in order book depth</b> relative to the number of trades.<br/><br/>" +
+                                                           "<b>Calculation:</b> <i>L2 OTT Ratio = (Sum of Absolute Changes in Order Book Size at All Price Levels) / (Number of Executed Trades)</i><br/><br/>" +
+                                                           "<b>Interpretation and Limitations:</b><br/>" +
+                                                           "<ul>" +
+                                                           "<li>A high L2 OTT *may* indicate low liquidity, high-frequency trading activity, or potential order book manipulation (e.g., spoofing). However, because it's based on aggregated data, it cannot definitively distinguish between these scenarios.</li>" +
+                                                           "<li>A single large order that is partially filled multiple times will increase the L2 OTT, as each partial fill registers as a size change.</li>" +
+                                                           "<li>The L2 OTT is a *proxy* for order activity and should be used in conjunction with other market microstructure metrics (spread, volume, order book imbalance) for a complete analysis.</li>" +
+                                                           "<li>This metric is *related to* but *distinct from* the traditional Order-to-Trade Ratio (OTTR) calculated with full order book data.</li>" +
+                                                           "</ul>" +
+                                                           "Regulatory bodies often monitor similar metrics to identify potentially manipulative or disruptive trading activities, although they typically have access to more granular data.<br/>";
+        public OrderToTradeRatioStudy()
         {
         }
-        ~TradeToOrderRatioStudy()
+        ~OrderToTradeRatioStudy()
         {
             Dispose(false);
         }
-
 
         public override async Task StartAsync()
         {
@@ -63,7 +71,6 @@ namespace VisualHFT.Studies
             log.Info($"{this.Name} Plugin has successfully started.");
             Status = ePluginStatus.STARTED;
         }
-
         public override async Task StopAsync()
         {
             Status = ePluginStatus.STOPPING;
@@ -82,12 +89,13 @@ namespace VisualHFT.Studies
             if (_settings.Provider.ProviderID != e.ProviderID || _settings.Symbol != e.Symbol)
                 return;
 
-            _lastMarketMidPrice = (decimal)e.MidPrice;
-            var currentOrderSize = e.Asks.Where(x => x.Size.HasValue).Sum(a => (decimal)a.Size) + e.Bids.Where(x => x.Size.HasValue).Sum(b => (decimal)b.Size);  // Sum of all order sizes
-            if (total_L2OrderSize_Ini == 0)
-                total_L2OrderSize_Ini = currentOrderSize;
-            total_L2OrderSize_End = currentOrderSize;
-            DoCalculation();
+            var lobUpdates = e.GetAndResetChangeCounts();
+            lock (_lock)
+            {
+                _orderEvents = lobUpdates.added + lobUpdates.deleted + lobUpdates.updated;
+            }
+            DoCalculationAndSend();
+
         }
         private void TRADES_OnDataReceived(Trade e)
         {
@@ -96,43 +104,49 @@ namespace VisualHFT.Studies
             if (!e.IsBuy.HasValue) //we do not know what it is
                 return;
 
-            if (e.IsBuy.Value)
-                totalExecutedTradeSize += e.Size;  // Add the size of the executed trade
-            else
-                totalExecutedTradeSize -= e.Size;  // Subtract the size of the executed trade
+            lock (_lock)
+            {
+                _tradeCount++;
+            }
+            DoCalculationAndSend();
 
-            DoCalculation();
         }
 
         private void ResetCalculations()
         {
-            total_L2OrderSize_Ini = 0;
-            total_L2OrderSize_End = 0;
-            totalExecutedTradeSize = 0;
+            lock (_lock)
+            {
+                _orderEvents = 0;
+                _tradeCount = 0;
+            }
         }
-
-        protected void DoCalculation()
+        protected void DoCalculationAndSend()
         {
             if (Status != VisualHFT.PluginManager.ePluginStatus.STARTED) return;
 
-            var newItem = new BaseStudyModel();
-            decimal t2oRatio = 0;
-            decimal delta = total_L2OrderSize_End - total_L2OrderSize_Ini;
+            decimal orderToTradeRatio;
 
-            if (delta == 0)
-                t2oRatio = 0;  // Avoid division by zero
-            else
-                t2oRatio = totalExecutedTradeSize / delta;
+            lock (_lock)
+            {
+                if (_tradeCount == 0)
+                    orderToTradeRatio = 0;
+                else
+                    orderToTradeRatio = (decimal)_orderEvents / _tradeCount;
+            }
 
             // Trigger any events or updates based on the new T2O ratio
-            newItem.Value = t2oRatio;
-            newItem.ValueFormatted = Math.Min(t2oRatio, 0.99m).ToString("N1");
+            var newItem = new BaseStudyModel();
+            newItem.Value = orderToTradeRatio;
+            newItem.ValueFormatted = orderToTradeRatio.ToString("N1");
             newItem.MarketMidPrice = _lastMarketMidPrice;
             newItem.Timestamp = HelperTimeProvider.Now;
 
             AddCalculation(newItem);
-
         }
+
+        /// <summary>
+        /// Defines aggregation strategy by taking the latest values from the new item
+        /// </summary>
         protected override void onDataAggregation(BaseStudyModel existing, BaseStudyModel newItem, int counterAggreated)
         {
             //Aggregation: last
@@ -143,11 +157,13 @@ namespace VisualHFT.Studies
             base.onDataAggregation(existing, newItem, counterAggreated);
         }
 
+        /// <summary>
+        /// Resets order events and trade count when a new data point is added to the aggregated series
+        /// </summary>
         protected override void onDataAdded()
         {
             ResetCalculations();
         }
-
 
         protected virtual void Dispose(bool disposing)
         {
@@ -161,7 +177,6 @@ namespace VisualHFT.Studies
                     HelperTrade.Instance.Unsubscribe(TRADES_OnDataReceived);
                     base.Dispose();
                 }
-
             }
         }
         protected override void LoadSettings()

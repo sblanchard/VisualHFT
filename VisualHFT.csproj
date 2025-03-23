@@ -105,9 +105,9 @@
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Gemini\MarketConnectors.Gemini\MarketConnectors.Gemini.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Kraken\MarketConnectors.Kraken.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.KuCoin\MarketConnectors.KuCoin.csproj" />
+    <ProjectReference Include="VisualHFT.Plugins\Studies.L2_OTT_Ratio\Studies.L2_OTT_Ratio.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.LOBImbalance\Studies.LOBImbalance.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.MarketResilience\Studies.MarketResilience.csproj" />
-    <ProjectReference Include="VisualHFT.Plugins\Studies.MarketTradingRatios\Studies.MarketTradingRatios.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.VPIN\Studies.VPIN.csproj" />
   </ItemGroup>
 
@@ -115,7 +115,6 @@
     <Content Include="App.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <None Include="VisualHFT.Plugins\MarketConnectors.Kraken\README.md.bak" />
     <Resource Include="Images\database.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>

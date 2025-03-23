@@ -47,7 +47,6 @@ namespace VisualHFT.Studies
             await base.StartAsync();//call the base first
 
             HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
-            DoCalculation(); //initial call
 
             log.Info($"{this.Name} Plugin has successfully started.");
             Status = ePluginStatus.STARTED;
@@ -83,10 +82,10 @@ namespace VisualHFT.Studies
             e.CalculateMetrics();
             _lobImbalance = e.ImbalanceValue;
             _lobMidPrice = e.MidPrice;
-            DoCalculation();
+            DoCalculationAndSend();
         }
 
-        private void DoCalculation()
+        private void DoCalculationAndSend()
         {
             if (Status != VisualHFT.PluginManager.ePluginStatus.STARTED) return;
             var newItem = new BaseStudyModel();
@@ -94,6 +93,7 @@ namespace VisualHFT.Studies
             newItem.ValueFormatted = _lobImbalance.ToString("N1");
             newItem.Timestamp = HelperTimeProvider.Now;
             newItem.MarketMidPrice = (decimal)_lobMidPrice;
+
             AddCalculation(newItem);
         }
 

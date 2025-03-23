@@ -1,5 +1,4 @@
-﻿using CryptoExchange.Net.CommonObjects;
-using Gemini.Net.Clients;
+﻿using Gemini.Net.Clients;
 using Gemini.Net.Models;
 using MarketConnectors.Gemini.Model;
 using MarketConnectors.Gemini.UserControls;
@@ -10,7 +9,6 @@ using System.IO;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.Interfaces;
 using VisualHFT.Commons.Model;
@@ -20,7 +18,6 @@ using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
 using Websocket.Client;
-using JsonSerializer = System.Text.Json.JsonSerializer;
 using OrderBook = VisualHFT.Model.OrderBook;
 using Trade = VisualHFT.Model.Trade;
 
@@ -756,10 +753,8 @@ namespace MarketConnectors.Gemini
             }
             else
             { 
-                
-                throw new Exception("The socket seems to be disconnected.");
+                //throw new Exception("The socket seems to be disconnected.");
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
-
             }
         }
 

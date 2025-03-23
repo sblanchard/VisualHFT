@@ -150,11 +150,11 @@ namespace MarketConnectors.Kraken
             _timerPing?.Dispose();
 
             foreach (var q in _eventBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _eventBuffers.Clear();
 
             foreach (var q in _tradesBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _tradesBuffers.Clear();
 
             tradePool.Dispose();
@@ -429,7 +429,8 @@ namespace MarketConnectors.Kraken
             trade.ProviderId = _settings.Provider.ProviderID;
             trade.ProviderName = _settings.Provider.ProviderName;
             trade.IsBuy = item.Item2.Quantity > 0;
-            trade.MarketMidPrice = _localOrderBooks[item.Item1].MidPrice;
+            if (_localOrderBooks.TryGetValue(item.Item1, out var lob) && lob != null)
+                trade.MarketMidPrice = lob.MidPrice;
 
             RaiseOnDataReceived(trade);
             tradePool.Return(trade);

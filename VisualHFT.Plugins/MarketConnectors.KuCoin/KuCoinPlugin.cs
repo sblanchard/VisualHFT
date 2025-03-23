@@ -193,11 +193,11 @@ namespace MarketConnectors.KuCoin
             _timerPing?.Dispose();
 
             foreach (var q in _eventBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _eventBuffers.Clear();
 
             foreach (var q in _tradesBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _tradesBuffers.Clear();
 
 
@@ -393,8 +393,7 @@ namespace MarketConnectors.KuCoin
                                 }
                                 else
                                 {
-                                    if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) >
-                                        1)
+                                    if (Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds) > 1)
                                     {
                                         var _msg =
                                             $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.ReceiveTime.ToLocalTime()).TotalSeconds)} seconds.";
@@ -426,6 +425,7 @@ namespace MarketConnectors.KuCoin
                 if (deltaSubscription.Success)
                 {
                     AttachEventHandlers(deltaSubscription.Data);
+                    await Task.Delay(1000); //to let deltas start collecting
                 }
                 else
                 {
@@ -768,7 +768,7 @@ namespace MarketConnectors.KuCoin
                     ProviderID = lob.ProviderID,
                 });
             });
-
+            lob.Sequence = data.Sequence.Value;
             lob.LoadData(
                 _asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),
                 _bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels)

@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.ObjectPool;
 using System.Collections;
 using System.Diagnostics;
-using VisualHFT.Commons.Model;
 
 namespace VisualHFT.Commons.Pools
 {
@@ -31,7 +30,6 @@ namespace VisualHFT.Commons.Pools
             CalculatePercentageUtilization();
             return _pool.Get();
         }
-
         public void Return(IEnumerable<T> listObjs)
         {
             if (listObjs == null)
@@ -51,9 +49,7 @@ namespace VisualHFT.Commons.Pools
         }
         public int AvailableObjects => _availableObjects;
         public double UtilizationPercentage => _utilizationPercentage;
-
         public string? ProviderName { get; set; }
-
         private void CalculatePercentageUtilization()
         {
             if (_maxPoolSize > 0)

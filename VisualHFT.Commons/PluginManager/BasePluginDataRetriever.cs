@@ -232,7 +232,6 @@ namespace VisualHFT.Commons.PluginManager
                     return;
                 }
             }
-            log.Debug(reason);
 
             // Log and notify the error or reason
             LogAndNotify(reason, exception);
@@ -259,9 +258,10 @@ namespace VisualHFT.Commons.PluginManager
                 }
 
                 Random jitter = new Random();
+                _reconnectionAttempt++;
                 int backoffDelay = (int)Math.Pow(2, _reconnectionAttempt) * 1000 + jitter.Next(0, 1000);
                 await Task.Delay(backoffDelay);
-                log.Info($"{this.Name} Reconnection attempt {_reconnectionAttempt} of {maxReconnectionAttempts} after delay {backoffDelay} ms");
+                log.Info($"{this.Name} Reconnection attempt {_reconnectionAttempt} of {maxReconnectionAttempts} after delay {backoffDelay} ms. Reason: {reason}");
 
                 if (!forceStartRegardlessStatus && Status == ePluginStatus.STOPPED_FAILED) //means that a fata error occurred, and user's attention is needed.
                 {

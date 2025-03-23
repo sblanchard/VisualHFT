@@ -141,6 +141,8 @@ namespace MarketConnectors.Bitfinex
                 await deltaSubscription.Data.CloseAsync();
             if (tradesSubscription != null && tradesSubscription.Data != null)
                 await tradesSubscription.Data.CloseAsync();
+            await _socketClient.UnsubscribeAllAsync();
+
             _timerPing?.Stop();
             _timerPing?.Dispose();
 

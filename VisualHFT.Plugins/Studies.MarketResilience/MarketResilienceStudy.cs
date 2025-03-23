@@ -1,6 +1,6 @@
-﻿using System;
+﻿using Studies.MarketResilience.Model;
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using VisualHFT.Commons.Helpers;
@@ -17,136 +17,16 @@ using VisualHFT.UserSettings;
 
 namespace VisualHFT.Studies
 {
-    internal class DepletionState
-    {
-        private OrderBook _iniOrderBook;
-        private OrderBook _endOrderBook;
-        private eLOBSIDE _depletionSide;
-        private eLOBSIDE _recoveredSide;
-        private double? _depletionInitialPrice;
-        private DateTime? _initialTimestamp;
-        private DateTime? _endTimestamp;
-        private TimeSpan _timeout;
-
-        public DepletionState(TimeSpan timeout)
-        {
-            _timeout = timeout;
-        }
-        public eLOBSIDE DepletionSide { get => _depletionSide; }
-
-        public TimeSpan Elapsed
-        {
-            get
-            {
-                if (_initialTimestamp == null || _endTimestamp == null) 
-                    return TimeSpan.Zero;
-                return _endTimestamp.Value - _initialTimestamp.Value;
-            }
-        }
-        public TimeSpan PartialElapsed
-        {
-            get
-            {
-                if (_initialTimestamp == null || _endTimestamp != null)
-                    return TimeSpan.Zero;
-                return HelperTimeProvider.Now - _initialTimestamp.Value;
-            }
-        }
-        public void SetIniOrderBook(OrderBook e, eLOBSIDE depletionSide, double initialDepletionPrice)
-        {
-            if (_iniOrderBook == null)
-                _iniOrderBook = new OrderBook(e.Symbol, e.PriceDecimalPlaces, e.MaxDepth);
-            
-            _iniOrderBook.ShallowCopyFrom(e, null);
-            _endOrderBook = null;
-            _depletionSide = depletionSide;
-            _initialTimestamp = HelperTimeProvider.Now;
-            _endTimestamp = null;
-            _depletionInitialPrice = initialDepletionPrice;
-        }
-        public void SetEndOrderBook(OrderBook e, eLOBSIDE recoveredSide)
-        {
-            if (_endOrderBook == null)
-                _endOrderBook = new OrderBook(e.Symbol, e.PriceDecimalPlaces, e.MaxDepth);
-            _endOrderBook.ShallowCopyFrom(e, null);
-            _recoveredSide = recoveredSide;
-            _endTimestamp = HelperTimeProvider.Now;
-        }
-
-
-
-        public eLOBSIDE GetBookRecoverySide(OrderBook currentOrderBook)
-        {
-            double? bestBid = currentOrderBook.GetTOB(true)?.Price.Value;
-            double? bestAsk = currentOrderBook.GetTOB(false)?.Price.Value;
-
-            if (_depletionSide == eLOBSIDE.BID)
-            {
-                // Check if bids have recovered
-                if (bestBid.HasValue && bestBid >= _depletionInitialPrice)
-                {
-                    return eLOBSIDE.BID; // Bids have recovered
-                }
-                else if (bestAsk.HasValue)
-                {
-                    return eLOBSIDE.ASK; // Asks have taken over
-                }
-            }
-            else if (_depletionSide == eLOBSIDE.ASK)
-            {
-                // Check if asks have recovered
-                if (bestAsk.HasValue && bestAsk <= _depletionInitialPrice)
-                {
-                    return eLOBSIDE.ASK; // Asks have recovered
-                }
-                else if (bestBid.HasValue)
-                {
-                    return eLOBSIDE.BID; // Bids have taken over
-                }
-            }
-
-            return eLOBSIDE.NONE;
-        }
-
-        public bool IsTimeout()
-        {
-            return PartialElapsed > _timeout;
-        }
-        public bool IsRunning()
-        {
-            return (_initialTimestamp.HasValue && !_endTimestamp.HasValue);
-        }
-        public void Reset()
-        {
-            _iniOrderBook = null;
-            _endOrderBook = null;
-            _depletionSide = eLOBSIDE.NONE;
-            _initialTimestamp = null;
-            _endTimestamp = null;
-            _depletionInitialPrice = null;
-        }
-    }
     public class MarketResilienceStudy : BasePluginStudy
     {
         private bool _disposed = false; // to track whether the object has been disposed
         private PlugInSettings _settings;
 
 
-
-
-        private OrderBook _previousOrderBook;
-        private DepletionState _depletionStateHolder;
-        
-        private List<double> _recentSpreads;
-
-        private const int recentSpreadWindowSize = 50;
-        private int LEVELS_TO_CONSUME = 3;
-        private double SPREAD_INCREASED_BY = 1.0; //by 100%
-        private TimeSpan _depletionRecoveryTimeOut = TimeSpan.FromMilliseconds(500);
-
-        private CustomObjectPool<BookItem> _poolBookItems;
-
+        private MarketResilienceCalculator mrCalc;
         private HelperCustomQueue<OrderBook> _QUEUE;
+
+
 
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
@@ -183,11 +63,7 @@ namespace VisualHFT.Studies
 
         public MarketResilienceStudy()
         {
-            _recentSpreads = new List<double>();
-            _depletionStateHolder = new DepletionState(_depletionRecoveryTimeOut);
-
-            _previousOrderBook = new OrderBook();
-
+            mrCalc = new MarketResilienceCalculator();
             _QUEUE = new HelperCustomQueue<OrderBook>($"<OrderBook>_{this.Name}", QUEUE_onRead, QUEUE_onError);
         }
         ~MarketResilienceStudy()
@@ -198,13 +74,12 @@ namespace VisualHFT.Studies
         public override async Task StartAsync()
         {
             await base.StartAsync();//call the base first
-            
-            _poolBookItems = new CustomObjectPool<BookItem>(3000);
-            _recentSpreads.Clear();
-            _depletionStateHolder.Reset();
-            _previousOrderBook.Reset();
+
+            mrCalc.Reset();
+            _QUEUE.Clear();
 
             HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
+            HelperTrade.Instance.Subscribe(TRADE_OnDataReceived);
 
             log.Info($"{this.Name} Plugin has successfully started.");
             Status = ePluginStatus.STARTED;
@@ -215,13 +90,8 @@ namespace VisualHFT.Studies
             Status = ePluginStatus.STOPPING;
             log.Info($"{this.Name} is stopping.");
 
-            _recentSpreads.Clear();
-            _depletionStateHolder.Reset();
-            _previousOrderBook.Reset();
             HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
-            _QUEUE.Clear();
-            _poolBookItems.Dispose();
-            _poolBookItems = null;
+            HelperTrade.Instance.Unsubscribe(TRADE_OnDataReceived);
 
             await base.StopAsync();
         }
@@ -243,65 +113,18 @@ namespace VisualHFT.Studies
                 return;
 
             var currentLOB = new OrderBook();
-            currentLOB.ShallowCopyFrom(e, _poolBookItems);
+            currentLOB.ShallowCopyFrom(e, null);
             _QUEUE.Add(currentLOB);
+        }
+        private void TRADE_OnDataReceived(Trade e)
+        {
+            mrCalc.OnTrade(e);
+            DoCalculationAndSend();
         }
         private void QUEUE_onRead(OrderBook e)
         {
-            if (e == null) return;
-
-            if (_depletionStateHolder.IsRunning())
-            {
-                if (IsSpreadBackToItsAvg(e))
-                {
-                    var recoverySide = _depletionStateHolder.GetBookRecoverySide(e);
-                    if (recoverySide != eLOBSIDE.NONE)
-                    {
-                        _depletionStateHolder.SetEndOrderBook(e, recoverySide);
-                        TimeSpan timeSinceDepletion = _depletionStateHolder.Elapsed;
-                            
-                        var resilienceScore = CalculateMarketResilienceScore(timeSinceDepletion, e, recoverySide);
-                        TriggerOnCalculate(e, recoverySide, resilienceScore);
-
-
-                        ResetMonitoring();
-                    }
-                    else if (_depletionStateHolder.IsTimeout())
-                    {
-                        //never recovered
-                        // => means that Resilience Score = 0 (very weak)
-                        // => with no direction eLOBSIDE.NONE
-                        TriggerOnCalculate(e, eLOBSIDE.NONE, 0);
-
-
-                        ResetMonitoring();
-                    }
-                }
-            }
-            else
-            {
-                // Update average spread
-                _recentSpreads.Add(e.Spread);
-                if (_recentSpreads.Count > recentSpreadWindowSize)
-                    _recentSpreads.RemoveAt(0);
-
-                
-                var depletionState = DepletedSideAndItsPrice(_previousOrderBook.Bids, e.Bids, true, LEVELS_TO_CONSUME);
-                if (depletionState.Item1 == eLOBSIDE.NONE)
-                    depletionState = DepletedSideAndItsPrice(_previousOrderBook.Asks, e.Asks, false, LEVELS_TO_CONSUME);
-                if (depletionState.Item1 != eLOBSIDE.NONE)
-                {
-                    if (IsSpreadIncreased(e))
-                    {
-                        //start watching
-                        _depletionStateHolder.SetIniOrderBook(e, depletionState.Item1, depletionState.Item2);
-                    }
-                }
-                _previousOrderBook.ShallowUpdateFrom(e);
-            }
-
-            ReturnBookItemsToPool(e);
-            
+            mrCalc.OnOrderBookUpdate(e);
+            DoCalculationAndSend();
         }
         private void QUEUE_onError(Exception ex)
         {
@@ -322,161 +145,21 @@ namespace VisualHFT.Studies
             base.onDataAggregation(existing, newItem, counterAggreated);
         }
 
-
-        private void ReturnBookItemsToPool(OrderBook e)
+        protected void DoCalculationAndSend()
         {
-            if (e.Asks != null)
+            if (Status != VisualHFT.PluginManager.ePluginStatus.STARTED) return;
+
+            // Trigger any events or updates based on the new T2O ratio
+            var newItem = new BaseStudyModel
             {
-                foreach (var it in e.Asks)
-                    _poolBookItems.Return(it);
-            }
-            if (e.Bids != null)
-            {
-                foreach (var it in e.Bids)
-                    _poolBookItems.Return(it);
-            }
-        }
-        private Tuple<eLOBSIDE, double> DepletedSideAndItsPrice(CachedCollection<BookItem> previousOrders, CachedCollection<BookItem> currentOrders, bool isBid, int levels)
-        {
-
-            if (previousOrders.Count() < levels || currentOrders.Count() < levels)
-                return new Tuple<eLOBSIDE, double>(eLOBSIDE.NONE, 0); // Not enough levels to compare
-
-            // Compare the top levels between previous and current snapshots
-            for (int i = 0; i < levels; i++)
-            {
-                if (isBid)
-                {
-                    if (currentOrders[i].Price < previousOrders[levels - 1].Price)
-                    {
-                        return new Tuple<eLOBSIDE, double>(eLOBSIDE.BID, previousOrders[0].Price.Value);
-                    }
-                }
-                else
-                {
-                    if (currentOrders[i].Price > previousOrders[levels - 1].Price)
-                    {
-                        return new Tuple<eLOBSIDE, double>(eLOBSIDE.ASK, previousOrders[0].Price.Value);
-                    }
-                }
-            }
-            return new Tuple<eLOBSIDE, double>(eLOBSIDE.NONE, 0);
-        }
-        private bool IsSpreadIncreased(OrderBook currentOrderBook)
-        {
-            if (_previousOrderBook == null)
-            {
-                return false;
-            }
-
-            var averageSpread = _recentSpreads.Average();
-            bool spreadCondition = currentOrderBook.Spread > averageSpread * (1 + SPREAD_INCREASED_BY);
-
-            return spreadCondition;
-        }
-
-        private bool IsSpreadBackToItsAvg(OrderBook currentOrderBook)
-        {
-            if (_previousOrderBook == null)
-            {
-                return false;
-            }
-            var averageSpread = _recentSpreads.Average();
-            bool spreadCondition = currentOrderBook.Spread <= averageSpread;
-
-            return spreadCondition;
-        }
-
-        private decimal CalculateMarketResilienceScore(TimeSpan timeSinceLargeTrade, OrderBook currentOrderBook, eLOBSIDE recoveredSide)
-        {
-            var hasRecoveredOnTheSameSide = _depletionStateHolder.DepletionSide == recoveredSide;
-
-            // Calculate normalized time recovery
-            double normalizedTimeRecovery = 1.00 - (timeSinceLargeTrade.TotalMilliseconds / _depletionRecoveryTimeOut.TotalMilliseconds);
-            normalizedTimeRecovery = Math.Max(0.0, normalizedTimeRecovery); // Ensure it's not negative
-
-            // Calculate normalized spread recovery
-            double normalizedSpreadRecovery = _previousOrderBook.Spread > 0 ? (_previousOrderBook.Spread - currentOrderBook.Spread) / _previousOrderBook.Spread : 0;
-            normalizedSpreadRecovery = Math.Max(0.0, Math.Min(1.0, normalizedSpreadRecovery)); // Ensure within range 0-1
-
-            // Calculate normalized depth recovery
-            double normalizedDepthRecovery = (double)(currentOrderBook.Asks.Count() + currentOrderBook.Bids.Count()) / (_previousOrderBook.Asks.Count() + _previousOrderBook.Bids.Count());
-            normalizedDepthRecovery = Math.Max(0.0, Math.Min(1.0, normalizedDepthRecovery)); // Ensure within range 0-1
-
-            // Weighted average of the metrics
-            double weightTime = 0.5; // Assign a weight to time recovery (can be adjusted)
-            double weightDepth = 0.1; // Assign a weight to depth recovery (can be adjusted)
-            double weightSpread = 0.4;
-
-            double baseScore = weightTime * normalizedTimeRecovery
-                               + weightDepth * normalizedDepthRecovery
-                               + weightSpread * normalizedSpreadRecovery;
-
-            // Apply bias based on recovery side
-            double bias = hasRecoveredOnTheSameSide ? 0.5 : -0.5;
-            double resilienceScore = baseScore + bias;
-
-            // Normalize the score to be between 0 and 1 without clipping
-            resilienceScore = hasRecoveredOnTheSameSide
-                ? 0.5 + (baseScore * 0.5)
-                : 0.5 + baseScore;
-            resilienceScore = Math.Min(1, Math.Max(0, resilienceScore));
-            return (decimal)resilienceScore;
-        }
-
-        private eORDERSIDE CalculateMarketResilienceBias(eLOBSIDE recoveredSide, decimal resilienceScore)
-        {
-            // if "Market Resilience" < 0.3 weak resilience
-            // if "Market Resilience" > 0.7 strong resilience
-
-
-            // if strong resilience AND recovered on the same side => Bias on the opposite direction as the recovery
-            // if weak resilience AND recovered on the opposite side => Bias on the same direction as the recovery
-
-            if (recoveredSide == eLOBSIDE.NONE)
-                return eORDERSIDE.None;
-
-            var _biasSide = eORDERSIDE.None;
-            if (resilienceScore < 0.3m)
-            {
-                if (_depletionStateHolder.DepletionSide == eLOBSIDE.BID && _depletionStateHolder.DepletionSide != recoveredSide)
-                    _biasSide = eORDERSIDE.Sell;
-                if (_depletionStateHolder.DepletionSide == eLOBSIDE.ASK && _depletionStateHolder.DepletionSide != recoveredSide)
-                    _biasSide = eORDERSIDE.Buy;
-            }
-            else if (resilienceScore < 0.7m)
-            {
-                if (_depletionStateHolder.DepletionSide == eLOBSIDE.BID && _depletionStateHolder.DepletionSide == recoveredSide)
-                    _biasSide = eORDERSIDE.Buy;
-                if (_depletionStateHolder.DepletionSide == eLOBSIDE.ASK && _depletionStateHolder.DepletionSide == recoveredSide)
-                    _biasSide = eORDERSIDE.Sell;
-            }
-
-            return _biasSide;
-        }
-        private void TriggerOnCalculate(OrderBook currentOrderBook, eLOBSIDE recoveredSide, decimal resilienceScore)
-        {
-
-            var _biasSide = CalculateMarketResilienceBias(recoveredSide, resilienceScore);
-
-            var newItem = new BaseStudyModel()
-            {
-                Value = resilienceScore,
-                ValueFormatted = resilienceScore.ToString("N1"),
-                Tooltip = "",
-                Timestamp = HelperTimeProvider.Now,
-                MarketMidPrice = (decimal)currentOrderBook.MidPrice,
-                Tag = _biasSide.ToString()
+                Value = mrCalc.CurrentMRScore,
+                ValueFormatted = mrCalc.CurrentMRScore.ToString("N1"),
+                MarketMidPrice = (decimal)mrCalc.MidMarketPrice,
+                Timestamp = HelperTimeProvider.Now
             };
+
             AddCalculation(newItem);
         }
-        private void ResetMonitoring()
-        {
-            _depletionStateHolder.Reset();
-            _previousOrderBook = new OrderBook();
-        }
-
-
 
 
 
@@ -488,12 +171,11 @@ namespace VisualHFT.Studies
                 if (disposing)
                 {
                     HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
+                    HelperTrade.Instance.Unsubscribe(TRADE_OnDataReceived);
+
                     _QUEUE.Dispose();
+                    mrCalc.Dispose();
 
-                    _previousOrderBook?.Dispose();
-
-                    /*_POOL_OB?.Dispose();
-                    _objectPool_BookItem?.Dispose();*/
                     base.Dispose();
                 }
 
