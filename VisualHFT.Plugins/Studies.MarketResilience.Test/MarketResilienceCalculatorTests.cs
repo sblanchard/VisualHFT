@@ -2,12 +2,21 @@ using System;
 using System.Threading;
 using VisualHFT.Model;
 using Studies.MarketResilience.Model;
+using VisualHFT.Studies.MarketResilience.Model;
 using Xunit;
 
 namespace Studies.MarketResilience.Tests
 {
     public class MarketResilienceTests
     {
+        private PlugInSettings _settings;
+        public MarketResilienceTests()
+        {
+            _settings = new PlugInSettings()
+            {
+                MinShockTimeDifference = 500, TradeSizeShockThresholdMultiplier = 3, SpreadShockThresholdMultiplier = 3
+            };
+        }
         private OrderBook CreateOrderBook(decimal spread, decimal bidPrice, decimal askPrice)
         {
             var ob = new OrderBook();
@@ -20,7 +29,7 @@ namespace Studies.MarketResilience.Tests
         [Fact]
         public void MarketResilienceCalculator_ShouldTrigger_AfterShockAndRecovery()
         {
-            var mrCalc = new MarketResilienceCalculator();
+            var mrCalc = new MarketResilienceCalculator(_settings);
 
             // Feed historical stable data
             for (int i = 0; i < 30; i++)
@@ -33,7 +42,7 @@ namespace Studies.MarketResilience.Tests
             mrCalc.OnTrade(new Trade { Size = 5000, Price = 500, Timestamp = DateTime.Now });
             mrCalc.OnOrderBookUpdate(CreateOrderBook(5m, 495, 500));
 
-            Thread.Sleep(400); // Simulate time passing to mimic recovery period
+            Thread.Sleep(_settings.MinShockTimeDifference.Value - 100); // Simulate time passing to mimic recovery period
 
             // Recover spread
             mrCalc.OnOrderBookUpdate(CreateOrderBook(0.5m, 500, 500.5m));
@@ -45,7 +54,7 @@ namespace Studies.MarketResilience.Tests
         [Fact]
         public void MarketResilienceCalculator_ShouldNotTrigger_IfTradeAndSpreadAreTooFarApart()
         {
-            var mrCalc = new MarketResilienceCalculator();
+            var mrCalc = new MarketResilienceCalculator(_settings);
 
             // Feed historical stable data
             for (int i = 0; i < 30; i++)
@@ -56,12 +65,10 @@ namespace Studies.MarketResilience.Tests
 
             // Trigger shocks explicitly
             mrCalc.OnTrade(new Trade { Size = 5000, Price = 500, Timestamp = DateTime.Now });
-            Thread.Sleep(400); // Simulate time passing to mimic recovery period
+            Thread.Sleep(_settings.MinShockTimeDifference.Value + 10); // Simulate time passing to mimic timing out the recovery period
             mrCalc.OnOrderBookUpdate(CreateOrderBook(5m, 495, 500));
 
-            Thread.Sleep(400); // Simulate time passing to mimic recovery period
-
-            // Recover spread
+            // Recover spread => which should be avoid by MR calculation becuase time has passed
             mrCalc.OnOrderBookUpdate(CreateOrderBook(0.5m, 500, 500.5m));
 
             // Verify MR recalculation occurred
@@ -70,7 +77,7 @@ namespace Studies.MarketResilience.Tests
         [Fact]
         public void MarketResilienceWithBias_ShouldDetectBearishBias()
         {
-            var mrCalcBias = new MarketResilienceWithBias();
+            var mrCalcBias = new MarketResilienceWithBias(_settings);
 
             // Feed stable historical data
             for (int i = 0; i < 30; i++)
@@ -96,7 +103,7 @@ namespace Studies.MarketResilience.Tests
         [Fact]
         public void MarketResilienceWithBias_ShouldDetectBullishBias()
         {
-            var mrCalcBias = new MarketResilienceWithBias();
+            var mrCalcBias = new MarketResilienceWithBias(_settings);
 
             // Feed stable historical data
             for (int i = 0; i < 30; i++)
@@ -109,7 +116,7 @@ namespace Studies.MarketResilience.Tests
             mrCalcBias.OnTrade(new Trade { Size = 5000, Price = 501m, Timestamp = DateTime.Now });
             mrCalcBias.OnOrderBookUpdate(CreateOrderBook(5m, 500, 505));
 
-            Thread.Sleep(400); // Simulate market recovery delay
+            Thread.Sleep(_settings.MinShockTimeDifference.Value - 100); // Simulate time passing to mimic recovery period
 
             // Ask side does not fully recover
             mrCalcBias.OnOrderBookUpdate(CreateOrderBook(0.5m, 502.5m, 503)); // ask side still higher than initial
@@ -122,7 +129,7 @@ namespace Studies.MarketResilience.Tests
         [Fact]
         public void MarketResilienceWithBias_ShouldDetectNeutralBias_WhenFullyRecovered()
         {
-            var mrCalcBias = new MarketResilienceWithBias();
+            var mrCalcBias = new MarketResilienceWithBias(_settings);
 
             // Feed stable historical data
             for (int i = 0; i < 30; i++)
@@ -135,7 +142,7 @@ namespace Studies.MarketResilience.Tests
             mrCalcBias.OnTrade(new Trade { Size = 5000, Price = 499.5m, Timestamp = DateTime.Now });
             mrCalcBias.OnOrderBookUpdate(CreateOrderBook(5m, 495, 500));
 
-            Thread.Sleep(400); // Simulate market recovery delay
+            Thread.Sleep(_settings.MinShockTimeDifference.Value - 100); // Simulate time passing to mimic recovery period
 
             // Fully recover bid side
             mrCalcBias.OnOrderBookUpdate(CreateOrderBook(0.5m, 500, 500.5m)); // bid side fully recovers
