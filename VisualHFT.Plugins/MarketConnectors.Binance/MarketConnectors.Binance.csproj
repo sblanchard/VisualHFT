@@ -7,12 +7,56 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\log4net.config" Link="log4net.config" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario1.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario2.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario3.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario4.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario5.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario6.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario7.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario8.json" />
+    <None Remove="Binance_jsonMessages\PrivateMessages_Scenario9.json" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Binance.Net" Version="9.11.1" />
-    <PackageReference Include="log4net" Version="2.0.17" />
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario2.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario3.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario4.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario5.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario6.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario7.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario8.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binance_jsonMessages\PrivateMessages_Scenario9.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\log4net.config" Link="log4net.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Binance.Net" Version="10.19.0" />
+    <PackageReference Include="log4net" Version="3.0.4" />
   </ItemGroup>
 
   <ItemGroup>

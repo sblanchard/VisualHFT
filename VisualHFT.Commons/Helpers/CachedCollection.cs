@@ -385,5 +385,26 @@ namespace VisualHFT.Helpers
             _cachedReadOnlyCollection?.Clear();
             _takeList.Dispose();
         }
+
+        public void TruncateItemsAfterPosition(int v)
+        {
+            lock (_lock)
+            {
+                // If v is negative, clear the entire list.
+                if (v < 0)
+                {
+                    Clear();
+                    return;
+                }
+
+                // If v is within the bounds of the list, remove items after position v.
+                if (v < _internalList.Count - 1)
+                {
+                    _internalList.RemoveRange(v + 1, _internalList.Count - (v + 1));
+                    InvalidateCache();
+                }
+                // If v is greater than or equal to the last index, nothing to truncate.
+            }
+        }
     }
 }

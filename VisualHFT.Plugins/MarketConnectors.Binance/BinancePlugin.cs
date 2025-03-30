@@ -20,11 +20,17 @@ using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
 using MarketConnectors.Binance.UserControls;
+using Binance.Net.Enums;
+using Binance.Net.Objects.Models.Spot.Socket;
+using VisualHFT.Commons.Interfaces;
+using Binance.Net.Objects.Models;
+using Newtonsoft.Json.Linq;
+using System.IO;
 
 namespace MarketConnectors.Binance
 {
 
-    public class BinancePlugin : BasePluginDataRetriever
+    public class BinancePlugin : BasePluginDataRetriever, IDataRetrieverTestable
     {
         private bool _disposed = false; // to track whether the object has been disposed
 
@@ -34,16 +40,19 @@ namespace MarketConnectors.Binance
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
         private HelperCustomQueue<IBinanceEventOrderBook> _eventBuffers;
         private HelperCustomQueue<IBinanceTrade> _tradesBuffers;
-
-        private Dictionary<string, long> _localOrderBooks_LastUpdate = new Dictionary<string, long>();
         private int pingFailedAttempts = 0;
         private System.Timers.Timer _timerPing;
+        private System.Timers.Timer _timerListenKey;
+
         private CallResult<UpdateSubscription> deltaSubscription;
         private CallResult<UpdateSubscription> tradesSubscription;
 
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly CustomObjectPool<VisualHFT.Model.Trade> tradePool = new CustomObjectPool<VisualHFT.Model.Trade>();//pool of Trade objects
+
+        private Dictionary<string, VisualHFT.Model.Order> _localUserOrders = new Dictionary<string, VisualHFT.Model.Order>();
+        private string ListenKey = string.Empty; 
 
         public override string Name { get; set; } = "Binance Plugin";
         public override string Version { get; set; } = "1.0.0";
@@ -110,6 +119,7 @@ namespace MarketConnectors.Binance
             await InitializeSnapshotsAsync();
             await InitializeTradesAsync();
             await InitializePingTimerAsync();
+            await InitializeUserPrivateOrders();
 
             log.Info($"Plugin has successfully started.");
             RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
@@ -225,7 +235,6 @@ namespace MarketConnectors.Binance
             log.Info($"{this.Name}: sending WS Trades Subscription to all symbols.");
             deltaSubscription = await _socketClient.SpotApi.ExchangeData.SubscribeToOrderBookUpdatesAsync(
                 GetAllNonNormalizedSymbols(),
-                //DEPTH_LEVELS,
                 _settings.UpdateIntervalMs,
                 data =>
                 {
@@ -234,7 +243,7 @@ namespace MarketConnectors.Binance
                     {
                         try
                         {
-                            data.Data.EventTime = data.Timestamp;
+                            data.Data.EventTime = data.ReceiveTime;
                             if (Math.Abs(DateTime.Now.Subtract(data.Data.EventTime.ToLocalTime()).TotalSeconds) > 1)
                             {
                                 var _msg = $"Rates are coming late at {Math.Abs(DateTime.Now.Subtract(data.Data.EventTime.ToLocalTime()).TotalSeconds)} seconds.";
@@ -258,6 +267,7 @@ namespace MarketConnectors.Binance
                 }, new CancellationToken());
             if (deltaSubscription.Success)
             {
+                _eventBuffers.PauseConsumer(); //wait for the snapshots
                 AttachEventHandlers(deltaSubscription.Data);
             }
             else
@@ -273,8 +283,6 @@ namespace MarketConnectors.Binance
             {
                 if (!_localOrderBooks.ContainsKey(normalizedSymbol))
                     _localOrderBooks.Add(normalizedSymbol, null);
-                if (!_localOrderBooks_LastUpdate.ContainsKey(normalizedSymbol))
-                    _localOrderBooks_LastUpdate.Add(normalizedSymbol, -1);
             }
 
             foreach (var symbol in GetAllNonNormalizedSymbols())
@@ -291,7 +299,6 @@ namespace MarketConnectors.Binance
                 if (depthSnapshot.Success)
                 {
                     _localOrderBooks[normalizedSymbol] = ToOrderBookModel(depthSnapshot.Data);
-                    _localOrderBooks_LastUpdate[normalizedSymbol] = depthSnapshot.Data.LastUpdateId;
                 }
                 else
                 {
@@ -303,6 +310,304 @@ namespace MarketConnectors.Binance
             _eventBuffers.ResumeConsumer();
 
         }
+        private async Task InitializePingForPrivateListenKeys()
+        {
+            _timerListenKey?.Stop();
+            _timerListenKey?.Dispose();
+
+            _timerListenKey = new System.Timers.Timer(1000 * 60 * 30); // Set the interval to 30 minutes for Refreshing Listen Key
+            _timerListenKey.Elapsed += async (sender, e) => await DoRefreshListenKeysAsync();
+            _timerListenKey.AutoReset = true;
+            _timerListenKey.Enabled = true; // Start the timer
+        }
+        private async Task DoRefreshListenKeysAsync()
+        {
+            try
+            {
+                var data = await _socketClient.SpotApi.Account.KeepAliveUserStreamAsync(this.ListenKey);
+            }
+            catch (Exception ex)
+            {
+
+
+            } 
+        }
+        private async Task InitializeUserPrivateOrders()
+        {
+            if (!string.IsNullOrEmpty(this._settings.ApiKey) && !string.IsNullOrEmpty(this._settings.ApiSecret))
+            {
+                var listenKey = await _socketClient.SpotApi.Account.StartUserStreamAsync(CancellationToken.None);
+                if (!listenKey.Success)
+                {
+                    return;
+                }
+
+                this.ListenKey = listenKey.Data.Result;
+                await InitializePingForPrivateListenKeys();
+
+                var openOrders = await _socketClient.SpotApi.Trading.GetOpenOrdersAsync();
+                if (openOrders != null && openOrders.Success)
+                {
+                    if(openOrders==null || openOrders.Data==null || openOrders.Data.Result==null || openOrders.Data.Result.Count()==0)
+                    {
+                        
+                    }
+                    else
+                    {
+                        foreach (BinanceOrder item in openOrders.Data.Result)
+                        {
+                            InitialUserOrders(item);
+                        }
+                    }
+
+                }
+                await _socketClient.SpotApi.Account.SubscribeToUserDataUpdatesAsync(this.ListenKey, neworder =>
+                { 
+                    log.Info(neworder.Data);
+                    if (neworder.Data != null)
+                    {
+                        BinanceStreamOrderUpdate item = neworder.Data;
+                        UpdateUserOrderBook(item);
+                    }
+                });
+            }
+        }
+
+        private void InitialUserOrders(BinanceOrder item)
+        {
+            VisualHFT.Model.Order localuserOrder;
+            if (!this._localUserOrders.ContainsKey(item.ClientOrderId))
+            {
+                localuserOrder = new VisualHFT.Model.Order();
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.ClOrdId = !string.IsNullOrEmpty(item.ClientOrderId) ? item.ClientOrderId : item.Id.ToString();
+                localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.Quantity = (double)item.Quantity;
+                localuserOrder.PricePlaced = (double)item.Price;
+                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+
+                if (item.TimeInForce == TimeInForce.ImmediateOrCancel)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                }
+                else if (item.TimeInForce == TimeInForce.FillOrKill)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                }
+                this._localUserOrders.Add(item.ClientOrderId, localuserOrder);
+            }
+            else
+            {
+                localuserOrder = this._localUserOrders[item.ClientOrderId];
+            }
+
+            if (item.Type == SpotOrderType.Market)
+            {
+                localuserOrder.OrderType = eORDERTYPE.MARKET;
+            }
+            else if (item.Type == SpotOrderType.LimitMaker || item.Type == SpotOrderType.Limit)
+            {
+                localuserOrder.OrderType = eORDERTYPE.LIMIT;
+            }
+            else
+            {
+                localuserOrder.OrderType = eORDERTYPE.PEGGED;
+            }
+
+
+            if (item.Side == OrderSide.Buy)
+            {
+                localuserOrder.Side = eORDERSIDE.Buy;
+            }
+            if (item.Side == OrderSide.Sell)
+            {
+                localuserOrder.Side = eORDERSIDE.Sell;
+            }
+
+            if (item.Status == OrderStatus.New || item.Status == OrderStatus.PendingNew)
+            {
+                if (item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.Side = eORDERSIDE.Buy;
+                }
+                if (item.Side == OrderSide.Sell)
+                {
+                    localuserOrder.Side = eORDERSIDE.Sell;
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.Quantity = (double)item.Quantity;
+                }
+                localuserOrder.Status = eORDERSTATUS.NEW;
+            }
+            if (item.Status == OrderStatus.Filled)
+            {
+
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.FilledQuantity = (double)(item.QuantityFilled);
+                localuserOrder.Status = eORDERSTATUS.FILLED;
+            }
+            if (item.Status == OrderStatus.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+
+            if (item.Status == OrderStatus.Rejected)
+            {
+                localuserOrder.Status = eORDERSTATUS.REJECTED;
+            }
+
+            if (item.Status == OrderStatus.PartiallyFilled)
+            {
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+            }
+
+
+            if (item.Status == OrderStatus.PendingCancel)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELEDSENT;
+            }
+
+            localuserOrder.LastUpdated = DateTime.Now;
+            //CHECK IF IT IS BEING MODIFIED => REMOVE THE ORIGINAL, SO THE UNIT TEST GETS JUST THE LATEST
+            if (!string.IsNullOrEmpty(item.OriginalClientOrderId) && item.OriginalClientOrderId != item.ClientOrderId)
+            {
+                if (_localUserOrders.TryGetValue(item.OriginalClientOrderId, out var originalOrder))
+                    originalOrder.Status = localuserOrder.Status;
+            }
+
+
+            RaiseOnDataReceived(localuserOrder);
+        }
+
+        private void UpdateUserOrderBook(BinanceStreamOrderUpdate item )
+        {
+            VisualHFT.Model.Order localuserOrder;
+            if (!this._localUserOrders.ContainsKey(item.ClientOrderId))
+            {
+                localuserOrder = new VisualHFT.Model.Order();
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.ClOrdId = !string.IsNullOrEmpty(item.ClientOrderId) ? item.ClientOrderId : item.Id.ToString();
+                localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.OrderID = item.Id;
+                localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                localuserOrder.CreationTimeStamp = item.CreateTime;
+                localuserOrder.Quantity = (double)item.Quantity;
+                localuserOrder.PricePlaced = (double)item.Price;
+                localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+                localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+
+                if (item.TimeInForce == TimeInForce.ImmediateOrCancel)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                }
+                else if (item.TimeInForce == TimeInForce.FillOrKill)
+                {
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                }
+                this._localUserOrders.Add(item.ClientOrderId, localuserOrder);
+            }
+            else
+            {
+                localuserOrder = this._localUserOrders[item.ClientOrderId];
+            }
+
+            if (item.Type == SpotOrderType.Market)
+            {
+                localuserOrder.OrderType = eORDERTYPE.MARKET;
+            }
+            else
+            {
+                localuserOrder.OrderType = eORDERTYPE.LIMIT;
+            }
+
+
+            if (item.Side == OrderSide.Buy)
+            {
+                localuserOrder.Side = eORDERSIDE.Buy;
+            }
+            if (item.Side == OrderSide.Sell)
+            {
+                localuserOrder.Side = eORDERSIDE.Sell;
+            }
+
+            if (item.Status == OrderStatus.New || item.Status == OrderStatus.PendingNew)
+            {
+                if (item.Side == OrderSide.Buy)
+                {
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.Side = eORDERSIDE.Buy;
+                }
+                if (item.Side == OrderSide.Sell)
+                {
+                    localuserOrder.Side = eORDERSIDE.Sell;
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.Quantity = (double)item.Quantity;
+                }
+                localuserOrder.Status = eORDERSTATUS.NEW;
+            }
+            if (item.Status == OrderStatus.Filled)
+            {
+
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.FilledQuantity = (double)(item.QuantityFilled);
+                localuserOrder.Status = eORDERSTATUS.FILLED;
+            }
+            if (item.Status == OrderStatus.Canceled)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELED;
+            }
+
+            if (item.Status == OrderStatus.Rejected)
+            {
+                localuserOrder.Status = eORDERSTATUS.REJECTED;
+            }
+
+            if (item.Status == OrderStatus.PartiallyFilled)
+            {
+                localuserOrder.BestAsk = (double)item.Price;
+                localuserOrder.BestBid = (double)item.Price;
+                localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+            }
+
+
+            if (item.Status == OrderStatus.PendingCancel)
+            {
+                localuserOrder.Status = eORDERSTATUS.CANCELEDSENT;
+            }
+
+            localuserOrder.LastUpdated = DateTime.Now;
+            //CHECK IF IT IS BEING MODIFIED => REMOVE THE ORIGINAL, SO THE UNIT TEST GETS JUST THE LATEST
+            if (!string.IsNullOrEmpty(item.OriginalClientOrderId) && item.OriginalClientOrderId != item.ClientOrderId)
+            {
+                if (_localUserOrders.TryGetValue(item.OriginalClientOrderId, out var originalOrder))
+                    originalOrder.Status = localuserOrder.Status;
+            }
+
+
+
+            RaiseOnDataReceived(localuserOrder);
+        }
+
         private async Task InitializePingTimerAsync()
         {
             _timerPing?.Stop();
@@ -318,11 +623,6 @@ namespace MarketConnectors.Binance
         private void eventBuffers_onReadAction(IBinanceEventOrderBook eventData)
         {
             var symbol = GetNormalizedSymbol(eventData.Symbol);
-
-            //check last Update (coming from the snapshot)
-            if (eventData.LastUpdateId <= _localOrderBooks_LastUpdate[symbol]) return;
-
-
             UpdateOrderBook(eventData, symbol);
 
         }
@@ -419,11 +719,23 @@ namespace MarketConnectors.Binance
 
         private void UpdateOrderBook(IBinanceEventOrderBook lob_update, string normalizedSymbol)
         {
+            
             if (!_localOrderBooks.ContainsKey(normalizedSymbol))
                 return;
 
+
             var local_lob = _localOrderBooks[normalizedSymbol];
             DateTime ts = lob_update.EventTime.ToLocalTime();
+
+            //SEQUENCE CHECK
+            if (lob_update.LastUpdateId <= local_lob.Sequence)  //skip lower sequences
+                return;
+
+            if (lob_update.FirstUpdateId > local_lob.Sequence &&
+                lob_update.FirstUpdateId != local_lob.Sequence + 1)
+                throw new Exception("Detected sequence gap.");
+
+
 
             foreach (var item in lob_update.Bids)
             {
@@ -479,9 +791,12 @@ namespace MarketConnectors.Binance
                         Symbol = normalizedSymbol
                     });
             }
+            local_lob.Sequence = lob_update.LastUpdateId; //update the sequence
 
             RaiseOnDataReceived(local_lob);
-        }
+        } 
+        
+         
         private async Task DoPingAsync()
         {
             try
@@ -570,6 +885,7 @@ namespace MarketConnectors.Binance
                     ProviderID = lob.ProviderID,
                 });
             });
+            lob.Sequence = data.LastUpdateId;
             lob.LoadData(
                 _asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),
                 _bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels)
@@ -675,6 +991,235 @@ namespace MarketConnectors.Binance
             // Display the view, perhaps in a dialog or a new window.
             view.DataContext = viewModel;
             return view;
+        }
+
+
+        //FOR UNIT TESTING PURPOSE
+        public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
+        {
+
+            var localModel = new BinanceOrderBook();
+            localModel.Symbol = snapshotModel.Symbol;
+            localModel.Bids = snapshotModel.Bids.Select(x => new BinanceOrderBookEntry() {  Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal()}).ToList();
+            localModel.Asks = snapshotModel.Asks.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+            localModel.LastUpdateId = sequence;
+            _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
+
+            var symbol = snapshotModel.Symbol;
+
+            if (!_localOrderBooks.ContainsKey(symbol))
+            {
+                _localOrderBooks.Add(symbol, ToOrderBookModel(localModel));
+            }
+            _localOrderBooks[symbol] = ToOrderBookModel(localModel);
+
+            RaiseOnDataReceived(_localOrderBooks[symbol]);
+
+        }
+
+        public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
+        {
+            var symbol = bidDeltaModel?.FirstOrDefault()?.Symbol;
+            if (symbol == null)
+                symbol = askDeltaModel?.FirstOrDefault()?.Symbol;
+            if (string.IsNullOrEmpty(symbol))
+                throw new Exception("Couldn't find the symbol for this model.");
+            var ts = DateTime.Now;
+
+            var localModel = new BinanceEventOrderBook();
+            localModel.Bids = bidDeltaModel?.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+            localModel.Asks = askDeltaModel?.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+            long minSequence = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));
+            long maxSequence = Math.Max(bidDeltaModel.Max(x => x.Sequence), askDeltaModel.Max(x => x.Sequence));
+            localModel.FirstUpdateId = minSequence;
+            localModel.LastUpdateId = maxSequence;
+
+
+            UpdateOrderBook(localModel, symbol);
+        }
+
+        public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
+        {
+            //depending on the scenario, load its message(s)
+            string _file = "";
+            if (scenario == eTestingPrivateMessageScenario.SCENARIO_1)
+                _file = "PrivateMessages_Scenario1.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_2)
+                _file = "PrivateMessages_Scenario2.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_3)
+                _file = "PrivateMessages_Scenario3.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_4)
+                _file = "PrivateMessages_Scenario4.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_5)
+                _file = "PrivateMessages_Scenario5.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_6)
+                _file = "PrivateMessages_Scenario6.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_7)
+                _file = "PrivateMessages_Scenario7.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_8)
+                _file = "PrivateMessages_Scenario8.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_9)
+            {
+                _file = "PrivateMessages_Scenario9.json";
+                throw new Exception("Messages collected for this scenario don't look good.");
+            }
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_10)
+            {
+                _file = "PrivateMessages_Scenario10.json";
+                throw new Exception("Messages were not collected for this scenario.");
+            }
+
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"Binance_JsonMessages/{_file}"));
+             
+            //DESERIALIZE EXCHANGES MODEL
+            List<BinanceStreamOrderUpdate> modelList = new List<BinanceStreamOrderUpdate>();
+            var dataEvents = new List<BinanceStreamOrderUpdate>();
+            var jsonArray = JArray.Parse(jsonString);
+            foreach (var jsonObject in jsonArray)
+            {
+                JToken dataToken = jsonObject["data"];
+                string dataJsonString = dataToken.ToString();
+                 
+                BinanceStreamOrderUpdate _data = JsonParser.Parse(dataJsonString);
+
+                if (_data != null)
+                        modelList.Add(_data);
+                 
+            }
+            //END UPDATE VISUALHFT CORE
+
+
+            //UPDATE VISUALHFT CORE & CREATE MODEL TO RETURN
+            if (!modelList.Any())
+                throw new Exception("No data was found in the json file.");
+            foreach (var item in modelList)
+            {
+                UpdateUserOrderBook(item);
+            }
+            //END UPDATE VISUALHFT CORE
+
+
+            //CREATE MODEL TO RETURN (First, identify the order that was sent, then use that one with the updated values)
+            var dicOrders = new Dictionary<string, VisualHFT.Model.Order>(); 
+            foreach (var item in modelList)
+            {
+
+                VisualHFT.Model.Order localuserOrder;
+                if (!dicOrders.ContainsKey(item.ClientOrderId))
+                {
+                    localuserOrder = new VisualHFT.Model.Order();
+                    localuserOrder.OrderID = item.Id;
+                    localuserOrder.ClOrdId = !string.IsNullOrEmpty(item.ClientOrderId) ? item.ClientOrderId : item.Id.ToString();
+                    localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.OrderID = item.Id;
+                    localuserOrder.ProviderId = _settings!.Provider.ProviderID;
+                    localuserOrder.ProviderName = _settings.Provider.ProviderName;
+                    localuserOrder.CreationTimeStamp = item.CreateTime;
+                    localuserOrder.Quantity = (double)item.Quantity;
+                    localuserOrder.PricePlaced = (double)item.Price;
+                    localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
+                    localuserOrder.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+                    if (item.TimeInForce == TimeInForce.ImmediateOrCancel)
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.IOC;
+                    }
+                    else if (item.TimeInForce == TimeInForce.FillOrKill)
+                    {
+                        localuserOrder.TimeInForce = eORDERTIMEINFORCE.FOK;
+                    }
+                    if (item.Type == SpotOrderType.Market)
+                    {
+                        localuserOrder.OrderType = eORDERTYPE.MARKET;
+                    }
+                    else
+                    {
+                        localuserOrder.OrderType = eORDERTYPE.LIMIT;
+                    }
+
+                    if (item.Side == OrderSide.Buy)
+                    {
+                        localuserOrder.Side = eORDERSIDE.Buy;
+                    }
+                    else if (item.Side == OrderSide.Sell)
+                    {
+                        localuserOrder.Side = eORDERSIDE.Sell;
+                    }
+
+
+
+                    dicOrders.Add(item.ClientOrderId, localuserOrder);
+                }
+                else
+                {
+                    localuserOrder = dicOrders[item.ClientOrderId];
+                }
+
+
+                if (item.Status == OrderStatus.New || item.Status == OrderStatus.PendingNew)
+                {
+                    if (item.Side == OrderSide.Buy)
+                    {
+                        localuserOrder.CreationTimeStamp = item.CreateTime;
+                        localuserOrder.PricePlaced = (double)item.Price;
+                        localuserOrder.BestBid = (double)item.Price;
+                        localuserOrder.Side = eORDERSIDE.Buy;
+                    }
+                    if (item.Side == OrderSide.Sell)
+                    {
+                        localuserOrder.Side = eORDERSIDE.Sell;
+                        localuserOrder.BestAsk = (double)item.Price;
+                        localuserOrder.CreationTimeStamp = item.CreateTime;
+                        localuserOrder.Quantity = (double)item.Quantity;
+                    }
+                    localuserOrder.Status = eORDERSTATUS.NEW;
+                }
+                if (item.Status == OrderStatus.Filled)
+                {
+
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.FilledQuantity = (double)(item.QuantityFilled);
+                    localuserOrder.Status = eORDERSTATUS.FILLED;
+                }
+                if (item.Status == OrderStatus.Canceled)
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELED;
+                }
+
+                if (item.Status == OrderStatus.Rejected)
+                {
+                    localuserOrder.Status = eORDERSTATUS.REJECTED;
+                }
+
+                if (item.Status == OrderStatus.PartiallyFilled)
+                {
+                    localuserOrder.BestAsk = (double)item.Price;
+                    localuserOrder.BestBid = (double)item.Price;
+                    localuserOrder.Status = eORDERSTATUS.PARTIALFILLED;
+                }
+
+
+                if (item.Status == OrderStatus.PendingCancel)
+                {
+                    localuserOrder.Status = eORDERSTATUS.CANCELEDSENT;
+                }
+                localuserOrder.LastUpdated = DateTime.Now;
+
+                
+                //CHECK IF IT IS BEING MODIFIED => REMOVE THE ORIGINAL, SO THE UNIT TEST GETS JUST THE LATEST
+                if (!string.IsNullOrEmpty(item.OriginalClientOrderId) && item.OriginalClientOrderId != item.ClientOrderId)
+                {
+                    if (dicOrders.TryGetValue(item.OriginalClientOrderId, out var originalOrder))
+                        originalOrder.Status = localuserOrder.Status;
+                }
+
+            }
+            //END CREATE MODEL TO RETURN
+
+
+            return dicOrders.Values.ToList();
         }
     }
 }

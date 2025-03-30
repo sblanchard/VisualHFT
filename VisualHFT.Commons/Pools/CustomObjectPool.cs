@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.ObjectPool;
 using System.Collections;
 using System.Diagnostics;
-using VisualHFT.Commons.Model;
 
 namespace VisualHFT.Commons.Pools
 {
@@ -31,7 +30,6 @@ namespace VisualHFT.Commons.Pools
             CalculatePercentageUtilization();
             return _pool.Get();
         }
-
         public void Return(IEnumerable<T> listObjs)
         {
             if (listObjs == null)
@@ -51,9 +49,7 @@ namespace VisualHFT.Commons.Pools
         }
         public int AvailableObjects => _availableObjects;
         public double UtilizationPercentage => _utilizationPercentage;
-
         public string? ProviderName { get; set; }
-
         private void CalculatePercentageUtilization()
         {
             if (_maxPoolSize > 0)
@@ -65,11 +61,11 @@ namespace VisualHFT.Commons.Pools
                     var typeName = typeof(T).Name;
                     var stackTrace = new StackTrace();
                     var callingMethod = stackTrace.GetFrame(2).GetMethod();
-                    var caller = callingMethod.ReflectedType != null
+                    /*var caller = callingMethod.ReflectedType != null
                         ? callingMethod.ReflectedType.Name
-                        : "Unknown" + "." + callingMethod.Name;
+                        : "Unknown" + "." + callingMethod.Name;*/
 
-                    log.Warn($"CustomObjectPool<{typeName}>: called by {caller} {ProviderName} - utilization: {_utilizationPercentage.ToString("p2")}");
+                    log.Warn($"CustomObjectPool<{typeName}> -> {ProviderName}-> {callingMethod.ToString()} - utilization: {_utilizationPercentage.ToString("p2")}");
                     _lastUpdateLog = DateTime.Now;
                 }
             }

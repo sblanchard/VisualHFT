@@ -7,7 +7,6 @@ namespace VisualHFT.Commons.Helpers
 {
     public class HelperCommon
     {
-        public static IDataTradeRetriever EXECUTEDORDERS = new GenericTradesRetriever();
         public static HelperStrategy ACTIVESTRATEGIES = new HelperStrategy();
 
 

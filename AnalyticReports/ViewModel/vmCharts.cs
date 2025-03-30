@@ -16,13 +16,14 @@ namespace VisualHFT.AnalyticReports.ViewModel
 
             //#region Hours of the day
             //var HourSerieTotal = HelperAnalytics.GetEquityCurveByHour(signals, initialDeposit);
+            /*
             HourSerieWins = (from x in signals.Where(X => X.PipsPnLInCurrency.Value >= 0)
                                  group x by new { date = new DateTime(x.CreationTimeStamp.Year, x.CreationTimeStamp.Month, x.CreationTimeStamp.Day, x.CreationTimeStamp.Hour, 0, 0) } into g
                                  select new cHourSerie { Date = g.Key.date.ToDateTime(), PLAmount = g.Sum(s => s.PipsPnLInCurrency.ToDouble()), VolumeQty = g.Count() }).ToList();
             HourSerieLosses = (from x in signals.Where(X => X.PipsPnLInCurrency.Value < 0)
                                    group x by new { date = new DateTime(x.CreationTimeStamp.Year, x.CreationTimeStamp.Month, x.CreationTimeStamp.Day, x.CreationTimeStamp.Hour, 0, 0) } into g
                                    select new cHourSerie { Date = g.Key.date.ToDateTime(), PLAmount = g.Sum(s => Math.Abs(s.PipsPnLInCurrency.ToDouble())), VolumeQty = g.Count() }).ToList();
-
+            */
 
 
             //#region Hour QTY

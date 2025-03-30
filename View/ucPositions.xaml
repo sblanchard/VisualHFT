@@ -42,7 +42,7 @@
                     <TabItem Header="POSITIONS" Style="{StaticResource MaterialDesignTabItem}" IsSelected="True" >
                         <Grid>
                             <DataGrid Style="{DynamicResource MaterialDesignDataGrid}" AutoGenerateColumns="False" 
-                                          ItemsSource="{Binding PositionsManager}" 
+                                          ItemsSource="{Binding Positions}" 
                                           CanUserDeleteRows="False" CanUserAddRows="False" ClipboardCopyMode="IncludeHeader"  HeadersVisibility="Column"  IsReadOnly="True" BorderThickness="0" CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserResizeRows="False" CanUserSortColumns="False"
                                           EnableRowVirtualization="True"
                                           EnableColumnVirtualization="True"

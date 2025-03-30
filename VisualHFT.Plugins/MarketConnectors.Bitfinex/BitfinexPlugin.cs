@@ -10,9 +10,11 @@ using MarketConnectors.Bitfinex.UserControls;
 using MarketConnectors.Bitfinex.ViewModel;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CryptoExchange.Net.Converters.JsonNet;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.UserSettings;
 using VisualHFT.Commons.Pools;
@@ -21,10 +23,15 @@ using VisualHFT.Commons.Helpers;
 using CryptoExchange.Net.Objects.Sockets;
 using VisualHFT.Enums;
 using VisualHFT.PluginManager;
+using VisualHFT.Commons.Interfaces;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
+using VisualHFT.Commons.Exceptions;
+using CryptoExchange.Net.Interfaces;
 
 namespace MarketConnectors.Bitfinex
 {
-    public class BitfinexPlugin : BasePluginDataRetriever
+    public class BitfinexPlugin : BasePluginDataRetriever, IDataRetrieverTestable
     {
         private bool _disposed = false; // to track whether the object has been disposed
 
@@ -32,11 +39,8 @@ namespace MarketConnectors.Bitfinex
         private BitfinexSocketClient _socketClient;
         private BitfinexRestClient _restClient;
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
-        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>> _eventBuffers =
-            new Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>>();
-
-        private Dictionary<string, HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>> _tradesBuffers =
-            new Dictionary<string, HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>>();
+        private Dictionary<string, HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>> _eventBuffers = new();
+        private Dictionary<string, HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>> _tradesBuffers = new();
 
         private int pingFailedAttempts = 0;
         private System.Timers.Timer _timerPing;
@@ -44,7 +48,6 @@ namespace MarketConnectors.Bitfinex
         private CallResult<UpdateSubscription> tradesSubscription;
 
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
         private readonly CustomObjectPool<VisualHFT.Model.Trade> tradePool = new CustomObjectPool<VisualHFT.Model.Trade>();//pool of Trade objects
 
 
@@ -83,6 +86,7 @@ namespace MarketConnectors.Bitfinex
                     options.ApiCredentials = new ApiCredentials(_settings.ApiKey, _settings.ApiSecret);
                 options.Environment = BitfinexEnvironment.Live;
             });
+
             try
             {
                 await InternalStartAsync();
@@ -91,8 +95,6 @@ namespace MarketConnectors.Bitfinex
                 log.Info($"Plugin has successfully started.");
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
                 Status = ePluginStatus.STARTED;
-
-
             }
             catch (Exception ex)
             {
@@ -109,12 +111,13 @@ namespace MarketConnectors.Bitfinex
             foreach (var symbol in GetAllNormalizedSymbols())
             {
                 _eventBuffers.Add(symbol, new HelperCustomQueue<Tuple<DateTime, string, BitfinexOrderBookEntry>>($"<Tuple<DateTime, string, BitfinexOrderBookEntry>>_{this.Name.Replace(" Plugin", "")}", eventBuffers_onReadAction, eventBuffers_onErrorAction));
-                _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>($"<Tuple<DateTime, string, BitfinexOrderBookEntry>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
+                _tradesBuffers.Add(symbol, new HelperCustomQueue<Tuple<string, BitfinexTradeSimple>>($"<Tuple<DateTime, string, BitfinexTradeSimple>>_{this.Name.Replace(" Plugin", "")}", tradesBuffers_onReadAction, tradesBuffers_onErrorAction));
             }
 
+            await InitializeDeltasAsync();
             await InitializeSnapshotsAsync();
             await InitializeTradesAsync();
-            await InitializeDeltasAsync();
+            await InitializeUserPrivateOrders();
             await InitializePingTimerAsync();
         }
         public override async Task StopAsync()
@@ -130,7 +133,6 @@ namespace MarketConnectors.Bitfinex
         }
         public async Task ClearAsync()
         {
-
             UnattachEventHandlers(deltaSubscription?.Data);
             UnattachEventHandlers(tradesSubscription?.Data);
             if (_socketClient != null)
@@ -139,15 +141,17 @@ namespace MarketConnectors.Bitfinex
                 await deltaSubscription.Data.CloseAsync();
             if (tradesSubscription != null && tradesSubscription.Data != null)
                 await tradesSubscription.Data.CloseAsync();
+            await _socketClient.UnsubscribeAllAsync();
+
             _timerPing?.Stop();
             _timerPing?.Dispose();
 
             foreach (var q in _eventBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _eventBuffers.Clear();
 
             foreach (var q in _tradesBuffers)
-                q.Value.Clear();
+                q.Value.Stop();
             _tradesBuffers.Clear();
 
 
@@ -181,7 +185,7 @@ namespace MarketConnectors.Bitfinex
                             {
                                 foreach (var item in trade.Data)
                                 {
-                                    item.Timestamp = trade.Timestamp; //not sure why these are different
+                                    item.Timestamp = trade.ReceiveTime; //not sure why these are different
                                     _traderQueueRef.Add(
                                         new Tuple<string, BitfinexTradeSimple>(_normalizedSymbol, item));
                                 }
@@ -206,16 +210,82 @@ namespace MarketConnectors.Bitfinex
                 }
             }
         }
+        private async Task InitializeUserPrivateOrders()
+        {
+            if (string.IsNullOrEmpty(this._settings.ApiKey) && !string.IsNullOrEmpty(this._settings.ApiSecret))
+            {
+                await _socketClient.SpotApi.SubscribeToUserUpdatesAsync(async neworder =>
+                {
+                    log.Info(neworder.Data);
+                    if (neworder.Data != null)
+                    {
+                        IEnumerable<BitfinexOrder> item = neworder.Data;
+
+                        foreach (var order in item)
+                        {
+                            await UpdateUserOrder(order);
+                        }
+                    }
+                });
+            }
+        }
+        private async Task UpdateUserOrder(BitfinexOrder item)
+        {
+            var order = new VisualHFT.Model.Order()
+            {
+                OrderID = item.Id,
+                CreationTimeStamp = item.CreateTime,
+                PricePlaced = item.Price.ToDouble(),
+                Quantity = item.Quantity.ToDouble(),
+                ProviderId = _settings.Provider.ProviderID,
+                ProviderName = _settings.Provider.ProviderName,
+                Symbol = item.Symbol,
+                Side = item.Side == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell,
+                ClOrdId = item.ClientOrderId.ToString()
+            };
+            if (item.Type != OrderType.ExchangeMarket && item.Type != OrderType.Market)
+                order.Quantity = item.Quantity.ToDouble();
+
+
+            if (item.Type == OrderType.ExchangeFillOrKill || item.Type == OrderType.FillOrKill)
+                order.TimeInForce = eORDERTIMEINFORCE.FOK;
+            else if (item.Type == OrderType.ExchangeImmediateOrCancel || item.Type == OrderType.ImmediateOrCancel)
+                order.TimeInForce = eORDERTIMEINFORCE.IOC;
+            else
+                order.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+            if (item.Type == OrderType.Market || item.Type == OrderType.ExchangeMarket)
+                order.OrderType = eORDERTYPE.MARKET;
+            else
+                order.OrderType = eORDERTYPE.LIMIT;
+
+            if (item.Status == OrderStatus.Active)
+            {
+                order.PricePlaced = item.Price.ToDouble();
+                order.Quantity = item.Quantity.ToDouble();
+                order.Status = eORDERSTATUS.NEW;
+            }
+            else if (item.Status == OrderStatus.Canceled)
+                order.Status = eORDERSTATUS.CANCELED;
+            else if (item.Status == OrderStatus.Executed || item.Status == OrderStatus.ForcefullyExecuted || item.Status == OrderStatus.PartiallyFilled)
+            {
+                order.Status = (item.Status == OrderStatus.PartiallyFilled ? eORDERSTATUS.PARTIALFILLED : eORDERSTATUS.FILLED);
+                order.FilledQuantity = order.Quantity - item.QuantityRemaining.ToDouble();
+                order.FilledPrice = item.PriceAverage.ToDouble();
+            }
+
+            order.LastUpdated = DateTime.Now;
+            RaiseOnDataReceived(order);
+        }
         private async Task InitializeDeltasAsync()
         {
             foreach (var symbol in GetAllNonNormalizedSymbols())
             {
                 var normalizedSymbol = GetNormalizedSymbol(symbol);
-                log.Info($"{this.Name}: sending WS Trades Subscription {normalizedSymbol} ");
+                log.Info($"{this.Name}: sending WS Deltas Subscription {normalizedSymbol} ");
                 deltaSubscription = await _socketClient.SpotApi.SubscribeToOrderBookUpdatesAsync(
                     symbol,
-                    Precision.PrecisionLevel0,
-                    Frequency.Realtime,
+                    Precision.PrecisionLevel0, Frequency.Realtime,
                     _settings.DepthLevels,
                     data =>
                     {
@@ -224,11 +294,18 @@ namespace MarketConnectors.Bitfinex
                         {
                             try
                             {
-                                foreach (var item in data.Data)
+                                if (data.UpdateType == SocketUpdateType.Snapshot)
                                 {
-                                    _eventBuffers[normalizedSymbol].Add(
-                                        new Tuple<DateTime, string, BitfinexOrderBookEntry>(
-                                            data.Timestamp.ToLocalTime(), normalizedSymbol, item));
+                                    UpdateOrderBookSnapshot(data.Data, normalizedSymbol);
+                                }
+                                else
+                                {
+                                    foreach (var item in data.Data)
+                                    {
+                                        _eventBuffers[normalizedSymbol].Add(
+                                            new Tuple<DateTime, string, BitfinexOrderBookEntry>(
+                                                data.ReceiveTime.ToLocalTime(), normalizedSymbol, item));
+                                    }
                                 }
                             }
                             catch (Exception ex)
@@ -308,7 +385,7 @@ namespace MarketConnectors.Bitfinex
             trade.ProviderId = _settings.Provider.ProviderID;
             trade.ProviderName = _settings.Provider.ProviderName;
             trade.IsBuy = item.Item2.Quantity > 0;
-            trade.MarketMidPrice = _localOrderBooks[item.Item1].MidPrice;
+            trade.MarketMidPrice = _localOrderBooks[item.Item1]?.MidPrice ?? 0;
 
             RaiseOnDataReceived(trade);
             tradePool.Return(trade);
@@ -381,42 +458,6 @@ namespace MarketConnectors.Bitfinex
         #endregion
 
 
-        private void UpdateOrderBook(BitfinexOrderBookEntry lob_update, string symbol, DateTime ts)
-        {
-            if (!_localOrderBooks.ContainsKey(symbol))
-                return;
-            if (lob_update == null)
-                return;
-
-            var local_lob = _localOrderBooks[symbol];
-
-            if (lob_update.Count > 0) //add or update level
-            {
-                bool isBid = lob_update.Quantity > 0;
-                var delta = new DeltaBookItem()
-                {
-                    //EntryID = lob_update.Price.ToString(),
-                    Price = (double)lob_update.Price,
-                    Size = (double)Math.Abs(lob_update.Quantity),
-                    IsBid = isBid,
-                    LocalTimeStamp = DateTime.Now,
-                    ServerTimeStamp = ts,
-                    Symbol = local_lob.Symbol,
-                    MDUpdateAction = eMDUpdateAction.None,
-                };
-                local_lob.AddOrUpdateLevel(delta);
-            }
-            else if (Math.Abs(lob_update.Quantity) == 1)
-            {
-                local_lob.DeleteLevel(new DeltaBookItem()
-                {
-                    IsBid = lob_update.Quantity == 1,
-                    Price = (double)lob_update.Price
-                });
-            }
-
-            RaiseOnDataReceived(local_lob);
-        }
         private async Task DoPingAsync()
         {
             try
@@ -472,44 +513,100 @@ namespace MarketConnectors.Bitfinex
             lob.ProviderName = _settings.Provider.ProviderName;
             lob.SizeDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.Asks.Select(x => x.Quantity));
 
-            var _asks = new List<VisualHFT.Model.BookItem>();
-            var _bids = new List<VisualHFT.Model.BookItem>();
             data.Asks.ToList().ForEach(x =>
             {
-                _asks.Add(new VisualHFT.Model.BookItem()
+                lob.AddOrUpdateLevel(new DeltaBookItem()
                 {
                     IsBid = false,
                     Price = (double)x.Price,
                     Size = (double)x.Quantity,
                     LocalTimeStamp = DateTime.Now,
                     ServerTimeStamp = DateTime.Now,
-                    Symbol = lob.Symbol,
-                    PriceDecimalPlaces = lob.PriceDecimalPlaces,
-                    SizeDecimalPlaces = lob.SizeDecimalPlaces,
-                    ProviderID = lob.ProviderID,
+                    Symbol = symbol,
+                    MDUpdateAction = eMDUpdateAction.New,
                 });
             });
             data.Bids.ToList().ForEach(x =>
             {
-                _bids.Add(new VisualHFT.Model.BookItem()
+                lob.AddOrUpdateLevel(new DeltaBookItem()
                 {
                     IsBid = true,
                     Price = (double)x.Price,
                     Size = (double)x.Quantity,
                     LocalTimeStamp = DateTime.Now,
                     ServerTimeStamp = DateTime.Now,
-                    Symbol = lob.Symbol,
-                    PriceDecimalPlaces = lob.PriceDecimalPlaces,
-                    SizeDecimalPlaces = lob.SizeDecimalPlaces,
-                    ProviderID = lob.ProviderID,
+                    Symbol = symbol,
+                    MDUpdateAction = eMDUpdateAction.New,
                 });
             });
 
-            lob.LoadData(
-                _asks.OrderBy(x => x.Price).Take(_settings.DepthLevels),
-                _bids.OrderByDescending(x => x.Price).Take(_settings.DepthLevels)
-                );
             return lob;
+        }
+        private void UpdateOrderBookSnapshot(IEnumerable<BitfinexOrderBookEntry> data, string symbol)
+        {
+            if (!_localOrderBooks.TryGetValue(symbol, out VisualHFT.Model.OrderBook? lob))
+            {
+                return;
+            }
+            lob.Clear(); //reset order book
+
+            data.ToList().ForEach(x =>
+            {
+                lob.AddOrUpdateLevel(new DeltaBookItem()
+                {
+                    IsBid = (x.Quantity > 0),
+                    Price = (double)x.Price,
+                    Size = (double)Math.Abs(x.Quantity),
+                    LocalTimeStamp = DateTime.Now,
+                    ServerTimeStamp = DateTime.Now,
+                    Symbol = symbol,
+                    MDUpdateAction = eMDUpdateAction.New,
+                });
+            });
+        }
+        private void UpdateOrderBook(BitfinexOrderBookEntry lob_update, string symbol, DateTime ts)
+        {
+            if (!_localOrderBooks.ContainsKey(symbol))
+                return;
+            if (lob_update == null)
+                return;
+
+            var local_lob = _localOrderBooks[symbol];
+
+            if (local_lob != null)
+            {
+                bool isBid = lob_update.Quantity > 0;
+
+                if (lob_update.Count == 0) //remove
+                {
+                    var delta = new DeltaBookItem()
+                    {
+                        Price = (double)lob_update.Price,
+                        Size = (double)Math.Abs(lob_update.Quantity),
+                        IsBid = isBid,
+                        LocalTimeStamp = DateTime.Now,
+                        ServerTimeStamp = ts,
+                        Symbol = local_lob.Symbol,
+                        MDUpdateAction = eMDUpdateAction.Delete,
+                    };
+                    local_lob.DeleteLevel(delta);
+                }
+                else
+                {
+                    var delta = new DeltaBookItem()
+                    {
+                        Price = (double)lob_update.Price,
+                        Size = (double)Math.Abs(lob_update.Quantity),
+                        IsBid = isBid,
+                        LocalTimeStamp = DateTime.Now,
+                        ServerTimeStamp = ts,
+                        Symbol = local_lob.Symbol,
+                        MDUpdateAction = eMDUpdateAction.Change,
+                    };
+                    local_lob.AddOrUpdateLevel(delta);
+                }
+            }
+            RaiseOnDataReceived(local_lob);
         }
 
 
@@ -577,7 +674,7 @@ namespace MarketConnectors.Bitfinex
                 ApiSecret = "",
                 DepthLevels = 25,
                 Provider = new VisualHFT.Model.Provider() { ProviderID = 2, ProviderName = "Bitfinex" },
-                Symbols = new List<string>() { "tBTCUSD(BTC/USD)", "tETHUSD(ETH/USD)" } // Add more symbols as needed
+                Symbols = new List<string>() { "BTCUSD(BTC/USD)", "ETHUSD(ETH/USD)" } // Add more symbols as needed
             };
             SaveToUserSettings(_settings);
         }
@@ -611,6 +708,263 @@ namespace MarketConnectors.Bitfinex
             // Display the view, perhaps in a dialog or a new window.
             view.DataContext = viewModel;
             return view;
+        }
+
+
+
+        //FOR UNIT TESTING PURPOSES
+        public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
+        {
+            var localModel = new BitfinexOrderBook();
+            localModel.Asks = snapshotModel.Asks.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
+            localModel.Bids = snapshotModel.Bids.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
+            _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
+            var symbol = snapshotModel.Symbol;
+
+            if (!_localOrderBooks.ContainsKey(symbol))
+            {
+                _localOrderBooks.Add(symbol, ToOrderBookModel(localModel, symbol));
+            }
+            else
+                _localOrderBooks[symbol] = ToOrderBookModel(localModel, symbol);
+            _localOrderBooks[symbol].Sequence = sequence;// Bitfinex does not provide sequence numbers
+
+            RaiseOnDataReceived(_localOrderBooks[symbol]);
+        }
+
+        public void InjectDeltaModel(List<DeltaBookItem> bidDeltaModel, List<DeltaBookItem> askDeltaModel)
+        {
+            var symbol = bidDeltaModel?.FirstOrDefault()?.Symbol;
+            if (symbol == null)
+                symbol = askDeltaModel?.FirstOrDefault()?.Symbol;
+            if (string.IsNullOrEmpty(symbol))
+                throw new Exception("Couldn't find the symbol for this model.");
+            var ts = DateTime.Now;
+
+
+
+            //************************************************************************************************************************
+            //sequence is not provided by BITFINEX (then make adjustments to this method, so Unit tests don't fail)
+            //************************************************************************************************************************
+            long maxSequence = Math.Max(bidDeltaModel.Max(x => x.Sequence), askDeltaModel.Max(x => x.Sequence));
+            long minSequence = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));
+            if (_localOrderBooks.ContainsKey(symbol))
+            {
+                if (minSequence < _localOrderBooks[symbol].Sequence)
+                {
+                    bidDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
+                    askDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
+                }
+                else if (minSequence != _localOrderBooks[symbol].Sequence + 1)
+                {
+                    throw new Exception("Sequence numbers are not in order.");
+                }
+                else
+                    _localOrderBooks[symbol].Sequence = maxSequence;
+            }
+            //************************************************************************************************************************
+            //************************************************************************************************************************
+
+
+            //transform to BitfinexOrderBookEntry
+            bidDeltaModel?.ForEach(x =>
+            {
+                decimal _qty = 0;
+                if (x.Size.HasValue)
+                    _qty = x.Size.ToDecimal();
+                else if (!x.Size.HasValue && x.MDUpdateAction == eMDUpdateAction.Delete)
+                    _qty = 1;
+                UpdateOrderBook(new BitfinexOrderBookEntry()
+                {
+                    Price = x.Price.ToDecimal(),
+                    Quantity = _qty,
+                    Count = x.MDUpdateAction == eMDUpdateAction.Delete ? 0 : 1
+                }, symbol, ts);
+            });
+            askDeltaModel?.ForEach(x =>
+            {
+                decimal _qty = 0;
+                if (x.Size.HasValue)
+                    _qty = x.Size.ToDecimal();
+                else if (!x.Size.HasValue && x.MDUpdateAction == eMDUpdateAction.Delete)
+                    _qty = 1;
+                UpdateOrderBook(new BitfinexOrderBookEntry()
+                {
+                    Price = x.Price.ToDecimal(),
+                    Quantity = -_qty,
+                    Count = x.MDUpdateAction == eMDUpdateAction.Delete ? 0 : 1
+                }, symbol, ts);
+            });
+        }
+
+        public List<VisualHFT.Model.Order> ExecutePrivateMessageScenario(eTestingPrivateMessageScenario scenario)
+        {
+            //depending on the scenario, load its message(s)
+            string _file = "";
+            if (scenario == eTestingPrivateMessageScenario.SCENARIO_1)
+                _file = "PrivateMessages_Scenario1.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_2)
+                _file = "PrivateMessages_Scenario2.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_3)
+                _file = "PrivateMessages_Scenario3.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_4)
+                _file = "PrivateMessages_Scenario4.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_5)
+                _file = "PrivateMessages_Scenario5.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_6)
+                _file = "PrivateMessages_Scenario6.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_7)
+                _file = "PrivateMessages_Scenario7.json";
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_8)
+            {
+                _file = "PrivateMessages_Scenario8.json";
+                throw new ExceptionScenarioNotSupportedByExchange();
+            }
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_9)
+            {
+                _file = "PrivateMessages_Scenario9.json";
+                throw new ExceptionScenarioNotSupportedByExchange();
+            }
+            else if (scenario == eTestingPrivateMessageScenario.SCENARIO_10)
+            {
+                _file = "PrivateMessages_Scenario10.json";
+                throw new ExceptionScenarioNotSupportedByExchange();
+            }
+
+            string jsonString = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, $"bitfinex_jsonMessages/{_file}"));
+
+
+
+
+            //DESERIALIZE EXCHANGES MODEL
+            JArray outerArray = JArray.Parse(jsonString);
+            var modelList = outerArray.Select(item =>
+            {
+                //Reference to documentation: https://docs.bitfinex.com/reference/ws-auth-orders
+                var arr = (JArray)item[2];
+
+
+                //parse status (ie: CANCELED, "EXECUTED @ 96211.0(0.0005)"
+                var _status = "";
+                if (arr[13].ToString().IndexOf(" ") > -1)
+                {
+                    _status = arr[13].ToString().Split(' ')[0];
+                }
+                else
+                    _status = arr[13].ToString();
+
+                return new BitfinexOrder
+                {
+                    Id = arr[0].Value<long>(),
+                    GroupId = arr[1].Type == JTokenType.Null ? null : arr[1].Value<long?>(),
+                    ClientOrderId = arr[2].Type == JTokenType.Null ? null : arr[2].Value<long?>(),
+                    Symbol = arr[3].Value<string>(),
+                    // Convert the Unix timestamps or apply your DateTimeConverter logic:
+                    CreateTime = DateTimeOffset.FromUnixTimeMilliseconds(arr[4].Value<long>()).LocalDateTime,
+                    UpdateTime = DateTimeOffset.FromUnixTimeMilliseconds(arr[5].Value<long>()).LocalDateTime,
+                    QuantityRemaining = arr[6].Value<decimal>(),
+                    QuantityRaw = arr[7].Value<decimal>(),
+                    //Type = (OrderType)Enum.Parse(typeof(OrderType), arr[8].Value<string>(), true),
+                    //TypePrevious = (OrderType)Enum.Parse(typeof(OrderType), arr[9].Value<string>(), true),
+                    //Status = (OrderStatus)Enum.Parse(typeof(OrderStatus), arr[13].Value<string>(), true),
+                    Type = DeserializeEnumWithConverter<OrderType>(arr[8]),
+                    TypePrevious = DeserializeEnumWithConverter<OrderType>(arr[9]),
+                    Status = DeserializeEnumWithConverter<OrderStatus>(_status),
+                    Price = arr[16].Type == JTokenType.Null ? 0 : arr[16].Value<decimal>(),
+                    PriceAverage = arr[17].Type == JTokenType.Null ? null : arr[17].Value<decimal?>(),
+                    PriceTrailing = arr[18].Type == JTokenType.Null ? 0 : arr[18].Value<decimal>(),
+                    Routing = arr[28].Type == JTokenType.Null ? string.Empty : arr[28].Value<string>(),
+                };
+            }).ToList();
+            //END DESERIALIZE EXCHANGES MODEL
+
+
+
+
+
+            //UPDATE VISUALHFT CORE & CREATE MODEL TO RETURN
+            if (!modelList.Any())
+                throw new Exception("No data was found in the json file.");
+            foreach (var item in modelList)
+            {
+                UpdateUserOrder(item);
+            }
+            //END UPDATE VISUALHFT CORE
+
+
+            //CREATE MODEL TO RETURN 
+            var retOrders = new List<VisualHFT.Model.Order>();
+            foreach (var item in modelList)
+            {
+                VisualHFT.Model.Order order = null;
+                if (retOrders.All(x => x.ClOrdId != item.ClientOrderId.ToString()))
+                {
+                    order = new VisualHFT.Model.Order()
+                    {
+                        OrderID = item.Id,
+                        CreationTimeStamp = item.CreateTime,
+                        PricePlaced = item.Price.ToDouble(),
+                        Quantity = item.Quantity.ToDouble(),
+                        ProviderId = _settings.Provider.ProviderID,
+                        ProviderName = _settings.Provider.ProviderName,
+                        Symbol = item.Symbol,
+                        Side = item.Side == OrderSide.Buy ? eORDERSIDE.Buy : eORDERSIDE.Sell,
+                    };
+                    retOrders.Add(order);
+                }
+                else
+                {
+                    order = retOrders.FirstOrDefault(x => x.ClOrdId == item.ClientOrderId.ToString());
+                }
+
+                order.ClOrdId = item.ClientOrderId.ToString();
+                if (item.Type != OrderType.ExchangeMarket && item.Type != OrderType.Market)
+                    order.Quantity = item.Quantity.ToDouble();
+
+
+                if (item.Type == OrderType.ExchangeFillOrKill || item.Type == OrderType.FillOrKill)
+                    order.TimeInForce = eORDERTIMEINFORCE.FOK;
+                else if (item.Type == OrderType.ExchangeImmediateOrCancel || item.Type == OrderType.ImmediateOrCancel)
+                    order.TimeInForce = eORDERTIMEINFORCE.IOC;
+                else
+                    order.TimeInForce = eORDERTIMEINFORCE.GTC;
+
+                if (item.Type == OrderType.Market || item.Type == OrderType.ExchangeMarket)
+                    order.OrderType = eORDERTYPE.MARKET;
+                else
+                    order.OrderType = eORDERTYPE.LIMIT;
+
+                if (item.Status == OrderStatus.Active)
+                {
+                    order.PricePlaced = item.Price.ToDouble();
+                    order.Quantity = item.Quantity.ToDouble();
+                    order.Status = eORDERSTATUS.NEW;
+                }
+                else if (item.Status == OrderStatus.Canceled)
+                    order.Status = eORDERSTATUS.CANCELED;
+                else if (item.Status == OrderStatus.Executed || item.Status == OrderStatus.ForcefullyExecuted || item.Status == OrderStatus.PartiallyFilled)
+                {
+                    order.Status = (item.Status == OrderStatus.PartiallyFilled? eORDERSTATUS.PARTIALFILLED:  eORDERSTATUS.FILLED);
+                    order.FilledQuantity = order.Quantity - item.QuantityRemaining.ToDouble();
+                    order.FilledPrice = item.PriceAverage.ToDouble();
+                }
+
+
+                
+            }
+            //END CREATE MODEL TO RETURN
+
+
+            return retOrders;
+        }
+        private T DeserializeEnumWithConverter<T>(JToken token)
+        {
+            // Create settings with the converter that handles the Map attribute
+            var settings = new JsonSerializerSettings();
+            settings.Converters.Add(new EnumConverter());
+            // Serialize the token’s value (which is just a string) into proper JSON (with quotes)
+            string json = JsonConvert.SerializeObject(token.Value<string>());
+            return JsonConvert.DeserializeObject<T>(json, settings);
         }
     }
 }

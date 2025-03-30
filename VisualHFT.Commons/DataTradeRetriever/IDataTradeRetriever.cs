@@ -5,15 +5,17 @@ namespace VisualHFT.DataTradeRetriever
 {
     public interface IDataTradeRetriever
     {
-        event EventHandler<IEnumerable<Order>> OnInitialLoad;
-        event EventHandler<IEnumerable<Order>> OnDataReceived;
-        event EventHandler<Order> OnDataUpdated;
+        void Subscribe(Action<VisualHFT.Model.Order> subscriber);
+        void Unsubscribe(Action<VisualHFT.Model.Order> subscriber);
+        void UpdateData(VisualHFT.Model.Order data);
+        void UpdateData(IEnumerable<VisualHFT.Model.Order> data);
 
-        DateTime? SessionDate { get; set; }
 
-        ReadOnlyCollection<Order> Orders { get; }
+        ReadOnlyCollection<VisualHFT.Model.Order> ExecutedOrders { get; }
         ReadOnlyCollection<Position> Positions { get; }
 
-        void AddOrder(Order? order);
+        void SetSessionDate(DateTime? sessionDate);
+        DateTime? GetSessionDate();
+
     }
 }

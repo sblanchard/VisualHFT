@@ -151,7 +151,6 @@ namespace VisualHFT.ViewModel
                 if (value != "")
                 {
                     _selectedSymbol = "-- All symbols --";
-                    if (_vmPosition != null) _vmPosition.SelectedStrategy = value;
 
                     RaisePropertyChanged(nameof(SelectedStrategy));
                     RaisePropertyChanged(nameof(SelectedSymbol));

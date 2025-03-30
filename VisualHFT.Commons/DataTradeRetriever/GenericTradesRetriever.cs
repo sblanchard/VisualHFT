@@ -1,102 +1,143 @@
-﻿using System.Collections.ObjectModel;
+﻿using Newtonsoft.Json.Linq;
+using System.Collections.ObjectModel;
 using VisualHFT.Model;
 
 
 namespace VisualHFT.DataTradeRetriever
 {
-    public class GenericTradesRetriever : IDataTradeRetriever, IDisposable
+    public class GenericTradesRetriever : IDataTradeRetriever
     {
         private List<VisualHFT.Model.Position> _positions;
-        private List<VisualHFT.Model.Order> _orders;
-        private object _locker = new object();
+        private List<VisualHFT.Model.Order> _executedOrders;
+        private DateTime? _sessionDate = null;
 
-        int _providerId;
-        string _providerName;
-        DateTime? _sessionDate = null;
 
-        private bool _disposed = false;
+        private List<Action<VisualHFT.Model.Order>> _subscribers = new List<Action<Order>>();
+        private readonly object _lockSubscribers = new object();
+        private readonly object _lockOrders = new object();
+        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        private static readonly GenericTradesRetriever instance = new GenericTradesRetriever();
+        public event Action<VisualHFT.Commons.Model.ErrorEventArgs> OnException;
+        public static GenericTradesRetriever Instance => instance;
 
-        public event EventHandler<IEnumerable<VisualHFT.Model.Order>> OnInitialLoad;
-        public event EventHandler<IEnumerable<VisualHFT.Model.Order>> OnDataReceived;
-        public event EventHandler<VisualHFT.Model.Execution> OnExecutionReceived;
-        public event EventHandler<Order> OnDataUpdated;
 
         public GenericTradesRetriever()
         {
             _positions = new List<VisualHFT.Model.Position>();
-            _orders = new List<VisualHFT.Model.Order>();
+            _executedOrders = new List<VisualHFT.Model.Order>();
 
             HelperTimeProvider.OnSetFixedTime += HelperTimeProvider_OnSetFixedTime;
         }
-        ~GenericTradesRetriever()
-        {
-            Dispose(false);
-        }
-        private void HelperTimeProvider_OnSetFixedTime(object? sender, EventArgs e)
-        {
-            if (_sessionDate != HelperTimeProvider.Now.Date)
-                SessionDate = HelperTimeProvider.Now.Date;
-        }
 
-        public DateTime? SessionDate
+
+
+        public void Subscribe(Action<VisualHFT.Model.Order> subscriber)
         {
-            get { return _sessionDate; }
-            set
+            lock (_lockSubscribers)
             {
-                if (value != _sessionDate)
+                _subscribers.Add(subscriber);
+            }
+        }
+        public void Unsubscribe(Action<VisualHFT.Model.Order> subscriber)
+        {
+            lock (_lockSubscribers)
+            {
+                _subscribers.Remove(subscriber);
+            }
+        }
+        private void DispatchToSubscribers(VisualHFT.Model.Order executedOrder)
+        {
+            lock (_lockSubscribers)
+            {
+                foreach (var subscriber in _subscribers)
                 {
-                    _sessionDate = value;
-                    _orders.Clear();
-                    _positions.Clear();
-                    OnInitialLoad?.Invoke(this, this.Orders);
+                    try
+                    {
+                        subscriber(executedOrder);
+                    }
+                    catch (Exception ex)
+                    {
+                        Task.Run(() =>
+                        {
+                            log.Error(ex);
+                            OnException?.Invoke(new VisualHFT.Commons.Model.ErrorEventArgs(ex, subscriber.Target));
+                        });
+                    }
                 }
             }
         }
-        public ReadOnlyCollection<VisualHFT.Model.Order> Orders
+        public void UpdateData(VisualHFT.Model.Order data)
         {
-            get { return _orders.AsReadOnly(); }
+            AddExecutedOrderInternal(data);
+            DispatchToSubscribers(data);
+        }
+        public void UpdateData(IEnumerable<VisualHFT.Model.Order> data)
+        {
+            foreach (var e in data)
+            {
+                UpdateData(e);
+            }
+        }
+
+        public void SetSessionDate(DateTime? sessionDate)
+        {
+            if (sessionDate != _sessionDate)
+            {
+                _sessionDate = sessionDate;
+                lock (_lockOrders)
+                    _executedOrders.Clear();
+                _positions.Clear();
+            }
+        }
+        public DateTime? GetSessionDate()
+        {
+            return _sessionDate;
+        }
+
+
+
+
+
+        private void HelperTimeProvider_OnSetFixedTime(object? sender, EventArgs e)
+        {
+            if (_sessionDate != HelperTimeProvider.Now.Date)
+                SetSessionDate(HelperTimeProvider.Now.Date);
+        }
+
+
+        public ReadOnlyCollection<VisualHFT.Model.Order> ExecutedOrders
+        {
+            get { lock (_lockOrders) return _executedOrders.AsReadOnly(); }
         }
         public ReadOnlyCollection<VisualHFT.Model.Position> Positions
         {
             get { return _positions.AsReadOnly(); }
         }
 
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!_disposed)
-            {
-                if (disposing)
-                {
 
 
-                }
-                _disposed = true;
-            }
-        }
-        public void Dispose()
+
+
+        private void AddExecutedOrderInternal(Order? executedOrder)
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-        public void AddOrder(Order? order)
-        {
-            if (order == null)
+            if (executedOrder == null)
                 return;
-            lock (_locker)
+            lock (_lockOrders)
             {
-                var existingOrder = _orders.FirstOrDefault(x => x.OrderID == order.OrderID);
+                var existingOrder = _executedOrders.FirstOrDefault(x => x.OrderID == executedOrder.OrderID 
+                                                                        && x.ProviderId == executedOrder.ProviderId 
+                                                                        && x.Symbol == executedOrder.Symbol);
                 if (existingOrder == null)
                 {
-                    _orders.Add(order);
-                    OnDataReceived?.Invoke(this, new List<Order> { order });
+                    _executedOrders.Add(executedOrder);
                 }
                 else
                 {
-                    existingOrder = order;
-                    OnDataUpdated?.Invoke(this, order);
+                    existingOrder.Update(executedOrder);
                 }
             }
 
         }
+
     }
 }

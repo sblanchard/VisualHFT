@@ -2,28 +2,6 @@
 
 namespace VisualHFT.Enums
 {
-    public enum ePOSITIONSIDE
-    {
-        Buy,
-        Sell,
-        None
-    };
-
-    public enum ePOSITIONSTATUS
-    {
-        NONE,
-        SENT,
-        NEW,
-        CANCELED,
-        REJECTED,
-        PARTIALFILLED,
-        FILLED,
-        CANCELEDSENT,
-        REPLACESENT,
-        REPLACED,
-        LASTLOOK_HOLDING
-    };
-
     public enum eTIMEINFORCE
     {
         FOK,
@@ -72,7 +50,8 @@ namespace VisualHFT.Enums
         NONE,
         GTC,
         IOC,
-        FOK
+        FOK,
+        MOK
     };
 
     public enum eORDERTYPE
@@ -150,4 +129,19 @@ namespace VisualHFT.Enums
         MARKET_CONNECTOR,
     }
 
+
+
+    public enum eTestingPrivateMessageScenario
+    {
+        SCENARIO_1,
+        SCENARIO_2,
+        SCENARIO_3,
+        SCENARIO_4,
+        SCENARIO_5,
+        SCENARIO_6,
+        SCENARIO_7,
+        SCENARIO_8,
+        SCENARIO_9,
+        SCENARIO_10,
+    }
 }
