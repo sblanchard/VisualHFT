@@ -1,4 +1,5 @@
-﻿namespace VisualHFT.Commons.Pools
+﻿
+namespace VisualHFT.Commons.Pools
 {
     public class RollingWindow<T>
     {
@@ -29,6 +30,11 @@
         public T Last()
         {
             return _queue.Last();
+        }
+
+        public bool Any()
+        {
+            return _queue.Any();
         }
     }
 }
