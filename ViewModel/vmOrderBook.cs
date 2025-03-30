@@ -102,7 +102,7 @@ namespace VisualHFT.ViewModel
             AggregationLevels = new ObservableCollection<Tuple<string, AggregationLevel>>();
             foreach (AggregationLevel level in Enum.GetValues(typeof(AggregationLevel)))
             {
-                if (level >= AggregationLevel.Ms100) //do not load less than 100ms. In order to save resources, we cannot go lower than 100ms (//TODO: in the future we must include lower aggregation levels)
+                //if (level >= AggregationLevel.Ms100) //do not load less than 100ms. In order to save resources, we cannot go lower than 100ms (//TODO: in the future we must include lower aggregation levels)
                     AggregationLevels.Add(new Tuple<string, AggregationLevel>(Helpers.HelperCommon.GetEnumDescription(level), level));
             }
             _aggregationLevelSelection = AggregationLevel.Ms100; //DEFAULT
