@@ -40,7 +40,6 @@ namespace VisualHFT.Studies
 
         public MarketResilienceBiasStudy()
         {
-            _mrBiasCalc = new MarketResilienceWithBias();
             _QUEUE = new HelperCustomQueue<OrderBook>($"<OrderBook>_{this.Name}", QUEUE_onRead, QUEUE_onError);
         }
 
@@ -54,7 +53,7 @@ namespace VisualHFT.Studies
         {
             await base.StartAsync();//call the base first
             
-            _mrBiasCalc.Reset();
+            _mrBiasCalc = new MarketResilienceWithBias(_settings);
             _QUEUE.Clear();
             HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
             HelperTrade.Instance.Subscribe(TRADE_OnDataReceived);

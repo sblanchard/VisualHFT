@@ -1,11 +1,8 @@
 ﻿using Studies.MarketResilience.Model;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.PluginManager;
-using VisualHFT.Commons.Pools;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
@@ -63,7 +60,6 @@ namespace VisualHFT.Studies
 
         public MarketResilienceStudy()
         {
-            mrCalc = new MarketResilienceCalculator();
             _QUEUE = new HelperCustomQueue<OrderBook>($"<OrderBook>_{this.Name}", QUEUE_onRead, QUEUE_onError);
         }
         ~MarketResilienceStudy()
@@ -75,7 +71,7 @@ namespace VisualHFT.Studies
         {
             await base.StartAsync();//call the base first
 
-            mrCalc.Reset();
+            mrCalc = new MarketResilienceCalculator(_settings);
             _QUEUE.Clear();
 
             HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
@@ -188,10 +184,33 @@ namespace VisualHFT.Studies
             {
                 InitializeDefaultSettings();
             }
-            if (_settings.Provider == null) //To prevent back compability with older setting formats
+            
+            
+            //To prevent back compability with older setting formats
+            bool needToSaveToMaintainCompatibility = false;
+            if (_settings.Provider == null) 
             {
                 _settings.Provider = new Provider();
+                needToSaveToMaintainCompatibility = true;
             }
+            if (!_settings.MinShockTimeDifference.HasValue)
+            {
+                _settings.MinShockTimeDifference = 500;
+                needToSaveToMaintainCompatibility = true;
+            }
+            if (!_settings.SpreadShockThresholdMultiplier.HasValue)
+            {
+                _settings.SpreadShockThresholdMultiplier = 3;
+                needToSaveToMaintainCompatibility = true;
+            }
+            if (!_settings.TradeSizeShockThresholdMultiplier.HasValue)
+            {
+                _settings.TradeSizeShockThresholdMultiplier = 3;
+                needToSaveToMaintainCompatibility = true;
+            }
+
+            if (needToSaveToMaintainCompatibility)
+                SaveToUserSettings(_settings);
         }
         protected override void SaveSettings()
         {
@@ -203,7 +222,10 @@ namespace VisualHFT.Studies
             {
                 Symbol = "",
                 Provider = new Provider(),
-                AggregationLevel = AggregationLevel.Ms500
+                AggregationLevel = AggregationLevel.Ms500,
+                MinShockTimeDifference = 500,
+                TradeSizeShockThresholdMultiplier = 3,
+                SpreadShockThresholdMultiplier = 3
             };
             SaveToUserSettings(_settings);
         }
@@ -214,19 +236,21 @@ namespace VisualHFT.Studies
             viewModel.SelectedSymbol = _settings.Symbol;
             viewModel.SelectedProviderID = _settings.Provider.ProviderID;
             viewModel.AggregationLevelSelection = _settings.AggregationLevel;
-
+            viewModel.MinShockTimeDifference = _settings.MinShockTimeDifference ?? 0;
+            viewModel.SpreadShockThresholdMultiplier = _settings.SpreadShockThresholdMultiplier ?? 0;
+            viewModel.TradeSizeShockThresholdMultiplier = _settings.TradeSizeShockThresholdMultiplier ?? 0;
             viewModel.UpdateSettingsFromUI = () =>
             {
                 _settings.Symbol = viewModel.SelectedSymbol;
                 _settings.Provider = viewModel.SelectedProvider;
                 _settings.AggregationLevel = viewModel.AggregationLevelSelection;
-
+                _settings.MinShockTimeDifference = viewModel.MinShockTimeDifference;
+                _settings.SpreadShockThresholdMultiplier = viewModel.SpreadShockThresholdMultiplier;
+                _settings.TradeSizeShockThresholdMultiplier = viewModel.TradeSizeShockThresholdMultiplier;
                 SaveSettings();
-
 
                 //run this because it will allow to restart with the new values
                 Task.Run(async () => await HandleRestart($"{this.Name} is starting (from reloading settings).", null, true));
-
             };
             // Display the view, perhaps in a dialog or a new window.
             view.DataContext = viewModel;

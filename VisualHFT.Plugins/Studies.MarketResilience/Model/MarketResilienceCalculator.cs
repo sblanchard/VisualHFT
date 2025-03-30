@@ -1,236 +1,216 @@
 ﻿using System;
-using System.Linq;
 using VisualHFT.Commons.Pools;
 using VisualHFT.Model;
+using VisualHFT.Studies.MarketResilience.Model;
 
 namespace Studies.MarketResilience.Model
 {
+    public enum eMarketBias
+    {
+        Neutral,
+        Bullish,
+        Bearish
+    }
     public class MarketResilienceCalculator : IDisposable
     {
-        protected readonly object _syncLock = new object();
-
-        private DateTime? spreadShockTime = null;
-        private DateTime? depthShockTime = null;
-        private DateTime? tradeShockTime = null;
-        protected RollingWindow<decimal> recentSpreads = new RollingWindow<decimal>(500);
-        private RollingWindow<decimal> recentDepths = new RollingWindow<decimal>(500);
-        private RollingWindow<decimal> recentTradeSizes = new RollingWindow<decimal>(500);
-        private RollingWindow<double> recentPriceImpacts = new RollingWindow<double>(500);
-        private RollingWindow<double> spreadRecoveryTimes = new RollingWindow<double>(100);
-        private RollingWindow<double> depthRecoveryTimes = new RollingWindow<double>(100);
-        private RollingWindow<double> tradeRecoveryTimes = new RollingWindow<double>(100);
-        protected decimal spreadShockThresholdMultiplier = 3m;
-        private decimal depthShockThresholdMultiplier = 3m;
-        private decimal tradeSizeShockThresholdMultiplier = 3m;
-
-        private PendingTradeImpactCheck pendingTradeCheck = null;
-        private OrderBook lastOrderBookSnapshot = null;
-        private bool pendingMRCalculation = false;
-
+        private double MIN_SHOCK_TIME_DIFFERENCE = 800.0; // Min time diff in ms to consider two shock events (trade and spread widening) as related.
+        private decimal SPREAD_SHOCK_THRESHOLD_MULTIPLIER = 3m; // Multiplier to identify significant spread widening events as shocks.
+        private decimal TRADE_SIZE_SHOCK_THRESHOLD_MULTIPLIER = 3m; // Multiplier to identify significant trade size events as shocks.
 
         private bool disposed = false;
+        private decimal? _lastMidPrice = 0;
+        protected decimal? _lastBidPrice;
+        protected decimal? _lastAskPrice;
+        protected decimal? _bidAtHit;
+        protected decimal? _askAtHit;
+        protected readonly object _syncLock = new object();
 
-        private class PendingTradeImpactCheck
+        protected RollingWindow<decimal> recentSpreads = new RollingWindow<decimal>(500);
+        private RollingWindow<decimal> recentTradeSizes = new RollingWindow<decimal>(500);
+        private RollingWindow<double> spreadRecoveryTimes = new RollingWindow<double>(100);
+        private PlugInSettings settings;
+
+        public MarketResilienceCalculator(PlugInSettings settings)
         {
-            public bool IsLargeTrade;
-            public double MidPriceBeforeTrade;
-            public DateTime Timestamp;
+            this.settings = settings;
+            
+            MIN_SHOCK_TIME_DIFFERENCE = settings.MinShockTimeDifference ?? MIN_SHOCK_TIME_DIFFERENCE;
+            SPREAD_SHOCK_THRESHOLD_MULTIPLIER = settings.SpreadShockThresholdMultiplier ?? SPREAD_SHOCK_THRESHOLD_MULTIPLIER;
+            TRADE_SIZE_SHOCK_THRESHOLD_MULTIPLIER = settings.TradeSizeShockThresholdMultiplier ?? TRADE_SIZE_SHOCK_THRESHOLD_MULTIPLIER;
         }
 
-        public decimal CurrentMRScore { get; private set; } = 1m; // stable MR value by default
+        private class TimestampedValue
+        {
+            public DateTime Timestamp { get; set; }
+            public decimal Value { get; set; }
+        }
 
-        public double  MidMarketPrice => lastOrderBookSnapshot?.MidPrice ?? 0;
+
+
+        private TimestampedValue? ShockTrade { get; set; }      // holds the shock trade
+        private TimestampedValue? ShockSpread { get; set; }     // holds the shock spread
+        private TimestampedValue? ReturnedSpread { get; set; }  // holds the last spread value, which will be used to calculate the MR score when gets back to normal values.
+        protected bool? InitialHitHappenedAtBid { get; set; }      // holds the information about the shock trade happened at bid or ask
+
+        public decimal CurrentMRScore { get; private set; } = 1m; // stable MR value by default
+        public eMarketBias CurrentMarketBias { get; private set; } = eMarketBias.Neutral;
+        public decimal MidMarketPrice => _lastMidPrice ?? 0;
+
         public void OnTrade(Trade trade)
         {
             lock (_syncLock)
             {
-                recentTradeSizes.Add(trade.Size);
-
-                if (lastOrderBookSnapshot == null) return;
-                bool isLargeTrade = IsLargeTrade(trade.Size, lastOrderBookSnapshot);
-                pendingTradeCheck = new PendingTradeImpactCheck
+                if (ShockTrade == null
+                    && IsLargeTrade(trade.Size))
                 {
-                    IsLargeTrade = isLargeTrade,
-                    MidPriceBeforeTrade = (double)lastOrderBookSnapshot.MidPrice,
-                    Timestamp = trade.Timestamp
-                };
-
-                if (isLargeTrade)
-                {
-                    tradeShockTime = DateTime.UtcNow;
-                    pendingMRCalculation = true;
+                    ShockTrade = new TimestampedValue
+                    {
+                        Timestamp = trade.Timestamp,
+                        Value = (decimal)trade.Size
+                    };
+                    //find out if the shock trade happened closer to bid or ask
+                    if (_lastBidPrice.HasValue &&
+                        _lastAskPrice.HasValue) //if we have latest bid/ask price we can infer where the trade happened
+                    {
+                        decimal midPrice = (_lastBidPrice.Value + _lastAskPrice.Value) / 2;
+                        InitialHitHappenedAtBid = trade.Price <= midPrice;
+                    }
+                    else
+                        InitialHitHappenedAtBid = false;
                 }
+                else
+                {
+                    recentTradeSizes.Add(trade.Size);
+                }
+                CheckAndCalculateIfShock();
             }
         }
-
-        public virtual void OnOrderBookUpdate(OrderBook orderBook)
+        public void OnOrderBookUpdate(OrderBook orderBook)
         {
             lock (_syncLock)
             {
-                lastOrderBookSnapshot = orderBook;
-
-                decimal currentSpread = (decimal)orderBook.Spread;
-                decimal currentDepth = orderBook.Bids.Take(5).Sum(b => (decimal)b.Size) +
-                                       orderBook.Asks.Take(5).Sum(a => (decimal)a.Size);
-
+                var currentSpread = (decimal)orderBook.Spread;
+                if (ShockSpread == null
+                    && IsLargeWideningSpread(currentSpread))
+                {
+                    ShockSpread = new TimestampedValue()
+                    {
+                        Timestamp = DateTime.Now,
+                        Value = currentSpread
+                    };
+                    _bidAtHit = _lastBidPrice;
+                    _askAtHit = _lastAskPrice;
+                }
+                else if (HasSpreadReturnedToMean(currentSpread))
+                {
+                    //keep track of the last spread
+                    ReturnedSpread ??= new TimestampedValue();
+                    ReturnedSpread.Value = currentSpread;
+                    ReturnedSpread.Timestamp = DateTime.Now;
+                }
                 recentSpreads.Add(currentSpread);
-                recentDepths.Add(currentDepth);
-
-                bool spreadShock = IsShock(currentSpread, recentSpreads, spreadShockThresholdMultiplier, true);
-                bool depthShock = IsShock(currentDepth, recentDepths, depthShockThresholdMultiplier, false);
-
-                // Handle spread shock
-                if (spreadShock && spreadShockTime == null)
-                {
-                    spreadShockTime = DateTime.UtcNow;
-                    pendingMRCalculation = true;
-                }
-                else if (!spreadShock && spreadShockTime != null)
-                {
-                    var recoveryDuration = DateTime.UtcNow - spreadShockTime.Value;
-                    spreadRecoveryTimes.Add(recoveryDuration.TotalMilliseconds);
-                    spreadShockTime = null;
-
-                    // Trigger MR after recovery
-                    if (pendingMRCalculation && depthShockTime == null && tradeShockTime == null)
-                    {
-                        TriggerMRCalculation();
-                        pendingMRCalculation = false;
-                    }
-                }
-
-                // Handle depth shock
-                if (depthShock && depthShockTime == null)
-                {
-                    depthShockTime = DateTime.UtcNow;
-                    pendingMRCalculation = true;
-                }
-                else if (!depthShock && depthShockTime != null)
-                {
-                    var recoveryDuration = DateTime.UtcNow - depthShockTime.Value;
-                    depthRecoveryTimes.Add(recoveryDuration.TotalMilliseconds);
-                    depthShockTime = null;
-
-                    // Trigger MR after recovery
-                    if (pendingMRCalculation && spreadShockTime == null && tradeShockTime == null)
-                    {
-                        TriggerMRCalculation();
-                        pendingMRCalculation = false;
-                    }
-                }
-
-                if (pendingTradeCheck != null)
-                {
-                    double midAfterTrade = orderBook.MidPrice;
-                    double impact = Math.Abs(midAfterTrade - pendingTradeCheck.MidPriceBeforeTrade);
-                    recentPriceImpacts.Add(impact);
-
-                    bool tradeImpactMinimal = IsMinimalImpact(impact);
-
-                    if (tradeImpactMinimal && tradeShockTime != null)
-                    {
-                        var recoveryDuration = DateTime.UtcNow - tradeShockTime.Value;
-                        tradeRecoveryTimes.Add(recoveryDuration.TotalMilliseconds);
-                        tradeShockTime = null;
-
-                        // Trigger MR after recovery
-                        if (pendingMRCalculation && spreadShockTime == null && depthShockTime == null)
-                        {
-                            TriggerMRCalculation();
-                            pendingMRCalculation = false;
-                        }
-                    }
-
-                    pendingTradeCheck = null;
-                }
-
+                _lastMidPrice = (decimal?)orderBook.MidPrice;
+                _lastBidPrice = (decimal?)orderBook.Bids.FirstOrDefault()?.Price;
+                _lastAskPrice = (decimal?)orderBook.Asks.FirstOrDefault()?.Price;
+                CheckAndCalculateIfShock();
+            }
+        }
+        private void CheckAndCalculateIfShock()
+        {
+            if (ShockTrade != null
+                && ShockSpread != null
+                && Math.Abs(ShockSpread.Timestamp.Subtract(ShockTrade.Timestamp).TotalMilliseconds) >
+                MIN_SHOCK_TIME_DIFFERENCE) // if the shocks are too far apart (timeout), reset
+            {
+                Reset();
+            }
+            else if (ShockTrade != null
+                     && ShockSpread != null
+                     && ReturnedSpread != null
+                     && Math.Abs(ShockSpread.Timestamp.Subtract(ShockTrade.Timestamp).TotalMilliseconds) <
+                     MIN_SHOCK_TIME_DIFFERENCE) // if the shocks are close enough, calculate the MR score
+            {
+                TriggerMRCalculation();
+                Reset();
             }
         }
 
-        protected bool IsShock(decimal currentValue, RollingWindow<decimal> window, decimal thresholdMultiplier, bool higherIsShock)
-        {
-            decimal avg = window.Average();
-            decimal std = window.StandardDeviation();
 
-            if (std == 0) return false;
-
-            decimal threshold = higherIsShock ? avg + thresholdMultiplier * std : avg - thresholdMultiplier * std;
-            return higherIsShock ? currentValue > threshold : currentValue < threshold;
-        }
-
-        private bool IsLargeTrade(decimal tradeSize, OrderBook book)
+        private bool IsLargeTrade(decimal tradeSize)
         {
             decimal avgSize = recentTradeSizes.Average();
             decimal stdSize = recentTradeSizes.StandardDeviation();
-
-            if (stdSize == 0) return false;
-
-            return tradeSize > avgSize + tradeSizeShockThresholdMultiplier * stdSize;
+            if (recentTradeSizes.Count < 3) return false; //not enough data
+            return tradeSize > avgSize + TRADE_SIZE_SHOCK_THRESHOLD_MULTIPLIER * stdSize;
         }
 
-        private bool IsMinimalImpact(double impact)
+        private bool IsLargeWideningSpread(decimal spreadValue)
         {
-            double avgImpact = recentPriceImpacts.Average();
-            double stdImpact = recentPriceImpacts.StandardDeviation();
-
-            if (stdImpact == 0) return impact == 0;
-
-            return impact < avgImpact + stdImpact;
+            decimal avgSize = recentSpreads.Average();
+            decimal stdSize = recentSpreads.StandardDeviation();
+            if (recentSpreads.Count < 3) return false; //not enough data
+            return spreadValue > avgSize + SPREAD_SHOCK_THRESHOLD_MULTIPLIER * stdSize;
         }
 
+        private bool HasSpreadReturnedToMean(decimal spreadValue)
+        {
+            decimal avgSize = recentSpreads.Average();
+            return spreadValue < avgSize;
+        }
 
         private void TriggerMRCalculation()
         {
-            double spreadScore = spreadRecoveryTimes.Count > 0
-                ? NormalizeRecoveryTime(spreadRecoveryTimes.Last(), spreadRecoveryTimes) : 1.0;
+            if (ShockSpread == null || ReturnedSpread == null)
+                return;
 
-            double depthScore = depthRecoveryTimes.Count > 0
-                ? NormalizeRecoveryTime(depthRecoveryTimes.Last(), depthRecoveryTimes) : 1.0;
+            // 1. Calculate explicit recovery duration (milliseconds)
+            double recoveryDurationMs = Math.Abs((ReturnedSpread.Timestamp - ShockSpread.Timestamp).TotalMilliseconds);
 
-            double tradeImpactScore = tradeRecoveryTimes.Count > 0
-                ? NormalizeRecoveryTime(tradeRecoveryTimes.Last(), tradeRecoveryTimes) : 1.0;
+            // 2. Get average historical recovery time (explicitly check historical data)
+            double avgHistoricalRecoveryMs = spreadRecoveryTimes.Any() ? spreadRecoveryTimes.Average() : recoveryDurationMs;
 
-            CurrentMRScore = (decimal)(
-                0.3 * spreadScore +
-                0.3 * depthScore +
-                0.2 * tradeImpactScore +
-                0.2 * ((spreadScore + depthScore + tradeImpactScore) / 3.0));
+            // Explicitly normalize recovery duration:
+            // If recovery is faster or equal than avg, MR score is closer to 1 (high resilience)
+            // If recovery slower than avg, MR decreases proportionally
+            double recoveryScore = avgHistoricalRecoveryMs / (avgHistoricalRecoveryMs + recoveryDurationMs);
+            recoveryScore = Math.Max(0, Math.Min(1, recoveryScore)); // clearly keep within [0,1]
+
+            // 3. Calculate explicit magnitude of shock:
+            decimal avgHistoricalSpread = recentSpreads.Any() ? recentSpreads.Average() : ShockSpread.Value;
+            double magnitudeRatio = (double)(ShockSpread.Value / avgHistoricalSpread);
+
+            // Normalize shock magnitude explicitly:
+            // Large shock = lower score; Small shock = higher score
+            double magnitudeScore = 1 / magnitudeRatio;
+            magnitudeScore = Math.Max(0, Math.Min(1, magnitudeScore)); // clearly keep within [0,1]
+
+            // 4. Explicitly combine both scores clearly (weights can be adjusted):
+            CurrentMRScore = (decimal)(0.5 * recoveryScore + 0.5 * magnitudeScore);
+            // 5. Determine market bias based on the MR score and where the shock trade happened
+            CurrentMarketBias = CalculateMRBias();
+
+
+            // Save the recovery duration explicitly for future historical comparison
+            spreadRecoveryTimes.Add(recoveryDurationMs);
         }
-
-        private double NormalizeRecoveryTime(double recoveryMs, RollingWindow<double> historicalRecoveryTimes)
+        protected virtual eMarketBias CalculateMRBias()
         {
-            if (historicalRecoveryTimes.Count < 10)
-                return 1.0;
-
-            double avgRecovery = historicalRecoveryTimes.Average();
-            double stdRecovery = historicalRecoveryTimes.StandardDeviation();
-
-            if (stdRecovery == 0)
-                return recoveryMs <= avgRecovery ? 1.0 : 0.0;
-
-            double zScore = (recoveryMs - avgRecovery) / stdRecovery;
-            double resilienceScore = 1 - Math.Min(1, Math.Max(0, (zScore / 3.0)));
-
-            return resilienceScore;
+            return eMarketBias.Neutral;
         }
-        public virtual void Reset()
+
+        private void Reset()
         {
             lock (_syncLock)
             {
-                recentSpreads.Clear();
-                recentDepths.Clear();
-                recentTradeSizes.Clear();
-                recentPriceImpacts.Clear();
-                spreadRecoveryTimes.Clear();
-                depthRecoveryTimes.Clear();
-                tradeRecoveryTimes.Clear();
-
-                spreadShockTime = null;
-                depthShockTime = null;
-                tradeShockTime = null;
-                pendingMRCalculation = false;
-
-                CurrentMRScore = 1m;
+                ShockSpread = null;
+                ReturnedSpread = null;
+                ShockTrade = null;
+                InitialHitHappenedAtBid = null;
+                _lastMidPrice = null;
+                _lastBidPrice = null;
+                _lastAskPrice = null;
+                _bidAtHit = null;
+                _askAtHit = null;
             }
         }
 
@@ -247,12 +227,7 @@ namespace Studies.MarketResilience.Model
 
             if (disposing)
             {
-                // Dispose managed resources.
-                if (lastOrderBookSnapshot != null)
-                {
-                    lastOrderBookSnapshot.Dispose();
-                    lastOrderBookSnapshot = null;
-                }
+
 
             }
             disposed = true;
