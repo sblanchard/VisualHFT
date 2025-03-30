@@ -917,7 +917,6 @@ namespace MarketConnectors.KuCoin
             {
                 InitializeDefaultSettings();
             }
-            InitializeDefaultSettings();
             if (_settings.Provider == null) //To prevent back compability with older setting formats
             {
                 _settings.Provider = new VisualHFT.Model.Provider() { ProviderID = 4, ProviderName = "KuCoin" };
