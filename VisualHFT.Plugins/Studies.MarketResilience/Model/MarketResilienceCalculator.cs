@@ -187,15 +187,15 @@ namespace Studies.MarketResilience.Model
             // 4. Explicitly combine both scores clearly (weights can be adjusted):
             CurrentMRScore = (decimal)(0.5 * recoveryScore + 0.5 * magnitudeScore);
             // 5. Determine market bias based on the MR score and where the shock trade happened
-            CurrentMarketBias = CalculateMRBias();
+            CurrentMarketBias = CalculateMRBias() ?? CurrentMarketBias;
 
 
             // Save the recovery duration explicitly for future historical comparison
             spreadRecoveryTimes.Add(recoveryDurationMs);
         }
-        protected virtual eMarketBias CalculateMRBias()
+        protected virtual eMarketBias? CalculateMRBias()
         {
-            return eMarketBias.Neutral;
+            return null;
         }
 
         private void Reset()
