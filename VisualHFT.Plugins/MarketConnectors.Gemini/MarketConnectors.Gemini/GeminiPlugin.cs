@@ -33,7 +33,7 @@ namespace MarketConnectors.Gemini
 
         private Dictionary<string, VisualHFT.Model.OrderBook> _localOrderBooks = new Dictionary<string, VisualHFT.Model.OrderBook>();
         private Dictionary<string, VisualHFT.Model.Order> _localUserOrders = new Dictionary<string, VisualHFT.Model.Order>();
-        private HelperCustomQueue<GeminiResponseInitial> _eventBuffers;
+        private HelperCustomQueue<MarketUpdate> _eventBuffers;
 
 
         private PlugInSettings? _settings;
@@ -117,7 +117,7 @@ namespace MarketConnectors.Gemini
         {
             await ClearAsync();
 
-            _eventBuffers = new HelperCustomQueue<GeminiResponseInitial>($"<GeminiResponseInitial>_{this.Name}", eventBuffers_onReadAction, eventBuffers_onErrorAction);
+            _eventBuffers = new HelperCustomQueue<MarketUpdate>($"<MarketUpdate>_{this.Name}", eventBuffers_onReadAction, eventBuffers_onErrorAction);
 
             await InitializeSnapshotAsync();
             await InitializeDeltasAsync();
@@ -128,9 +128,9 @@ namespace MarketConnectors.Gemini
             await InitializeUserPrivateOrders();
         }
 
-        private void eventBuffers_onReadAction(GeminiResponseInitial eventData)
+        private void eventBuffers_onReadAction(MarketUpdate eventData)
         {
-            var symbol = GetNormalizedSymbol(eventData.symbol);
+            var symbol = GetNormalizedSymbol(eventData.Symbol);
             UpdateOrderBook(eventData, symbol,DateTime.Now);
 
         }
@@ -628,7 +628,7 @@ namespace MarketConnectors.Gemini
         }
 
 
-        private void UpdateOrderBook(GeminiResponseInitial lob_update,string symbol, DateTime serverTime)
+        private void UpdateOrderBook(MarketUpdate lob_update,string symbol, DateTime serverTime)
         {
 
             if (!_localOrderBooks.ContainsKey(symbol))
@@ -640,7 +640,7 @@ namespace MarketConnectors.Gemini
             }
 
 
-            foreach (var item in lob_update.changes)
+            foreach (var item in lob_update.Changes)
             {
                 bool isBid = item[0].ToLower().Equals("buy");
                 double.TryParse(item[1], out double _price);
@@ -689,59 +689,60 @@ namespace MarketConnectors.Gemini
             }
             RaiseOnDataReceived(local_lob);
 
-            if (lob_update.trades != null)
+            if (lob_update.Trades != null)
             {
-                List<Trade> trades = new List<VisualHFT.Model.Trade>();
-                foreach (var item in lob_update.trades)
+                foreach (var item in lob_update.Trades)
                 {
-                    if (item.type == "trade")
+                    if (item.Type == "trade")
                     {
                         UpdateTrades(item);
                     }
                     else
                     {
-                        Console.WriteLine("Type not recognized " + item.type);
+                        Console.WriteLine("Type not recognized " + item.Type);
                     }
                 }
             }
         }
 
-        private void UpdateTrades(GeminiResponseTrade item)
+        private void UpdateTrades(MarketConnectors.Gemini.Model.Trade item)
         {
 
             RaiseOnDataReceived(new Trade()
             {
-                Symbol = GetNormalizedSymbol(item.symbol),
-                Size = item.quantity,
-                Price = item.price,
-                IsBuy = item.side.ToLower() == "buy",
+                Symbol = GetNormalizedSymbol(item.Symbol),
+                Size = item.Quantity,
+                Price = item.Price,
+                IsBuy = item.Side.ToLower() == "buy",
                 ProviderId = _settings.Provider.ProviderID,
                 ProviderName = _settings.Provider.ProviderName,
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.timestamp).DateTime
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.Timestamp).DateTime
             });
         }
         private void HandleMessage(string marketData, DateTime serverTime)
         {
             string message = marketData;
-            dynamic type = JsonConvert.DeserializeObject<dynamic>(message);
-            if (type.type == "l2_updates")
+            MarketUpdate update = System.Text.Json.JsonSerializer.Deserialize<MarketUpdate>(message);
+            if (update == null)
+                return;
+
+            if (update.Type == "l2_updates")
             {
-                GeminiResponseInitial dataReceived = _parser.Parse<GeminiResponseInitial>(message);
-                string symbol = GetNormalizedSymbol(dataReceived.symbol);
-                _eventBuffers.Add(dataReceived);
+                string symbol = GetNormalizedSymbol(update.Symbol);
+                _eventBuffers.Add(update);
             }
-            else if (type.type == "heartbeat")
+            else if (update.Type == "heartbeat")
             {
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
             }
-            else if (type.type == "trade")
+            else if (update.Type == "trade")
             {
-                GeminiResponseTrade? item = JsonConvert.DeserializeObject<GeminiResponseTrade>(message);
+                MarketConnectors.Gemini.Model.Trade? item = JsonConvert.DeserializeObject<MarketConnectors.Gemini.Model.Trade>(message);
                 UpdateTrades(item);
             }
             else
             {
-                throw new Exception("Type not recognized " + type.type);
+                throw new Exception("Type not recognized " + update.Type);
             }
         }
         private void CheckConnectionStatus(object state)
@@ -879,11 +880,11 @@ namespace MarketConnectors.Gemini
                 changes.Add(new List<string>() { "buy", x.Price.Value.ToString(), x.Size.Value.ToString() });
             });
 
-            UpdateOrderBook(new GeminiResponseInitial()
+            UpdateOrderBook(new MarketUpdate()
             {
-                symbol = symbol,
-                type = "l2_updates", //no need here
-                changes = changes,
+                Symbol = symbol,
+                Type = "l2_updates", //no need here
+                Changes = changes,
             }, symbol, DateTime.Now);
 
             _localOrderBooks[symbol].Sequence = sequence;// Gemini does not provide sequence numbers

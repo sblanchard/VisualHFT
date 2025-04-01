@@ -213,7 +213,6 @@ namespace VisualHFT.ViewModel
                 LineStyle = LineStyle.Solid,
                 Color = OxyColors.Gray,
                 EdgeRenderingMode = EdgeRenderingMode.PreferSpeed,
-
             };
             var lineAsk = new OxyPlot.Series.LineSeries
             {
@@ -247,7 +246,6 @@ namespace VisualHFT.ViewModel
                 RenderInLegend = false,
                 Selectable = false,
                 EdgeRenderingMode = EdgeRenderingMode.PreferSpeed,
-
                 BinSize = 15 //smoothing the draw for speed performance
             };
             var scatterBids = new OxyPlot.Series.ScatterSeries
