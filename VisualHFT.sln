@@ -57,6 +57,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Studies.L2_OTT_Ratio", "Vis
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Studies.MarketResilience.Test", "VisualHFT.Plugins\Studies.MarketResilience.Test\Studies.MarketResilience.Test.csproj", "{5A140A0F-94B7-4D5A-A0BE-7DAA323534BB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OxyPlot.Wpf.Shared", "..\oxyplot\Source\OxyPlot.Wpf.Shared\OxyPlot.Wpf.Shared.csproj", "{0E271D27-8139-5EA9-4BAF-BBC9F2DD92BE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OxyPlot", "..\oxyplot\Source\OxyPlot\OxyPlot.csproj", "{76C85675-6AF0-509D-F457-1B8F15CA4FF0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -151,6 +155,14 @@ Global
 		{5A140A0F-94B7-4D5A-A0BE-7DAA323534BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5A140A0F-94B7-4D5A-A0BE-7DAA323534BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5A140A0F-94B7-4D5A-A0BE-7DAA323534BB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E271D27-8139-5EA9-4BAF-BBC9F2DD92BE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E271D27-8139-5EA9-4BAF-BBC9F2DD92BE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E271D27-8139-5EA9-4BAF-BBC9F2DD92BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E271D27-8139-5EA9-4BAF-BBC9F2DD92BE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76C85675-6AF0-509D-F457-1B8F15CA4FF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76C85675-6AF0-509D-F457-1B8F15CA4FF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76C85675-6AF0-509D-F457-1B8F15CA4FF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76C85675-6AF0-509D-F457-1B8F15CA4FF0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
