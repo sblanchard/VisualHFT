@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
@@ -14,33 +14,47 @@ using AxisPosition = OxyPlot.Axes.AxisPosition;
 using Prism.Mvvm;
 using VisualHFT.Commons.Helpers;
 using VisualHFT.Enums;
+using VisualHFT.Commons.Model;
+using System.Threading;
 
 
 namespace VisualHFT.ViewModel
 {
     public class vmOrderBook : BindableBase, IDisposable
     {
-        private bool _disposed = false; // to track whether the object has been disposed
-        private int _MAX_CHART_POINTS = 1300;
-        private TimeSpan _MIN_UI_REFRESH_TS = TimeSpan.FromMilliseconds(300); //For the UI: do not allow less than this, since it is not noticeble for human eye
+        private static readonly int _MAX_CHART_POINTS = 1000;
+        private static readonly int _MAX_TRADES_RECORDS = 100;
+        private readonly TimeSpan _MIN_UI_REFRESH_TS = TimeSpan.FromMilliseconds(20); //For the UI: do not allow less than this, since it is not noticeble for human eye
 
-        private object MTX_PLOTS = new object();
-        private object MTX_ORDERBOOK = new object();
-        private object MTX_TRADES = new object();
+        
+        private static class OrderBookSnapshotPool
+        {
+            // Create a pool for OrderBookSnapshot objects.
+            public static readonly CustomObjectPool<OrderBookSnapshot> Instance = new CustomObjectPool<OrderBookSnapshot>(maxPoolSize: _MAX_CHART_POINTS);
+        }
+
+
+        private bool _disposed = false; // to track whether the object has been disposed
+        private readonly object MTX_RealTimePricePlotModel = new object();
+
+        private readonly object MTX_RealTimeSpreadModel = new object();
+        private readonly object MTX_CummulativeBidsChartModel = new object();
+        private readonly object MTX_CummulativeAsksChartModel = new object();
+
+        private readonly object MTX_ORDERBOOK = new object();
+        private readonly object MTX_TRADES = new object();
 
         private Dictionary<string, Func<string, string, bool>> _dialogs;
-        protected ObservableCollection<string> _symbols;
+        private ObservableCollection<string> _symbols;
         private string _selectedSymbol;
         private VisualHFT.ViewModel.Model.Provider _selectedProvider = null;
         private AggregationLevel _aggregationLevelSelection;
 
-        private CachedCollection<BookItem> _bidsGrid;
-        private CachedCollection<BookItem> _asksGrid;
+        private List<BookItem> _bidsGrid;
+        private List<BookItem> _asksGrid;
         private CachedCollection<BookItem> _depthGrid;
 
         private ObservableCollection<VisualHFT.ViewModel.Model.Provider> _providers;
-        private double _maxOrderSize = 0;
-        private double _minOrderSize = 0;
 
         private BookItem _AskTOB = new BookItem();
         private BookItem _BidTOB = new BookItem();
@@ -49,27 +63,22 @@ namespace VisualHFT.ViewModel
         private int _decimalPlaces;
 
 
-        private Model.BookItemPriceSplit _BidTOB_SPLIT = null;
-        private Model.BookItemPriceSplit _AskTOB_SPLIT = null;
+        private readonly Model.BookItemPriceSplit _BidTOB_SPLIT = null;
+        private readonly Model.BookItemPriceSplit _AskTOB_SPLIT = null;
 
         private double _lobImbalanceValue = 0;
         private int _switchView = 0;
 
         private UIUpdater uiUpdater;
 
-        private Stack<VisualHFT.Model.Trade> _realTimeTrades;
-
-        private VisualHFT.Commons.Pools.CustomObjectPool<OrderBookData> _objectPool_OrderBook;
-        private VisualHFT.Commons.Pools.CustomObjectPool<BookItem> _objectPool_BookItem;
-        private VisualHFT.Commons.Pools.CustomObjectPool<PlotInfoPriceChart> _objectPool_Price;
-        private VisualHFT.Commons.Pools.CustomObjectPool<OrderBookLevel> _objectPool_OrderBookLevel;
-        private HelperCustomQueue<OrderBookData> _QUEUE;
-        private AggregatedCollection<PlotInfoPriceChart> _AGG_DATA;
+        private readonly Stack<VisualHFT.Model.Trade> _realTimeTrades;
+        private VisualHFT.Commons.Pools.CustomObjectPool<OxyPlot.Series.ScatterPoint> _objectPool_ScatterPoint;
+        private HelperCustomQueue<OrderBookSnapshot> _QUEUE;
+        private AggregatedCollection<OrderBookSnapshot> _AGGREGATED_LOB;
 
 
         private bool _MARKETDATA_AVAILABLE = false;
         private bool _TRADEDATA_AVAILABLE = false;
-
 
         public vmOrderBook(Dictionary<string, Func<string, string, bool>> dialogs)
         {
@@ -79,11 +88,9 @@ namespace VisualHFT.ViewModel
             CummulativeBidsChartModel = new PlotModel();
             CummulativeAsksChartModel = new PlotModel();
 
-            _objectPool_OrderBook = new CustomObjectPool<OrderBookData>(_MAX_CHART_POINTS * 1000);
-            _objectPool_BookItem = new CustomObjectPool<BookItem>(_MAX_CHART_POINTS * 1000);
-            _objectPool_Price = new CustomObjectPool<PlotInfoPriceChart>(_MAX_CHART_POINTS * 10);
-            _objectPool_OrderBookLevel = new CustomObjectPool<OrderBookLevel>(_MAX_CHART_POINTS * 1000);
-            _QUEUE = new HelperCustomQueue<OrderBookData>($"<OrderBookData>_vmOrderBook", QUEUE_onReadAction, QUEUE_onErrorAction);
+            _objectPool_ScatterPoint = new CustomObjectPool<OxyPlot.Series.ScatterPoint>(_MAX_CHART_POINTS * 1000);
+
+            _QUEUE = new HelperCustomQueue<OrderBookSnapshot>($"<OrderBookSnapshot>_vmOrderBook", QUEUE_onReadAction, QUEUE_onErrorAction);
 
 
             _realTimeTrades = new Stack<VisualHFT.Model.Trade>();
@@ -93,8 +100,8 @@ namespace VisualHFT.ViewModel
             InitializeRealTimeSpreadChart();
             InitializeCummulativeCharts();
 
-            _bidsGrid = new CachedCollection<BookItem>((x, y) => y.Price.GetValueOrDefault().CompareTo(x.Price.GetValueOrDefault()));
-            _asksGrid = new CachedCollection<BookItem>((x, y) => x.Price.GetValueOrDefault().CompareTo(y.Price.GetValueOrDefault()));
+            _bidsGrid = new List<BookItem>();
+            _asksGrid = new List<BookItem>();
             _depthGrid = new CachedCollection<BookItem>((x, y) => y.Price.GetValueOrDefault().CompareTo(x.Price.GetValueOrDefault()));
 
             _symbols = new ObservableCollection<string>(HelperSymbol.Instance);
@@ -107,9 +114,9 @@ namespace VisualHFT.ViewModel
             }
             _aggregationLevelSelection = AggregationLevel.Ms100; //DEFAULT
             uiUpdater = new UIUpdater(uiUpdaterAction, _aggregationLevelSelection.ToTimeSpan().TotalMilliseconds);
-            _AGG_DATA = new AggregatedCollection<PlotInfoPriceChart>(_aggregationLevelSelection, _MAX_CHART_POINTS,
-                x => x.Date, _AGG_DATA_OnAggregating);
-            _AGG_DATA.OnRemoving += _AGG_DATA_OnRemoving;
+            _AGGREGATED_LOB = new AggregatedCollection<OrderBookSnapshot>(_aggregationLevelSelection, _MAX_CHART_POINTS, x => x.LastUpdated, _AGGREGATED_LOB_OnAggregating);
+            _AGGREGATED_LOB.OnRemoved += _AGGREGATED_LOB_OnRemoved;
+            _AGGREGATED_LOB.OnAdded += _AGGREGATED_LOB_OnAdded;
 
             HelperSymbol.Instance.OnCollectionChanged += ALLSYMBOLS_CollectionChanged;
             HelperProvider.Instance.OnDataReceived += PROVIDERS_OnDataReceived;
@@ -452,14 +459,14 @@ namespace VisualHFT.ViewModel
                 //This is the most expensive calls. IT will freeze the UI thread if we don't de-couple
                 Application.Current.Dispatcher.BeginInvoke(() =>
                 {
-                    lock (MTX_PLOTS)
-                    {
+                    lock (MTX_RealTimePricePlotModel)
                         RealTimePricePlotModel.InvalidatePlot(true);
+                    lock(MTX_RealTimeSpreadModel)
                         RealTimeSpreadModel.InvalidatePlot(true);
+                    lock (MTX_CummulativeBidsChartModel)
                         CummulativeBidsChartModel.InvalidatePlot(true);
+                    lock (MTX_CummulativeAsksChartModel)
                         CummulativeAsksChartModel.InvalidatePlot(true);
-                    }
-
                 });
 
 
@@ -475,7 +482,7 @@ namespace VisualHFT.ViewModel
                     while (_realTimeTrades.TryPop(out var itemToAdd))
                     {
                         TradesDisplay.Insert(0, itemToAdd);
-                        if (TradesDisplay.Count > 100)
+                        if (TradesDisplay.Count > _MAX_TRADES_RECORDS)
                         {
                             TradesDisplay.RemoveAt(TradesDisplay.Count - 1);
                         }
@@ -505,67 +512,83 @@ namespace VisualHFT.ViewModel
             if (string.IsNullOrEmpty(_selectedSymbol) || _selectedSymbol != e?.Symbol)
                 return;
 
+
             e.CalculateMetrics();
-            var localLOB = _objectPool_OrderBook.Get();
-            localLOB.ShallowCopyFrom(e, _objectPool_BookItem);
-            _QUEUE.Add(localLOB);
+            OrderBookSnapshot snapshot = OrderBookSnapshotPool.Instance.Get();
+            // Initialize its state based on the master OrderBook.
+            snapshot.UpdateFrom(e);
+            // Enqueue for processing.
+            _QUEUE.Add(snapshot);
         }
 
-
-        private void _AGG_DATA_OnRemoving(object? sender, PlotInfoPriceChart e)
+        private void _AGGREGATED_LOB_OnAdded(object? sender, OrderBookSnapshot e)
         {
-            e.AskLevelOrders.ForEach(x => _objectPool_OrderBookLevel.Return(x));
-            e.BidLevelOrders.ForEach(x => _objectPool_OrderBookLevel.Return(x));
-            _objectPool_Price?.Return(e);
-        }
-        private void _AGG_DATA_OnAggregating(PlotInfoPriceChart existing, PlotInfoPriceChart newItem)
-        {
-            existing.MidPrice = newItem.MidPrice;
-            existing.AskPrice = newItem.AskPrice;
-            existing.BidPrice = newItem.BidPrice;
-            //existing.Date = newItem.Date;
-            existing.Spread = newItem.Spread;
-            existing.Volume = newItem.Volume;
+            var lobItemToDisplay = _AGGREGATED_LOB[_AGGREGATED_LOB.Count() -1]; //if the new item is inserted, we need to get the previous one to update charts
+            if (lobItemToDisplay == null)
+                return;
+            double sharedTS = lobItemToDisplay.LastUpdated.ToOADate();
+            lock (MTX_RealTimeSpreadModel)
+                AddPointToSpreadChart(ToDataPointSpread(lobItemToDisplay, sharedTS));
 
+            double maxAsk = 0;
+            double maxBid = 0;
+            lock (MTX_CummulativeAsksChartModel)
+                maxAsk = AddPointsToCumulativeAskVolumeChart(ToDataPointsCumulativeVolume(lobItemToDisplay.Asks, sharedTS));
+            lock (MTX_CummulativeBidsChartModel)
+                maxBid = AddPointsToCumulativeBidVolumeChart(ToDataPointsCumulativeVolume(lobItemToDisplay.Bids, sharedTS));
+            var maxAll = Math.Max(maxBid, maxAsk);
+            lock (MTX_CummulativeBidsChartModel)
+                SetMaximumsToCumulativeBidVolumeCharts(maxAll);
+            lock (MTX_CummulativeAsksChartModel)
+                SetMaximumsToCumulativeAskVolumeCharts(maxAll);
 
-            {
-                //send existing items back to the pool
-                existing.AskLevelOrders.ForEach(x => _objectPool_OrderBookLevel.Return(x));
-                existing.AskLevelOrders.Clear();
-                existing.BidLevelOrders.ForEach(x => _objectPool_OrderBookLevel.Return(x));
-                existing.BidLevelOrders.Clear();
-
-                //add new items
-                existing.BidLevelOrders.AddRange(newItem.BidLevelOrders);
-                existing.AskLevelOrders.AddRange(newItem.AskLevelOrders);
-            }
-        }
-        private void QUEUE_onReadAction(OrderBookData ob)
-        {
-            PlotInfoPriceChart newPoint = null;
+            lock (MTX_RealTimePricePlotModel)
+                AddPointsToScatterPriceChart(
+                    ToDataPointBestBid(lobItemToDisplay, sharedTS),
+                    ToDataPointBestAsk(lobItemToDisplay, sharedTS),
+                    ToDataPointMidPrice(lobItemToDisplay, sharedTS),
+                    ToScatterPointsLevels(lobItemToDisplay.Bids, sharedTS),
+                    ToScatterPointsLevels(lobItemToDisplay.Asks, sharedTS)
+                );
             lock (MTX_ORDERBOOK)
-                newPoint = GenerateSinglePoint_RealTimePrice(ob);
+                UpdateLocalValues(lobItemToDisplay);
 
-            //Return objects to the pool
-            for (int i = 0; i < ob.Bids.Count(); i++)//plain iteration performs better than enumerator or linq (by dotTrace)
-                _objectPool_BookItem.Return(ob.Bids[i]);
-            for (int i = 0; i < ob.Asks.Count(); i++)//plain iteration performs better than enumerator or linq (by dotTrace)
-                _objectPool_BookItem.Return(ob.Asks[i]);
-
-            _objectPool_OrderBook.Return(ob);
-            if (!_AGG_DATA.Add(newPoint))
-            {
-                //object has been used to update the existing item (_AGG_DATA_OnAggregating), now we can discard it
-                _objectPool_Price.Return(newPoint);
-            }
-            else
-            {
-                lock (MTX_PLOTS)
-                {
-                    Oxyplot_SeriesUpdate();
-                }
-            }
             _MARKETDATA_AVAILABLE = true; //to avoid ui update when no new data is coming in
+
+        }
+        private void _AGGREGATED_LOB_OnRemoved(object? sender, int index)
+        {
+            if (currentThreadID == 0)
+                currentThreadID = Thread.CurrentThread.ManagedThreadId;
+            if (currentThreadID != Thread.CurrentThread.ManagedThreadId)
+                return;
+
+            //for current snapshot, make sure to return to the pool 
+            OrderBookSnapshotPool.Instance.Return(_AGGREGATED_LOB[index]);
+
+            //remove last points on the chart
+            lock (MTX_RealTimeSpreadModel)
+                RemoveLastPointToSpreadChart();
+            lock (MTX_RealTimePricePlotModel)
+                RemoveLastPointsToScatterChart();
+        }
+        private void _AGGREGATED_LOB_OnAggregating(OrderBookSnapshot existing, OrderBookSnapshot newItem)
+        {
+            //for current snapshot, the one we will replace with the new one, make sure to return to the pool 
+            OrderBookSnapshotPool.Instance.Return(existing);
+            
+            //always keep latest snapshot. 
+            existing = newItem;
+        }
+
+        private static int currentThreadID = 0;
+        private void QUEUE_onReadAction(OrderBookSnapshot ob)
+        {
+            //add item to the AggregatedCollection
+            // when data is added       -> get prev item and Generate a new point for the chart
+            // when data is removed     -> remove from the chart and return to the pool
+
+            _AGGREGATED_LOB.Add(ob);
         }
         private void QUEUE_onErrorAction(Exception ex)
         {
@@ -575,219 +598,219 @@ namespace VisualHFT.ViewModel
 
 
 
-        private PlotInfoPriceChart GenerateSinglePoint_RealTimePrice(OrderBookData orderBook)
+        private DataPoint ToDataPointBestBid(OrderBookSnapshot lob, double sharedTS)
         {
-            orderBook.CalculateAccummulated();
+            return new DataPoint(sharedTS, lob.Bids[0].Price.Value);
+        }
+        private DataPoint ToDataPointBestAsk(OrderBookSnapshot lob, double sharedTS)
+        {
+            return new DataPoint(sharedTS, lob.Asks[0].Price.Value);
+        }
+        private DataPoint ToDataPointMidPrice(OrderBookSnapshot lob, double sharedTS)
+        {
+            return new DataPoint(sharedTS, lob.MidPrice);
+        }
+        private DataPoint ToDataPointSpread(OrderBookSnapshot lob, double sharedTS)
+        {
+            return new DataPoint(sharedTS, lob.Spread);
+        }
+        private IEnumerable<OxyPlot.Series.ScatterPoint> ToScatterPointsLevels(List<BookItem> lobList, double sharedTS)
+        {
+            var scatterPoints = new List<OxyPlot.Series.ScatterPoint>();
+            lobList.ForEach(level => 
+            {
+                if (level.Price > 0 && level.Size != 0)
+                {
+                    var newScatter = _objectPool_ScatterPoint.Get();
+                    newScatter.X = sharedTS;
+                    newScatter.Y = level.Price.Value;
+                    newScatter.Size = 3;
+                    newScatter.Value = level.Size.Value;
+                    scatterPoints.Add(newScatter);
+                }
 
+            });
+            return scatterPoints;
+        }
+        private IEnumerable<DataPoint> ToDataPointsCumulativeVolume(List<BookItem> lobList, double sharedTS)
+        {
+            var retItems = new List<DataPoint>();
+            double cumulativeVol = 0;
+            lobList.ForEach(level =>
+            {
+                if (level.Price.HasValue && level.Price.Value > 0 && level.Size.HasValue && level.Size.Value > 0)
+                {
+                    cumulativeVol += level.Size.Value;
+                    retItems.Add(new DataPoint(level.Price.Value, cumulativeVol));
+                }
+            });
+            return retItems;
+        }
+        private void AddPointToSpreadChart(DataPoint spreadPoint)
+        {
+            if (RealTimeSpreadModel.Series[0] is OxyPlot.Series.LineSeries _spreadSeries)
+            {
+                _spreadSeries.Points.Add(spreadPoint);
+            }
+        }
+        private double AddPointsToCumulativeAskVolumeChart(IEnumerable<DataPoint> cumulativeAskPoints)
+        {
+            double maxCumulativeVol = 0;
+            //get series
+            var _cumSeriesAsks = CummulativeAsksChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
+            //clear current values
+            _cumSeriesAsks?.Points.Clear();
+
+            //ADD POINTS
+            foreach (var item in cumulativeAskPoints)
+            {
+                _cumSeriesAsks?.Points.Add(item);
+                maxCumulativeVol = Math.Max(maxCumulativeVol, item.X);
+            }
+            return maxCumulativeVol;
+        }
+        private double AddPointsToCumulativeBidVolumeChart(IEnumerable<DataPoint> cumulativeBidPoints)
+        {
+            double maxCumulativeVol = 0;
+            //get series
+            var _cumSeriesBids = CummulativeBidsChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
+            //clear current values
+            _cumSeriesBids?.Points.Clear();
+
+            //ADD POINTS
+            foreach (var item in cumulativeBidPoints)
+            {
+                _cumSeriesBids?.Points.Add(item);
+                maxCumulativeVol = Math.Max(maxCumulativeVol, item.X);
+            }
+            return maxCumulativeVol;
+        }
+        private void SetMaximumsToCumulativeBidVolumeCharts(double maxCumulativeVol)
+        {
+            var _cumSeriesBids = CummulativeBidsChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
+            if (_cumSeriesBids?.YAxis != null)
+            {
+                _cumSeriesBids.YAxis.Maximum = maxCumulativeVol;
+            }
+        }
+        private void SetMaximumsToCumulativeAskVolumeCharts(double maxCumulativeVol)
+        {
+            var _cumSeriesAsks = CummulativeAsksChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
+            if (_cumSeriesAsks?.YAxis != null)
+            {
+                _cumSeriesAsks.YAxis.Maximum = maxCumulativeVol;
+            }
+        }
+        private void AddPointsToScatterPriceChart(DataPoint bidPricePoint, 
+            DataPoint askPricePoint,
+            DataPoint midPricePoint,
+            IEnumerable<OxyPlot.Series.ScatterPoint> bidLevelPoints,
+            IEnumerable<OxyPlot.Series.ScatterPoint> askLevelPoints)
+        {
+            foreach (var serie in RealTimePricePlotModel.Series)
+            {
+                if (serie is OxyPlot.Series.LineSeries _serie)
+                {
+                    if (serie.Title == "MidPrice")
+                        _serie.Points.Add(midPricePoint);
+                    else if (serie.Title == "Ask")
+                        _serie.Points.Add(askPricePoint);
+                    else if (serie.Title == "Bid")
+                        _serie.Points.Add(bidPricePoint);
+                }
+                else if (serie is OxyPlot.Series.ScatterSeries _scatter)
+                {
+                    if (_scatter.ColorAxis is LinearColorAxis colorAxis)
+                    {
+                        //we have defined min/max when normalizing the Size in "GenerateSinglePoint_RealTimePrice" method.
+                        colorAxis.Minimum = 1;
+                        colorAxis.Maximum = 10;
+                    }
+                    if (serie.Title == "ScatterAsks")
+                    {
+                        _scatter.Points.AddRange(askLevelPoints);
+                    }
+                    else if (serie.Title == "ScatterBids")
+                    {
+                        _scatter.Points.AddRange(bidLevelPoints);
+                    }
+                }
+            }
+        }
+        private void UpdateLocalValues(OrderBookSnapshot orderBook)
+        {
             BidAskGridUpdate(orderBook);
             _decimalPlaces = orderBook.PriceDecimalPlaces;
 
-
             _BidTOB = orderBook.GetTOB(true);
             _AskTOB = orderBook.GetTOB(false);
-            _MidPoint = orderBook != null ? orderBook.MidPrice : 0;
-            _Spread = orderBook != null ? orderBook.Spread : 0;
+            _MidPoint = orderBook.MidPrice;
+            _Spread = orderBook.Spread;
             _lobImbalanceValue = orderBook.ImbalanceValue;
 
             if (_AskTOB != null && _AskTOB.Price.HasValue && _AskTOB.Size.HasValue)
                 _AskTOB_SPLIT.SetNumber(_AskTOB.Price.Value, _AskTOB.Size.Value, _decimalPlaces);
             if (_BidTOB != null && _BidTOB.Price.HasValue && _BidTOB.Size.HasValue)
                 _BidTOB_SPLIT.SetNumber(_BidTOB.Price.Value, _BidTOB.Size.Value, _decimalPlaces);
-
-
-            var objToAdd = _objectPool_Price.Get();
-            objToAdd.Date = HelperTimeProvider.Now;
-            objToAdd.MidPrice = _MidPoint;
-            objToAdd.AskPrice = _AskTOB == null || !_AskTOB.Price.HasValue ? 0 : _AskTOB.Price.Value;
-            objToAdd.BidPrice = _BidTOB == null || !_BidTOB.Price.HasValue ? 0 : _BidTOB.Price.Value;
-            objToAdd.Volume = _AskTOB == null || _BidTOB == null || !_AskTOB.Size.HasValue || !_BidTOB.Size.HasValue ? 0 : _AskTOB.Size.Value + _BidTOB.Size.Value;
-            objToAdd.Spread = _Spread;
-
-
-            #region Aggregated Orders at different levels [SCATTER BUBBLES]
-            var sizeMinMax = orderBook.GetMinMaxSizes();
-            if (sizeMinMax.Item1 != 0)
-                _minOrderSize = Math.Min(sizeMinMax.Item1, _minOrderSize);
-            _maxOrderSize = Math.Max(sizeMinMax.Item2, _maxOrderSize);
-
-            double minBubbleSize = 1; // Minimum size for bubbles in pixels
-            double maxBubbleSize = 10; // Maximum size for bubbles in pixels
-            if (orderBook.Bids != null)
-            {
-                foreach (var bid in orderBook.Bids)
-                {
-                    if (bid.Price.HasValue && bid.Price.Value > 0 && bid.Size.HasValue && bid.Size.Value > 0)
-                    {
-                        var _obj = _objectPool_OrderBookLevel.Get();
-                        _obj.Date = objToAdd.Date;
-                        _obj.Price = bid.Price.Value;
-                        _obj.Size = minBubbleSize + (bid.Size.Value - _minOrderSize) / (_maxOrderSize - _minOrderSize) * (maxBubbleSize - minBubbleSize);
-
-                        objToAdd.BidLevelOrders.Add(_obj);
-                    }
-                }
-            }
-            if (orderBook.Asks != null)
-            {
-                foreach (var ask in orderBook.Asks)
-                {
-                    if (ask.Price.HasValue && ask.Price.Value > 0 && ask.Size.HasValue && ask.Price.Value > 0)
-                    {
-                        var _obj = _objectPool_OrderBookLevel.Get();
-                        _obj.Date = objToAdd.Date;
-                        _obj.Price = ask.Price.Value;
-                        _obj.Size = minBubbleSize + (ask.Size.Value - _minOrderSize) / (_maxOrderSize - _minOrderSize) * (maxBubbleSize - minBubbleSize);
-
-                        objToAdd.AskLevelOrders.Add(_obj);
-                    }
-                }
-            }
-            #endregion
-
-            return objToAdd;
         }
-
-        private void Oxyplot_SeriesUpdate()
+        private void RemoveLastPointToSpreadChart()
         {
-            //clean series
-            /*RealTimeSpreadModel.Series.OfType<OxyPlot.Series.LineSeries>().ToList().ForEach(x => x.Points.Clear());
-            RealTimePricePlotModel.Series.OfType<OxyPlot.Series.LineSeries>().ToList().ForEach(x => x.Points.Clear());
-            RealTimePricePlotModel.Series.OfType<OxyPlot.Series.ScatterSeries>().ToList().ForEach(x => x.Points.Clear());
-            CummulativeAsksChartModel.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
-            CummulativeBidsChartModel.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
-            */
-
-            if (_AGG_DATA.Count() > 0)
-            {
-                var point = _AGG_DATA.LastOrDefault();
-                //REAL TIME PRICES
-                foreach (var serie in RealTimePricePlotModel.Series)
-                {
-                    if (serie is OxyPlot.Series.LineSeries _serie)
-                    {
-                        if (point.MidPrice == 0 || point.AskPrice == 0 || point.BidPrice == 0)
-                            break;
-                        if (serie.Title == "MidPrice")
-                            _serie.Points.Add(new DataPoint(point.Date.ToOADate(), point.MidPrice));
-                        else if (serie.Title == "Ask")
-                            _serie.Points.Add(new DataPoint(point.Date.ToOADate(), point.AskPrice));
-                        else if (serie.Title == "Bid")
-                            _serie.Points.Add(new DataPoint(point.Date.ToOADate(), point.BidPrice));
-                    }
-                    else if (serie is OxyPlot.Series.ScatterSeries _scatter)
-                    {
-                        if (_scatter.ColorAxis is LinearColorAxis colorAxis)
-                        {
-                            //we have defined min/max when normalizing the Size in "GenerateSinglePoint_RealTimePrice" method.
-                            colorAxis.Minimum = 1;
-                            colorAxis.Maximum = 10;
-                        }
-                        if (serie.Title == "ScatterAsks")
-                        {
-                            IEnumerable<OrderBookLevel> _levels;
-                            _levels = point.AskLevelOrders.ToImmutableArray().Where(x => x.Price < point.MidPrice * 1.005);
-                            foreach (var level in _levels)
-                            {
-                                if (level.Price > 0 && level.Size != 0)
-                                {
-                                    var newScatter = new OxyPlot.Series.ScatterPoint(point.Date.ToOADate(), level.Price,
-                                        3, level.Size);
-                                    _scatter.Points.Add(newScatter);
-                                }
-                            }
-                        }
-                        else if (serie.Title == "ScatterBids")
-                        {
-                            IEnumerable<OrderBookLevel> _levels;
-                            _levels = point.BidLevelOrders.ToImmutableArray().Where(x => x.Price > point.MidPrice * 0.995);
-                            foreach (var level in _levels)
-                            {
-                                if (level.Price > 0 && level.Size != 0)
-                                {
-                                    var newScatter = new OxyPlot.Series.ScatterPoint(point.Date.ToOADate(), level.Price,
-                                        3, level.Size);
-                                    _scatter.Points.Add(newScatter);
-                                }
-                            }
-                        }
-                    }
-                }
-
-
-
-                //REALTIME SPREAD
-                var _spreadSeries = RealTimeSpreadModel.Series[0] as OxyPlot.Series.LineSeries;
-                _spreadSeries.Points.Add(new DataPoint(point.Date.ToOADate(), point.Spread));
-
-
-                //CUMULATIVE CHART
-                double maxCummulativeVol = 0;
-                CummulativeAsksChartModel.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
-                CummulativeBidsChartModel.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
-                var _cumSeriesBids = CummulativeBidsChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
-                var _cumSeriesAsks = CummulativeAsksChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
-                lock (MTX_ORDERBOOK)
-                {
-                    foreach (var item in _bidsGrid)
-                    {
-                        if (item.Price.HasValue && item.Price.Value > 0 && item.Size.HasValue && item.Size.Value > 0)
-                        {
-                            _cumSeriesBids.Points.Add(new DataPoint(item.Price.Value, item.CummulativeSize.Value));
-                            maxCummulativeVol = Math.Max(maxCummulativeVol, item.CummulativeSize.Value);
-                        }
-                    }
-
-                    foreach (var item in _asksGrid)
-                    {
-                        if (item.Price.HasValue && item.Price.Value > 0 && item.Size.HasValue && item.Size.Value > 0)
-                        {
-                            _cumSeriesAsks.Points.Add(new DataPoint(item.Price.Value, item.CummulativeSize.Value));
-                            maxCummulativeVol = Math.Max(maxCummulativeVol, item.CummulativeSize.Value);
-                        }
-                    }
-                }
-
-                if (_cumSeriesAsks.YAxis != null)
-                {
-                    _cumSeriesAsks.YAxis.Maximum = maxCummulativeVol;
-                    _cumSeriesBids.YAxis.Maximum = maxCummulativeVol;
-                }
-            }
-
-            KeepPlotModelsSize();
-
-        }
-        private void KeepPlotModelsSize()
-        {
-            bool lineSeriePointIsRemoved = false;
-            //remove line series first
-            foreach (var _serie in RealTimePricePlotModel.Series.OfType<OxyPlot.Series.LineSeries>())
-            {
-                //check if the x-axis overflows
-                while (_serie.Points.Count > _MAX_CHART_POINTS)
-                {
-                    _serie.Points.RemoveAt(0);
-                    lineSeriePointIsRemoved = true;
-                }
-            }
-            foreach (var _scatter in RealTimePricePlotModel.Series.OfType<OxyPlot.Series.ScatterSeries>())
-            {
-                if (lineSeriePointIsRemoved)
-                {
-                    //check if the x-axis overflows
-                    var lineFirstPoint = RealTimePricePlotModel.Series.OfType<OxyPlot.Series.LineSeries>().First().Points[0];
-                    _scatter.Points.RemoveAll(p => p.X < lineFirstPoint.X);
-                    //_scatter.Points.RemoveAll(p => p.X > point.Date.ToOADate());
-                }
-            }
-
-
-            var _spreadSeries = RealTimeSpreadModel.Series[0] as OxyPlot.Series.LineSeries;
-            while (_spreadSeries.Points.Count > _MAX_CHART_POINTS)
+            if (RealTimeSpreadModel.Series[0] is OxyPlot.Series.LineSeries _spreadSeries)
             {
                 _spreadSeries.Points.RemoveAt(0);
+                Trace.Assert(_spreadSeries.Points.Count > _MAX_CHART_POINTS, "Invalid number of points for Spread chart.");
             }
         }
+        private void RemoveLastPointsToScatterChart()
+        {
+            foreach (var serie in RealTimePricePlotModel.Series)
+            {
+                if (serie is OxyPlot.Series.LineSeries _serie)
+                {
+                    if (serie.Title == "MidPrice")
+                    {
+                        _serie.Points.RemoveAt(0);
+                        Trace.Assert(_serie.Points.Count > _MAX_CHART_POINTS, "Invalid number of points for MidPrice series.");
+                    }
+                    else if (serie.Title == "Ask")
+                    {
+                        _serie.Points.RemoveAt(0);
+                        Trace.Assert(_serie.Points.Count > _MAX_CHART_POINTS, "Invalid number of points for AskPrice series.");
+                    }
+                    else if (serie.Title == "Bid")
+                    {
+                        _serie.Points.RemoveAt(0);
+                        Trace.Assert(_serie.Points.Count > _MAX_CHART_POINTS, "Invalid number of points for BidPrice series.");
+                    }
+                }
+                else if (serie is OxyPlot.Series.ScatterSeries _scatter)
+                {
+                    if (serie.Title == "ScatterAsks")
+                    {
+                        double tsToRemove = _scatter.Points[0].X;
+                        while (_scatter.Points[0].X == tsToRemove)
+                        {
+                            _objectPool_ScatterPoint.Return(_scatter.Points[0]);
+                            _scatter.Points.RemoveAt(0);
+                        }
+                        Debug.Assert(_scatter.Points.GroupBy(x => x.X).Count() > _MAX_CHART_POINTS, "Invalid number of points for AskScatter series.");
+                    }
+                    else if (serie.Title == "ScatterBids")
+                    {
+                        double tsToRemove = _scatter.Points[0].X;
+                        while (_scatter.Points[0].X == tsToRemove)
+                        {
+                            _objectPool_ScatterPoint.Return(_scatter.Points[0]);
+                            _scatter.Points.RemoveAt(0);
+                        }
+                        Debug.Assert(_scatter.Points.GroupBy(x => x.X).Count() > _MAX_CHART_POINTS, "Invalid number of points for BidScatter series.");
+                    }
+                }
+            }
+        }
+
+
+
         private void Clear()
         {
             Application.Current.Dispatcher.BeginInvoke(() =>
@@ -802,15 +825,20 @@ namespace VisualHFT.ViewModel
 
 
             _QUEUE.Clear(); //make this outside the LOCK, otherwise we could run into a deadlock situation when calling back 
-            lock (MTX_PLOTS)
-            {
-                //clean series
+            //clean series
+            lock (MTX_RealTimeSpreadModel)
                 RealTimeSpreadModel?.Series.OfType<OxyPlot.Series.LineSeries>().ToList().ForEach(x => x.Points.Clear());
-                RealTimePricePlotModel?.Series.OfType<OxyPlot.Series.LineSeries>().ToList().ForEach(x => x.Points.Clear());
-                RealTimePricePlotModel?.Series.OfType<OxyPlot.Series.ScatterSeries>().ToList().ForEach(x => x.Points.Clear());
-                CummulativeAsksChartModel?.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
-                CummulativeBidsChartModel?.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
+            lock (MTX_RealTimePricePlotModel)
+            {
+                RealTimePricePlotModel?.Series.OfType<OxyPlot.Series.LineSeries>().ToList()
+                    .ForEach(x => x.Points.Clear());
+                RealTimePricePlotModel?.Series.OfType<OxyPlot.Series.ScatterSeries>().ToList()
+                    .ForEach(x => x.Points.Clear());
             }
+            lock (MTX_CummulativeAsksChartModel)
+                CummulativeAsksChartModel?.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
+            lock (MTX_CummulativeBidsChartModel)
+                CummulativeBidsChartModel?.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
 
 
             lock (MTX_ORDERBOOK)
@@ -827,22 +855,17 @@ namespace VisualHFT.ViewModel
                 _AskTOB_SPLIT.Clear();
                 _BidTOB_SPLIT.Clear();
 
-                _maxOrderSize = 0; //reset
-                _minOrderSize = 0; //reset
-
-                _objectPool_OrderBook = new CustomObjectPool<OrderBookData>(_MAX_CHART_POINTS * 1000);
-                _objectPool_BookItem = new CustomObjectPool<BookItem>(_MAX_CHART_POINTS * 1000);
-                _objectPool_Price = new CustomObjectPool<PlotInfoPriceChart>(_MAX_CHART_POINTS * 10);
-                _objectPool_OrderBookLevel = new CustomObjectPool<OrderBookLevel>(_MAX_CHART_POINTS * 1000);
-
-                if (_AGG_DATA != null)
+                _objectPool_ScatterPoint = new CustomObjectPool<OxyPlot.Series.ScatterPoint>(_MAX_CHART_POINTS * 1000);
+                if (_AGGREGATED_LOB != null)
                 {
-                    _AGG_DATA.OnRemoving -= _AGG_DATA_OnRemoving;
-                    _AGG_DATA.Dispose();
+                    _AGGREGATED_LOB.OnRemoved -= _AGGREGATED_LOB_OnRemoved;
+                    _AGGREGATED_LOB.OnAdded -= _AGGREGATED_LOB_OnAdded;
+                    _AGGREGATED_LOB.Dispose();
                 }
-                _AGG_DATA = new AggregatedCollection<PlotInfoPriceChart>(_aggregationLevelSelection, _MAX_CHART_POINTS,
-                    x => x.Date, _AGG_DATA_OnAggregating);
-                _AGG_DATA.OnRemoving += _AGG_DATA_OnRemoving;
+                _AGGREGATED_LOB = new AggregatedCollection<OrderBookSnapshot>(_aggregationLevelSelection, _MAX_CHART_POINTS,
+                    x => x.LastUpdated, _AGGREGATED_LOB_OnAggregating);
+                _AGGREGATED_LOB.OnRemoved += _AGGREGATED_LOB_OnRemoved;
+                _AGGREGATED_LOB.OnAdded += _AGGREGATED_LOB_OnAdded;
             }
 
             Dispatcher.CurrentDispatcher.BeginInvoke(() =>
@@ -870,10 +893,10 @@ namespace VisualHFT.ViewModel
         /// Avoiding allocations as much as possible.
         /// </summary>
         /// <param name="orderBook">The order book.</param>
-        private void BidAskGridUpdate(OrderBookData orderBook)
+        private void BidAskGridUpdate(OrderBookSnapshot orderBook)
         {
-            _asksGrid.ShallowUpdateFrom(orderBook.Asks);
-            _bidsGrid.ShallowUpdateFrom(orderBook.Bids);
+            _asksGrid = orderBook.Asks;
+            _bidsGrid = orderBook.Bids;
 
 
             //commented out for now
@@ -910,12 +933,12 @@ namespace VisualHFT.ViewModel
         }
         private void PROVIDERS_OnDataReceived(object? sender, VisualHFT.Model.Provider e)
         {
-            if (!_providers.Any(x => x.ProviderCode == e.ProviderCode))
+            if (_providers.All(x => x.ProviderCode != e.ProviderCode))
             {
                 Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
                 {
                     var item = new ViewModel.Model.Provider(e);
-                    if (!_providers.Any(x => x.ProviderCode == e.ProviderCode))
+                    if (_providers.All(x => x.ProviderCode != e.ProviderCode))
                         _providers.Add(item);
                     //if nothing is selected
                     if (_selectedProvider == null) //default provider must be the first who's Active
@@ -963,8 +986,8 @@ namespace VisualHFT.ViewModel
         public double MidPoint => _MidPoint;
         public double Spread => _Spread;
 
-        public IEnumerable<BookItem> Asks => _asksGrid.ToList();
-        public IEnumerable<BookItem> Bids => _bidsGrid.ToList();
+        public IEnumerable<BookItem> Asks => _asksGrid;
+        public IEnumerable<BookItem> Bids => _bidsGrid;
         public IEnumerable<BookItem> Depth => _depthGrid;
         public ObservableCollection<VisualHFT.Model.Trade> TradesDisplay { get; }
 
@@ -1002,13 +1025,16 @@ namespace VisualHFT.ViewModel
                     _bidsGrid?.Clear();
                     _asksGrid?.Clear();
                     _providers?.Clear();
-                    _objectPool_Price?.Dispose();
-                    _objectPool_OrderBookLevel?.Dispose();
+                    _objectPool_ScatterPoint?.Dispose();
+                    OrderBookSnapshotPool.Instance.Dispose();
                     _QUEUE?.Dispose();
 
-                    if (_AGG_DATA != null)
-                        _AGG_DATA.OnRemoving -= _AGG_DATA_OnRemoving;
-                    _AGG_DATA?.Dispose();
+                    if (_AGGREGATED_LOB != null)
+                    {
+                        _AGGREGATED_LOB.OnRemoved -= _AGGREGATED_LOB_OnRemoved;
+                        _AGGREGATED_LOB.OnAdded -= _AGGREGATED_LOB_OnAdded;
+                    }
+                    _AGGREGATED_LOB?.Dispose();
                 }
                 _disposed = true;
             }

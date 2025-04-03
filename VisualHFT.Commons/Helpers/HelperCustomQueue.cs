@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using log4net;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Principal;
 
@@ -6,6 +7,7 @@ namespace VisualHFT.Commons.Helpers
 {
     public class HelperCustomQueue<T> : IDisposable
     {
+        private const int ALERT_WHEN_QUEUE_SIZE = 1000;
         private BlockingCollection<T> _queue;
         private ManualResetEventSlim _resetEvent;
         private CancellationTokenSource _ctx;
@@ -15,10 +17,11 @@ namespace VisualHFT.Commons.Helpers
         private Action<Exception> _actionOnError;
         private readonly object _lock = new object();
         private bool _isConsumerPaused;
+        private DateTime _lastUpdateLog = DateTime.MinValue;
 
         private readonly HelperPerformanceCounter _performanceCounter;
         private readonly string _queueName;
-
+        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         public HelperCustomQueue(string queueName, Action<T> actionOnRead, Action<Exception> actionOnError = null)
         {
             _queue = new BlockingCollection<T>();
@@ -49,6 +52,7 @@ namespace VisualHFT.Commons.Helpers
         }
         public void Add(T item)
         {
+            bool informOverUtilization = false;
             lock (_lock)
             {
                 if (_ctx.IsCancellationRequested || _queue.IsAddingCompleted)
@@ -56,7 +60,12 @@ namespace VisualHFT.Commons.Helpers
                 _queue.Add(item, _ctx.Token);
                 _resetEvent.Set();
 
+                informOverUtilization = _queue.Count > ALERT_WHEN_QUEUE_SIZE;
                 _performanceCounter?.QueueItemAdded();
+            }
+            if (informOverUtilization)
+            {
+                InformOverUtilization();
             }
         }
 
@@ -118,8 +127,6 @@ namespace VisualHFT.Commons.Helpers
                 ClearAndResetTask(false);
             }
         }
-
-
         public void PauseConsumer()
         {
             _resetEvent.Reset();
@@ -133,6 +140,12 @@ namespace VisualHFT.Commons.Helpers
         private void ClearAndResetTask(bool restart = true)
         {
             _queue.CompleteAdding();
+            // Dispose all remaining disposable items in queue
+            foreach (var item in _queue.GetConsumingEnumerable().OfType<IDisposable>())
+            {
+                item.Dispose();
+            }
+
             _ctx.Cancel(); // Signal cancellation to the consumer task
             _resetEvent.Set(); // Release the consumer task from waiting 
 
@@ -168,7 +181,22 @@ namespace VisualHFT.Commons.Helpers
         }
 
 
+        private void InformOverUtilization()
+        {
+            if (DateTime.Now.Subtract(_lastUpdateLog).TotalSeconds > 5)
+            {
+                var typeName = typeof(T).Name;
+                var stackTrace = new StackTrace();
 
+                var callingMethod = stackTrace.GetFrame(2)?.GetMethod();
+                var callingClass = callingMethod?.ReflectedType?.Namespace + "." + callingMethod?.ReflectedType?.Name;
+                /*var caller = callingMethod.ReflectedType != null
+                    ? callingMethod.ReflectedType.Name
+                    : "Unknown" + "." + callingMethod.Name;*/
+                log.Warn($"HelperCustomQueue<{typeName}> -> {callingClass}::{callingMethod?.ToString()} - utilization: {_queue.Count}/{ALERT_WHEN_QUEUE_SIZE}");
+                _lastUpdateLog = DateTime.Now;
+            }
+        }
         protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
@@ -183,7 +211,6 @@ namespace VisualHFT.Commons.Helpers
                 _disposed = true;
             }
         }
-
         public void Dispose()
         {
             Dispose(true);

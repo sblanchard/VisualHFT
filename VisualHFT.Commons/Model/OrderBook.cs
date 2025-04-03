@@ -311,25 +311,6 @@ namespace VisualHFT.Model
         }
         public long Sequence { get; set; }
 
-        public void ShallowCopyFrom(OrderBook e, CustomObjectPool<BookItem> pool)
-        {
-            if (e == null)
-                return;
-            _data.ShallowCopyFrom(e, pool);
-        }
-        /// <summary>
-        /// ShallowUpdateFrom
-        /// Will update the existing data.
-        /// This is very useful when keeping a Collection locally and want to avoid swapping and allocating
-        /// </summary>
-        /// <param name="sourceList">The source list.</param>
-        public void ShallowUpdateFrom(OrderBook e)
-        {
-            if (e == null)
-                return;
-            _data.ShallowUpdateFrom(e);
-        }
-
         private void InternalClear()
         {
             for (int i = 0; i < _data.Asks.Count();)
@@ -430,8 +411,6 @@ namespace VisualHFT.Model
 
                 if (!willNewItemFallOut)
                 {
-                    if (string.IsNullOrEmpty(_poolBookItems.ProviderName))
-                        _poolBookItems.ProviderName = _data.ProviderName;
                     var _level = _poolBookItems.Get();
                     _level.EntryID = item.EntryID;
                     _level.Price = item.Price;

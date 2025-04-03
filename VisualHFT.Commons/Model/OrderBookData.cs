@@ -134,47 +134,6 @@ namespace VisualHFT.Model
             return Tuple.Create(minVal, maxVal);
         }
 
-
-        public void ShallowCopyFrom(OrderBook e, CustomObjectPool<BookItem> pool)
-        {
-            if (e == null)
-                return;
-            Symbol = e.Symbol;
-            PriceDecimalPlaces = e.PriceDecimalPlaces;
-            SizeDecimalPlaces = e.SizeDecimalPlaces;
-            ProviderID = e.ProviderID;
-            ProviderName = e.ProviderName;
-            ProviderStatus = e.ProviderStatus;
-            MaxDepth = e.MaxDepth;
-            ImbalanceValue = e.ImbalanceValue;
-
-            _Asks.ShallowCopyFrom(e.Asks, pool);
-            _Bids.ShallowCopyFrom(e.Bids, pool);
-        }
-
-        /// <summary>
-        /// ShallowUpdateFrom
-        /// Will update the existing data.
-        /// This is very useful when keeping a Collection locally and want to avoid swapping and allocating
-        /// </summary>
-        /// <param name="sourceList">The source list.</param>
-        public void ShallowUpdateFrom(OrderBook e)
-        {
-            if (e == null)
-                return;
-            Symbol = e.Symbol;
-            PriceDecimalPlaces = e.PriceDecimalPlaces;
-            SizeDecimalPlaces = e.SizeDecimalPlaces;
-            ProviderID = e.ProviderID;
-            ProviderName = e.ProviderName;
-            ProviderStatus = e.ProviderStatus;
-            MaxDepth = e.MaxDepth;
-            ImbalanceValue = e.ImbalanceValue;
-
-            _Asks.ShallowUpdateFrom(e.Asks);
-            _Bids.ShallowUpdateFrom(e.Bids);
-        }
-
         public void Reset()
         {
             _Bids?.Clear();
