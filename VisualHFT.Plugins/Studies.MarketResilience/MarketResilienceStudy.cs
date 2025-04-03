@@ -2,7 +2,9 @@
 using System;
 using System.Threading.Tasks;
 using VisualHFT.Commons.Helpers;
+using VisualHFT.Commons.Model;
 using VisualHFT.Commons.PluginManager;
+using VisualHFT.Commons.Pools;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
@@ -16,12 +18,17 @@ namespace VisualHFT.Studies
 {
     public class MarketResilienceStudy : BasePluginStudy
     {
+        private static class OrderBookSnapshotPool
+        {
+            // Create a pool for OrderBookSnapshot objects.
+            public static readonly CustomObjectPool<OrderBookSnapshot> Instance = new CustomObjectPool<OrderBookSnapshot>(maxPoolSize: 1000);
+        }
         private bool _disposed = false; // to track whether the object has been disposed
         private PlugInSettings _settings;
 
 
         private MarketResilienceCalculator mrCalc;
-        private HelperCustomQueue<OrderBook> _QUEUE;
+        private HelperCustomQueue<OrderBookSnapshot> _QUEUE;
 
 
 
@@ -60,7 +67,7 @@ namespace VisualHFT.Studies
 
         public MarketResilienceStudy()
         {
-            _QUEUE = new HelperCustomQueue<OrderBook>($"<OrderBook>_{this.Name}", QUEUE_onRead, QUEUE_onError);
+            _QUEUE = new HelperCustomQueue<OrderBookSnapshot>($"<OrderBookSnapshot>_{this.Name}", QUEUE_onRead, QUEUE_onError);
         }
         ~MarketResilienceStudy()
         {
@@ -108,19 +115,22 @@ namespace VisualHFT.Studies
             if (_settings.Provider.ProviderID != e.ProviderID || _settings.Symbol != e.Symbol)
                 return;
 
-            var currentLOB = new OrderBook();
-            currentLOB.ShallowCopyFrom(e, null);
-            _QUEUE.Add(currentLOB);
+            OrderBookSnapshot snapshot = OrderBookSnapshotPool.Instance.Get();
+            // Initialize its state based on the master OrderBook.
+            snapshot.UpdateFrom(e);
+            // Enqueue for processing.
+            _QUEUE.Add(snapshot);
         }
         private void TRADE_OnDataReceived(Trade e)
         {
             mrCalc.OnTrade(e);
             DoCalculationAndSend();
         }
-        private void QUEUE_onRead(OrderBook e)
+        private void QUEUE_onRead(OrderBookSnapshot e)
         {
             mrCalc.OnOrderBookUpdate(e);
             DoCalculationAndSend();
+            OrderBookSnapshotPool.Instance.Return(e);
         }
         private void QUEUE_onError(Exception ex)
         {
@@ -168,6 +178,7 @@ namespace VisualHFT.Studies
                 {
                     HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
                     HelperTrade.Instance.Unsubscribe(TRADE_OnDataReceived);
+                    OrderBookSnapshotPool.Instance.Dispose();
 
                     _QUEUE.Dispose();
                     mrCalc.Dispose();

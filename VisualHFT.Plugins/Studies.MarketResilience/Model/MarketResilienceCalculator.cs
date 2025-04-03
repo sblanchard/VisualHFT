@@ -1,4 +1,5 @@
 ﻿using System;
+using VisualHFT.Commons.Model;
 using VisualHFT.Commons.Pools;
 using VisualHFT.Model;
 using VisualHFT.Studies.MarketResilience.Model;
@@ -85,7 +86,7 @@ namespace Studies.MarketResilience.Model
                 CheckAndCalculateIfShock();
             }
         }
-        public void OnOrderBookUpdate(OrderBook orderBook)
+        public void OnOrderBookUpdate(OrderBookSnapshot orderBook)
         {
             lock (_syncLock)
             {
@@ -110,8 +111,8 @@ namespace Studies.MarketResilience.Model
                 }
                 recentSpreads.Add(currentSpread);
                 _lastMidPrice = (decimal?)orderBook.MidPrice;
-                _lastBidPrice = (decimal?)orderBook.Bids.FirstOrDefault()?.Price;
-                _lastAskPrice = (decimal?)orderBook.Asks.FirstOrDefault()?.Price;
+                _lastBidPrice = (decimal?)orderBook.Bids[0]?.Price;
+                _lastAskPrice = (decimal?)orderBook.Asks[0]?.Price;
                 CheckAndCalculateIfShock();
             }
         }

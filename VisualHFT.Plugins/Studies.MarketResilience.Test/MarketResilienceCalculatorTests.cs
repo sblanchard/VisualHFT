@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using VisualHFT.Model;
 using Studies.MarketResilience.Model;
+using VisualHFT.Commons.Model;
 using VisualHFT.Studies.MarketResilience.Model;
 using Xunit;
 
@@ -17,13 +18,15 @@ namespace Studies.MarketResilience.Tests
                 MinShockTimeDifference = 500, TradeSizeShockThresholdMultiplier = 3, SpreadShockThresholdMultiplier = 3
             };
         }
-        private OrderBook CreateOrderBook(decimal spread, decimal bidPrice, decimal askPrice)
+        private OrderBookSnapshot CreateOrderBook(decimal spread, decimal bidPrice, decimal askPrice)
         {
             var ob = new OrderBook();
             
             ob.LoadData(new[] { new BookItem { Price = (double?)askPrice, Size = 100 } },
                         new[] { new BookItem { Price = (double?)bidPrice, Size = 100 } });
-            return ob;
+            var newSnapshot = new OrderBookSnapshot();
+            newSnapshot.UpdateFrom(ob);
+            return newSnapshot;
         }
 
         [Fact]
