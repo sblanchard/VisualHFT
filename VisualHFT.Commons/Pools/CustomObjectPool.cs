@@ -53,7 +53,7 @@ namespace VisualHFT.Commons.Pools
         {
             if (_maxPoolSize > 0)
                 _utilizationPercentage = 1.0 - (_availableObjects / (double)_maxPoolSize);
-            if (_availableObjects < -1) //is being overused
+            if (_availableObjects < 0) //is being overused
             {
                 if (DateTime.Now.Subtract(_lastUpdateLog).TotalSeconds > 5)
                 {
