@@ -1,8 +1,10 @@
 ﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
@@ -18,6 +20,10 @@ using VisualHFT.Commons.Model;
 
 namespace VisualHFT.ViewModel
 {
+    public static class ListPool<T>
+    {
+        public static readonly CustomObjectPool<List<T>> Instance = new CustomObjectPool<List<T>>(maxPoolSize: 1000);
+    }
     public class vmOrderBook : BindableBase, IDisposable
     {
         private static readonly int _MAX_CHART_POINTS = 5000;
@@ -28,7 +34,7 @@ namespace VisualHFT.ViewModel
         private static class OrderBookSnapshotPool
         {
             // Create a pool for OrderBookSnapshot objects.
-            public static readonly CustomObjectPool<OrderBookSnapshot> Instance = new CustomObjectPool<OrderBookSnapshot>(maxPoolSize: _MAX_CHART_POINTS + (int)(_MAX_CHART_POINTS*0.1));
+            public static readonly CustomObjectPool<OrderBookSnapshot> Instance = new CustomObjectPool<OrderBookSnapshot>(maxPoolSize: _MAX_CHART_POINTS + (int)(_MAX_CHART_POINTS*1.1));
         }
 
 
@@ -37,8 +43,6 @@ namespace VisualHFT.ViewModel
 
         private readonly object MTX_RealTimeSpreadModel = new object();
         private readonly object MTX_CummulativeChartModel = new object();
-        private readonly object MTX_bidsGrid = new object();
-        private readonly object MTX_asksGrid = new object();
 
         private readonly object MTX_ORDERBOOK = new object();
         private readonly object MTX_TRADES = new object();
@@ -104,10 +108,8 @@ namespace VisualHFT.ViewModel
             InitializeRealTimeSpreadChart();
             InitializeCummulativeCharts();
 
-            lock(MTX_bidsGrid)
-                _bidsGrid = new List<BookItem>();
-            lock (MTX_asksGrid)
-                _asksGrid = new List<BookItem>();
+            _bidsGrid = new List<BookItem>();
+            _asksGrid = new List<BookItem>();
             _depthGrid = new CachedCollection<BookItem>((x, y) => y.Price.GetValueOrDefault().CompareTo(x.Price.GetValueOrDefault()));
 
             _symbols = new ObservableCollection<string>(HelperSymbol.Instance);
@@ -115,12 +117,16 @@ namespace VisualHFT.ViewModel
             AggregationLevels = new ObservableCollection<Tuple<string, AggregationLevel>>();
             foreach (AggregationLevel level in Enum.GetValues(typeof(AggregationLevel)))
             {
-                //if (level >= AggregationLevel.Ms100) //do not load less than 100ms. In order to save resources, we cannot go lower than 100ms (//TODO: in the future we must include lower aggregation levels)
+                if (level >= AggregationLevel.Ms10) //do not load less than 100ms. In order to save resources, we cannot go lower than 100ms (//TODO: in the future we must include lower aggregation levels)
                     AggregationLevels.Add(new Tuple<string, AggregationLevel>(Helpers.HelperCommon.GetEnumDescription(level), level));
             }
             _aggregationLevelSelection = AggregationLevel.Ms100; //DEFAULT
             uiUpdater = new UIUpdater(uiUpdaterAction, _aggregationLevelSelection.ToTimeSpan().TotalMilliseconds);
-            _AGGREGATED_LOB = new AggregatedCollection<OrderBookSnapshot>(_aggregationLevelSelection, _MAX_CHART_POINTS, x => x.LastUpdated, _AGGREGATED_LOB_OnAggregating);
+            _AGGREGATED_LOB = new AggregatedCollection<OrderBookSnapshot>(
+                _aggregationLevelSelection, 
+                _MAX_CHART_POINTS, 
+                (x => x.LastUpdated), 
+                _AGGREGATED_LOB_OnAggregating);
             _AGGREGATED_LOB.OnRemoved += _AGGREGATED_LOB_OnRemoved;
             _AGGREGATED_LOB.OnAdded += _AGGREGATED_LOB_OnAdded;
 
@@ -457,24 +463,23 @@ namespace VisualHFT.ViewModel
 
                     }
                 });
-                RaisePropertyChanged(nameof(Bids));
-                RaisePropertyChanged(nameof(Asks));
-                RaisePropertyChanged(nameof(Depth));
 
 
                 //This is the most expensive calls. IT will freeze the UI thread if we don't de-couple
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                lock (MTX_RealTimePricePlotModel)
                 {
-                    lock (MTX_RealTimePricePlotModel)
-                        RealTimePricePlotModel.InvalidatePlot(true);
-                    lock(MTX_RealTimeSpreadModel)
-                        RealTimeSpreadModel.InvalidatePlot(true);
-                    lock (MTX_CummulativeChartModel)
-                    {
-                        CummulativeBidsChartModel.InvalidatePlot(true);
-                        CummulativeAsksChartModel.InvalidatePlot(true);
-                    }
-                });
+                    RealTimePricePlotModel.InvalidatePlot(true);
+                    RaisePropertyChanged(nameof(Bids));
+                    RaisePropertyChanged(nameof(Asks));
+                    RaisePropertyChanged(nameof(Depth));
+                }
+                lock (MTX_RealTimeSpreadModel)
+                    RealTimeSpreadModel.InvalidatePlot(true);
+                lock (MTX_CummulativeChartModel)
+                {
+                    CummulativeBidsChartModel.InvalidatePlot(true);
+                    CummulativeAsksChartModel.InvalidatePlot(true);
+                }
 
 
                 _MARKETDATA_AVAILABLE = false; //to avoid ui update when no new data is coming in
@@ -527,7 +532,6 @@ namespace VisualHFT.ViewModel
             // Enqueue for processing.
             _QUEUE.Add(snapshot);
         }
-
         private void _AGGREGATED_LOB_OnAdded(object? sender, OrderBookSnapshot e)
         {
             var lobItemToDisplay = _AGGREGATED_LOB[_AGGREGATED_LOB.Count() -1]; //if the new item is inserted, we need to get the previous one to update charts
@@ -549,7 +553,11 @@ namespace VisualHFT.ViewModel
                 SetMaximumsToCumulativeAskVolumeCharts(maxAll);
             }
 
+            lock (MTX_ORDERBOOK)
+                UpdateLocalValues(lobItemToDisplay);
+            
             lock (MTX_RealTimePricePlotModel)
+            {
                 AddPointsToScatterPriceChart(
                     ToDataPointBestBid(lobItemToDisplay, sharedTS),
                     ToDataPointBestAsk(lobItemToDisplay, sharedTS),
@@ -557,9 +565,8 @@ namespace VisualHFT.ViewModel
                     ToScatterPointsLevels(lobItemToDisplay.Bids.Where(x => x.Price >= _MidPoint * 0.99), sharedTS),
                     ToScatterPointsLevels(lobItemToDisplay.Asks.Where(x => x.Price <= _MidPoint * 1.01), sharedTS)
                 );
-            lock (MTX_ORDERBOOK)
-                UpdateLocalValues(lobItemToDisplay);
-            BidAskGridUpdate(lobItemToDisplay);
+                BidAskGridUpdate(lobItemToDisplay);
+            }
 
             _MARKETDATA_AVAILABLE = true; //to avoid ui update when no new data is coming in
 
@@ -575,13 +582,26 @@ namespace VisualHFT.ViewModel
             lock (MTX_RealTimePricePlotModel)
                 RemoveLastPointsToScatterChart();
         }
-        private void _AGGREGATED_LOB_OnAggregating(OrderBookSnapshot existing, OrderBookSnapshot newItem)
+
+        
+        /// <summary>
+        /// This method defines how the internal AggregatedCollection should aggregate incoming items.
+        /// It is invoked whenever a new item is added to the collection and aggregation is required.
+        /// The method takes the existing collection of items, the new incoming item, and a counter indicating
+        /// how many times the last item has been aggregated. The aggregation logic should be implemented
+        /// within this method to combine or process the items as needed.
+        /// </summary>
+        /// <param name="dataCollection">The existing internal collection of items.</param>
+        /// <param name="newItem">The new incoming item to be aggregated.</param>
+        /// <param name="lastItemAggregationCount">Counter indicating how many times the last item has been aggregated.</param>
+        private void _AGGREGATED_LOB_OnAggregating(List<OrderBookSnapshot> dataCollection, OrderBookSnapshot newItem, int lastItemAggregationCount)
         {
-            //for current snapshot, the one we will replace with the new one, make sure to return to the pool 
-            OrderBookSnapshotPool.Instance.Return(existing);
-            
-            //always keep latest snapshot. 
-            existing = newItem;
+            var lastItem_TimeStamp = dataCollection[^1].LastUpdated;    //we should not lose the last item's TS
+            OrderBookSnapshotPool.Instance.Return(dataCollection[^1]);  //return the last item to the pool
+
+
+            newItem.LastUpdated = lastItem_TimeStamp;                   //set the new item's TS to the last one
+            dataCollection[^1] = newItem;                               //replace the last item with the new one
         }
 
         private void QUEUE_onReadAction(OrderBookSnapshot ob)
@@ -595,18 +615,25 @@ namespace VisualHFT.ViewModel
         private void QUEUE_onErrorAction(Exception ex)
         {
             Console.WriteLine("Error in queue processing: " + ex.Message);
+            Clear();
             //throw ex;
         }
 
 
 
-        private DataPoint ToDataPointBestBid(OrderBookSnapshot lob, double sharedTS)
+        private DataPoint? ToDataPointBestBid(OrderBookSnapshot? lob, double sharedTS)
         {
-            return new DataPoint(sharedTS, lob.Bids[0].Price.Value);
+            if (lob != null && lob.Bids != null && lob.Bids.Count > 0 && lob.Bids[0].Price.HasValue)
+                return new DataPoint(sharedTS, lob.Bids[0].Price.Value);
+            else
+                return null;
         }
-        private DataPoint ToDataPointBestAsk(OrderBookSnapshot lob, double sharedTS)
+        private DataPoint? ToDataPointBestAsk(OrderBookSnapshot? lob, double sharedTS)
         {
-            return new DataPoint(sharedTS, lob.Asks[0].Price.Value);
+            if (lob != null && lob.Asks != null && lob.Asks.Count > 0 && lob.Asks[0].Price.HasValue)
+                return new DataPoint(sharedTS, lob.Asks[0].Price.Value);
+            else
+                return null;
         }
         private DataPoint ToDataPointMidPrice(OrderBookSnapshot lob, double sharedTS)
         {
@@ -716,8 +743,8 @@ namespace VisualHFT.ViewModel
                 _cumSeriesAsks.YAxis.Maximum = maxCumulativeVol;
             }
         }
-        private void AddPointsToScatterPriceChart(DataPoint bidPricePoint, 
-            DataPoint askPricePoint,
+        private void AddPointsToScatterPriceChart(DataPoint? bidPricePoint, 
+            DataPoint? askPricePoint,
             DataPoint midPricePoint,
             IEnumerable<OxyPlot.Series.ScatterPoint> bidLevelPoints,
             IEnumerable<OxyPlot.Series.ScatterPoint> askLevelPoints)
@@ -728,10 +755,12 @@ namespace VisualHFT.ViewModel
                 {
                     if (serie.Title == "MidPrice")
                         _serie.Points.Add(midPricePoint);
-                    else if (serie.Title == "Ask")
-                        _serie.Points.Add(askPricePoint);
-                    else if (serie.Title == "Bid")
-                        _serie.Points.Add(bidPricePoint);
+                    else if (serie.Title == "Ask" && askPricePoint != null)
+                    {
+                        _serie.Points.Add(askPricePoint.Value);
+                    }
+                    else if (serie.Title == "Bid" && bidPricePoint != null)
+                        _serie.Points.Add(bidPricePoint.Value);
                 }
                 else if (serie is OxyPlot.Series.ScatterSeries _scatter)
                 {
@@ -741,11 +770,11 @@ namespace VisualHFT.ViewModel
                         colorAxis.Minimum = 1;
                         colorAxis.Maximum = 10;
                     }
-                    if (serie.Title == "ScatterAsks")
+                    if (serie.Title == "ScatterAsks" && askLevelPoints != null)
                     {
                         _scatter.Points.AddRange(askLevelPoints);
                     }
-                    else if (serie.Title == "ScatterBids")
+                    else if (serie.Title == "ScatterBids" && bidLevelPoints != null)
                     {
                         _scatter.Points.AddRange(bidLevelPoints);
                     }
@@ -825,14 +854,6 @@ namespace VisualHFT.ViewModel
             }
         }
 
-        private void FailIfTrue(bool condition, string? msg)
-        {
-            if (condition)
-            {
-                throw new Exception(msg);
-            }
-        }
-
         private void Clear()
         {
             Application.Current.Dispatcher.BeginInvoke(() =>
@@ -856,6 +877,8 @@ namespace VisualHFT.ViewModel
                     .ForEach(x => x.Points.Clear());
                 RealTimePricePlotModel?.Series.OfType<OxyPlot.Series.ScatterSeries>().ToList()
                     .ForEach(x => x.Points.Clear());
+                _bidsGrid.Clear();
+                _asksGrid.Clear();
             }
 
             lock (MTX_CummulativeChartModel)
@@ -864,10 +887,6 @@ namespace VisualHFT.ViewModel
                 CummulativeBidsChartModel?.Series.OfType<OxyPlot.Series.TwoColorAreaSeries>().ToList().ForEach(x => x.Points.Clear());
             }
 
-            lock (MTX_bidsGrid)
-                _bidsGrid.Clear();
-            lock (MTX_asksGrid)
-                _asksGrid.Clear();
 
             lock (MTX_ORDERBOOK)
             {
@@ -879,7 +898,7 @@ namespace VisualHFT.ViewModel
 
                 _AskTOB_SPLIT.Clear();
                 _BidTOB_SPLIT.Clear();
-
+                
                 _objectPool_ScatterPoint = new CustomObjectPool<OxyPlot.Series.ScatterPoint>(_MAX_CHART_POINTS * 1000);
                 if (_AGGREGATED_LOB != null)
                 {
@@ -920,11 +939,11 @@ namespace VisualHFT.ViewModel
         /// <param name="orderBook">The order book.</param>
         private void BidAskGridUpdate(OrderBookSnapshot orderBook)
         {
-            lock (MTX_asksGrid)
-                _asksGrid = orderBook.Asks;
-            lock(MTX_bidsGrid)
-                _bidsGrid = orderBook.Bids;
+            if (orderBook == null)
+                return;
 
+            GridListUpdate(_asksGrid, orderBook.Asks);
+            GridListUpdate(_bidsGrid, orderBook.Bids);
 
             //commented out for now
             /*if (_asksGrid != null && _bidsGrid != null)
@@ -936,6 +955,37 @@ namespace VisualHFT.ViewModel
                     _depthGrid.Add(item);
             }*/
         }
+
+        private void GridListUpdate(List<BookItem> currentList, List<BookItem> newList)
+        {
+            // Update existing items and add/remove as needed
+            for (int i = 0; i < Math.Max(currentList.Count, newList.Count); i++)
+            {
+                if (i < newList.Count)
+                {
+                    if (i < currentList.Count)
+                        UpdateBookItem(currentList[i], newList[i]); // Update existing item
+                    else
+                    {
+                        var newItem = new BookItem();
+                        UpdateBookItem(newItem, newList[i]);
+                        currentList.Add(newItem); // Add new item
+                    }
+                }
+                else if (i < currentList.Count)
+                {
+                    currentList.RemoveAt(currentList.Count - 1); // Remove extra items
+                }
+            }
+        }
+        private void UpdateBookItem(BookItem target, BookItem source)
+        {
+            target.Price = source?.Price;
+            target.Size = source?.Size;
+            target.PriceDecimalPlaces = source.PriceDecimalPlaces;
+            target.SizeDecimalPlaces = source.SizeDecimalPlaces;
+        }
+
 
         private void ALLSYMBOLS_CollectionChanged(object? sender, string e)
         {
@@ -1013,23 +1063,9 @@ namespace VisualHFT.ViewModel
         public double MidPoint => _MidPoint;
         public double Spread => _Spread;
 
-        public IEnumerable<BookItem> Asks
-        {
-            get
-            {
-                lock (MTX_asksGrid)
-                    return _asksGrid;
-            }
-        }
+        public List<BookItem> Asks =>  new List<BookItem>(_asksGrid);
 
-        public IEnumerable<BookItem> Bids
-        {
-            get
-            {
-                lock (MTX_bidsGrid)
-                    return _bidsGrid;
-            }
-        }
+        public List<BookItem> Bids => new List<BookItem>(_bidsGrid);
 
         public IEnumerable<BookItem> Depth => _depthGrid;
         public ObservableCollection<VisualHFT.Model.Trade> TradesDisplay { get; }

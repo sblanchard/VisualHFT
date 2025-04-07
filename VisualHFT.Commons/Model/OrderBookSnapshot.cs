@@ -6,19 +6,79 @@ namespace VisualHFT.Commons.Model
 {
     public class OrderBookSnapshot : IDisposable
     {
-        private CustomObjectPool<BookItem> _bookItemPool = new CustomObjectPool<BookItem>(maxPoolSize: 1000);
+        private CustomObjectPool<BookItem> _bookItemPool = new CustomObjectPool<BookItem>(maxPoolSize: 200);
+        private List<BookItem> _asks;
+        private List<BookItem> _bids;
+        private string _symbol;
+        private int _priceDecimalPlaces;
+        private int _sizeDecimalPlaces;
+        private int _providerId;
+        private string _providerName;
+        private int _maxDepth;
+        private double _imbalanceValue;
+        private DateTime _lastUpdated;
 
-        public List<BookItem> Asks { get; private set; }
-        public List<BookItem> Bids { get; private set; }
+        public List<BookItem> Asks
+        {
+            get
+            {
+                return _asks;
+            }
+            private set { _asks = value; }
+        }
 
-        public string Symbol { get; set; }
-        public int PriceDecimalPlaces { get; set; }
-        public int SizeDecimalPlaces { get; set; }
+        public List<BookItem> Bids
+        {
+            get { return _bids; }
+            private set
+            {
+                _bids = value;
+            }
+        }
+
+        public string Symbol
+        {
+            get => _symbol;
+            set => _symbol = value;
+        }
+
+        public int PriceDecimalPlaces
+        {
+            get => _priceDecimalPlaces;
+            set => _priceDecimalPlaces = value;
+        }
+
+        public int SizeDecimalPlaces
+        {
+            get => _sizeDecimalPlaces;
+            set => _sizeDecimalPlaces = value;
+        }
+
         public double SymbolMultiplier => Math.Pow(10, PriceDecimalPlaces);
-        public int ProviderID { get; set; }
-        public string ProviderName { get; set; }
-        public int MaxDepth { get; set; }
-        public double ImbalanceValue { get; set; }
+
+        public int ProviderID
+        {
+            get => _providerId;
+            set => _providerId = value;
+        }
+
+        public string ProviderName
+        {
+            get => _providerName;
+            set => _providerName = value;
+        }
+
+        public int MaxDepth
+        {
+            get => _maxDepth;
+            set => _maxDepth = value;
+        }
+
+        public double ImbalanceValue
+        {
+            get => _imbalanceValue;
+            set => _imbalanceValue = value;
+        }
 
 
         // Constructor creates new subcollections.
@@ -39,9 +99,10 @@ namespace VisualHFT.Commons.Model
             this.MaxDepth = master.MaxDepth;
             this.ImbalanceValue = master.ImbalanceValue;
             LastUpdated = HelperTimeProvider.Now;
-            CopyBookItems(master.Asks, Asks);
-            CopyBookItems(master.Bids, Bids);
+            CopyBookItems(master.Asks, _asks);
+            CopyBookItems(master.Bids, _bids);
         }
+
         private void CopyBookItems(CachedCollection<BookItem> from, List<BookItem> to)
         {
             ClearBookItems(to); //reset before copying
@@ -55,9 +116,13 @@ namespace VisualHFT.Commons.Model
         public BookItem GetTOB(bool isBid)
         {
             if (isBid)
-                return Bids?.FirstOrDefault();
+            {
+                return _bids?.FirstOrDefault();
+            }
             else
-                return Asks?.FirstOrDefault();
+            {
+                return _asks?.FirstOrDefault();
+            }
         }
         public double MidPrice
         {
@@ -86,7 +151,11 @@ namespace VisualHFT.Commons.Model
             }
         }
 
-        public DateTime LastUpdated { get; set; }
+        public DateTime LastUpdated
+        {
+            get => _lastUpdated;
+            set => _lastUpdated = value;
+        }
 
         public Tuple<double, double> GetMinMaxSizes()
         {
@@ -94,11 +163,10 @@ namespace VisualHFT.Commons.Model
             double minVal = 0;
             double maxVal = 0;
             if (Asks == null || Bids == null
-                             || Asks.Count() == 0
-                             || Bids.Count() == 0)
+                             || Asks.Count == 0
+                             || Bids.Count == 0)
                 return new Tuple<double, double>(0, 0);
-
-            foreach (var o in Bids)
+            foreach (var o in _bids)
             {
                 if (o.Size.HasValue)
                 {
@@ -106,7 +174,7 @@ namespace VisualHFT.Commons.Model
                     maxVal = Math.Max(maxVal, o.Size.Value);
                 }
             }
-            foreach (var o in Asks)
+            foreach (var o in _asks)
             {
                 if (o.Size.HasValue)
                 {
@@ -114,7 +182,6 @@ namespace VisualHFT.Commons.Model
                     maxVal = Math.Max(maxVal, o.Size.Value);
                 }
             }
-
             return Tuple.Create(minVal, maxVal);
         }
 
@@ -128,8 +195,8 @@ namespace VisualHFT.Commons.Model
         // Reset the snapshot to a clean state.
         public void Reset()
         {
-            ClearBookItems(Asks);
-            ClearBookItems(Bids);
+            ClearBookItems(_asks);
+            ClearBookItems(_bids);
         }
 
         // When disposing, reset internal state and return the snapshot to the pool.

@@ -93,14 +93,17 @@ namespace VisualHFT.Commons.Helpers
                     _resetEvent.Reset();
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
                 // Expected exception when cancellation is requested
+                /*var typeName = typeof(T).Name;
+                CallExceptionLog(ex.ToString());*/
             }
             catch (Exception ex)
             {
                 _ctx.Cancel(); // Cancel on any other exception
                 _actionOnError?.Invoke(ex);
+                CallExceptionLog(ex.ToString());
             }
         }
 
@@ -181,19 +184,20 @@ namespace VisualHFT.Commons.Helpers
         }
 
 
+        private void CallExceptionLog(string msg)
+        {
+            var typeName = typeof(T).Name;
+            var stackTrace = new StackTrace();
+
+            var callingMethod = stackTrace.GetFrame(2)?.GetMethod();
+            var callingClass = callingMethod?.ReflectedType?.Namespace + "." + callingMethod?.ReflectedType?.Name;
+            log.Warn($"HelperCustomQueue<{typeName}> -> {callingClass}::{callingMethod?.ToString()} - {msg}");
+        }
         private void InformOverUtilization()
         {
             if (DateTime.Now.Subtract(_lastUpdateLog).TotalSeconds > 5)
             {
-                var typeName = typeof(T).Name;
-                var stackTrace = new StackTrace();
-
-                var callingMethod = stackTrace.GetFrame(2)?.GetMethod();
-                var callingClass = callingMethod?.ReflectedType?.Namespace + "." + callingMethod?.ReflectedType?.Name;
-                /*var caller = callingMethod.ReflectedType != null
-                    ? callingMethod.ReflectedType.Name
-                    : "Unknown" + "." + callingMethod.Name;*/
-                log.Warn($"HelperCustomQueue<{typeName}> -> {callingClass}::{callingMethod?.ToString()} - utilization: {_queue.Count}/{ALERT_WHEN_QUEUE_SIZE}");
+                CallExceptionLog($"utilization: { _queue.Count}/{ ALERT_WHEN_QUEUE_SIZE}");
                 _lastUpdateLog = DateTime.Now;
             }
         }
