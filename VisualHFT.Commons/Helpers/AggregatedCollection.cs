@@ -22,7 +22,7 @@ namespace VisualHFT.Helpers
         private readonly List<T> _aggregatedData;
 
         private readonly Func<T, DateTime> _dateSelector;
-        private readonly Action<T, T, int> _aggregator;
+        private readonly Action<List<T>, T, int> _aggregator;
 
         private readonly object _lockObject = new object();
         private int _maxPoints = 0; // Maximum number of points
@@ -36,27 +36,23 @@ namespace VisualHFT.Helpers
         public event EventHandler<int> OnRemoved;
         public event EventHandler<T> OnAdded;
 
-        public AggregatedCollection(IEnumerable<T> items, AggregationLevel level, int maxItems, Func<T, DateTime> dateSelector, Action<T, T, int> aggregator)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AggregatedCollection"/> class.
+        /// </summary>
+        /// <param name="level">The level.</param>
+        /// <param name="maxItems">The max items.</param>
+        /// <param name="dateSelector">The date selector.</param>
+        /// <param name="onDataAggregationAction">The aggregator.</param>
+        public AggregatedCollection(AggregationLevel level, int maxItems, Func<T, DateTime> dateSelector, Action<List<T>, T, int> onDataAggregationAction)
         {
-            if (items != null)
-                _aggregatedData = new List<T>(items);
-            else
-                _aggregatedData = new List<T>(maxItems);
+            _aggregatedData = new List<T>(maxItems);
 
             _maxPoints = maxItems;
             _level = level;
             _aggregationSpan = level.ToTimeSpan();
             _dynamicAggregationSpan = _aggregationSpan; // Initialize with the same value
             _dateSelector = dateSelector;
-            _aggregator = aggregator;
-        }
-        public AggregatedCollection(AggregationLevel level, int maxItems, Func<T, DateTime> dateSelector, Action<T, T, int> aggregator)
-            : this(null, level, maxItems, dateSelector, aggregator)
-        {
-        }
-        public AggregatedCollection(AggregationLevel level, int maxItems, Func<T, DateTime> dateSelector, Action<T, T> aggregator)
-            : this(null, level, maxItems, dateSelector, (a, b, _) => aggregator(a, b))
-        {
+            _aggregator = onDataAggregationAction;
         }
         ~AggregatedCollection()
         {
@@ -73,28 +69,25 @@ namespace VisualHFT.Helpers
             }
 
             bool retValue = false;
-            int? removedItemIndexToSendEvent = null;
-            T addedItemToSendEvent = null;
-            T removingItemToSendEvent = null;
 
             lock (_lockObject)
             {
-                if (_aggregationSpan == TimeSpan.Zero /*&& _level != AggregationLevel.Automatic*/)
+                if (_aggregationSpan == TimeSpan.Zero) // no aggregation
                 {
                     _aggregatedData.Add(item);
-                    addedItemToSendEvent = item;
+                    OnAdded?.Invoke(this, item);
 
                     if (_aggregatedData.Count() > _maxPoints)
                     {
                         // Remove the item from the collection
-                        T itemToRemove = _aggregatedData[0];
+                        var itemToRemove = _aggregatedData[0];
 
-                        removingItemToSendEvent = itemToRemove;
+                        OnRemoving?.Invoke(this, itemToRemove);
 
                         _aggregatedData.Remove(itemToRemove);
 
                         // Trigger any remove events or perform additional logic as required
-                        removedItemIndexToSendEvent = 0;
+                        OnRemoved?.Invoke(this, 0);
                     }
                     retValue = true;
                 }
@@ -104,59 +97,37 @@ namespace VisualHFT.Helpers
                     T lastItem = _aggregatedData.LastOrDefault();
                     if (lastItem != null)
                     {
-                        //diff in timestamp between the incoming item and lastItem
-                        /*if (_level == AggregationLevel.Automatic)
-                        {
-                            _dynamicAggregationSpan = CalculateAutomaticAggregationSpan();
-                            _readyToAdd = Math.Abs(_dateSelector(item).Ticks - _dateSelector(lastItem).Ticks) >= _dynamicAggregationSpan.Ticks;
-                        }
-                        else*/
-                        {
-                            _readyToAdd = Math.Abs(_dateSelector(item).Ticks - _dateSelector(lastItem).Ticks) >= _level.ToTimeSpan().Ticks;
-                        }
+                        _readyToAdd = Math.Abs(_dateSelector(item).Ticks - _dateSelector(lastItem).Ticks) >= _level.ToTimeSpan().Ticks;
                     }
 
                     // Check the last item in the list
-                    if (!_readyToAdd)
+                    if (!_readyToAdd && lastItem != null)
                     {
                         _ItemsUpdatedCount++;
-                        _aggregator(lastItem, item, _ItemsUpdatedCount);
+                        _aggregator(_aggregatedData, item, _ItemsUpdatedCount);
                         retValue = false;
                     }
-                    else
+                    else if (_readyToAdd)
                     {
                         _ItemsUpdatedCount = 0; //reset on add new
                         _aggregatedData.Add(item);
-                        addedItemToSendEvent = item;
+                        OnAdded?.Invoke(this, item);
 
                         if (_aggregatedData.Count() > _maxPoints)
                         {
-                            T itemToRemove = _aggregatedData[0];
-
+                            var itemToRemove = _aggregatedData[0];
                             // Remove the item from the collection
-                            removingItemToSendEvent = itemToRemove;
+                            OnRemoving?.Invoke(this, itemToRemove);
 
                             _aggregatedData.Remove(itemToRemove);
 
                             // Trigger any remove events or perform additional logic as required
-                            removedItemIndexToSendEvent = 0;
+                            OnRemoved?.Invoke(this, 0);
                         }
-
                         retValue = true;
                     }
-
                 }
             }
-
-
-            //SEND ALL EVENTS OUT FROM THE LOCK
-            if (removedItemIndexToSendEvent.HasValue)
-                OnRemoved?.Invoke(this, removedItemIndexToSendEvent.Value);
-            if (removingItemToSendEvent != null)
-                OnRemoving?.Invoke(this, removingItemToSendEvent);
-            if (addedItemToSendEvent != null)
-                OnAdded?.Invoke(this, addedItemToSendEvent);
-
             return retValue;
         }
 
@@ -270,52 +241,6 @@ namespace VisualHFT.Helpers
             lock (_lockObject)
                 return _aggregatedData.DefaultIfEmpty(new T()).Max(selector);
         }
-        public TimeSpan DynamicAggregationSpan => _dynamicAggregationSpan;
-
-
-        /// <summary>
-        /// Calculates the automatic aggregation span.
-        /// The CalculateAutomaticAggregationSpan method dynamically adjusts the aggregation span of the AggregatedCollection<T> based on the rate of incoming data.
-        /// It calculates the average time interval between the timestamps of the last few items (using a sliding window approach)
-        ///  to determine an appropriate aggregation span. This allows the collection to adapt to varying data frequencies,
-        ///  ensuring that items are aggregated appropriately according to the observed data rate.
-        /// The method returns a TimeSpan that represents the calculated aggregation level, which can range from 1 millisecond to 1 day,
-        ///  based on predefined thresholds.
-        /// </summary>
-        /// <param name="currentItemDate">The current item date.</param>
-        /// <returns>A TimeSpan.</returns>
-        internal TimeSpan CalculateAutomaticAggregationSpan()
-        {
-            if (_aggregatedData.Count <= 1)
-                return AggregationLevel.Ms1.ToTimeSpan(); //minimum available
-            int _window = Math.Min(WINDOW_SIZE, _aggregatedData.Count);
-            var lastWindowList = _aggregatedData.Select(x => _dateSelector(x)).TakeLast(_window);
-
-            var avgTimeDiffs = lastWindowList
-                .Zip(lastWindowList.Skip(1), (first, second) => (second - first)).Average(x => x.Milliseconds);
-
-            var averageElapsed = TimeSpan.FromMilliseconds(avgTimeDiffs);
-
-            if (averageElapsed <= TimeSpan.FromMilliseconds(1))
-                return AggregationLevel.Ms1.ToTimeSpan();
-            else if (averageElapsed <= TimeSpan.FromMilliseconds(10))
-                return AggregationLevel.Ms10.ToTimeSpan();
-            else if (averageElapsed <= TimeSpan.FromMilliseconds(100))
-                return AggregationLevel.Ms100.ToTimeSpan();
-            else if (averageElapsed <= TimeSpan.FromMilliseconds(500))
-                return AggregationLevel.Ms500.ToTimeSpan();
-            else if (averageElapsed <= TimeSpan.FromSeconds(1))
-                return AggregationLevel.S1.ToTimeSpan();
-            else if (averageElapsed <= TimeSpan.FromSeconds(3))
-                return AggregationLevel.S3.ToTimeSpan();
-            else if (averageElapsed <= TimeSpan.FromSeconds(5))
-                return AggregationLevel.S5.ToTimeSpan();
-            else
-                return AggregationLevel.D1.ToTimeSpan();
-        }
-
-
-
         protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)

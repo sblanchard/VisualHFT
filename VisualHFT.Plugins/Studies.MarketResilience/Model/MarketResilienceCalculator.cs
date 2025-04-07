@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using VisualHFT.Commons.Model;
 using VisualHFT.Commons.Pools;
 using VisualHFT.Model;
@@ -90,6 +91,11 @@ namespace Studies.MarketResilience.Model
         {
             lock (_syncLock)
             {
+                if (orderBook == null
+                    || orderBook.Asks == null || orderBook.Bids == null
+                    || !orderBook.Asks.Any() || !orderBook.Bids.Any())
+                    return;
+
                 var currentSpread = (decimal)orderBook.Spread;
                 if (ShockSpread == null
                     && IsLargeWideningSpread(currentSpread))
