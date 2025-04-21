@@ -14,11 +14,14 @@ namespace VisualHFT.TriggerEngine
         CrossesAbove,
         CrossesBelow
     }
-    public enum WindowUnit
+    public enum TimeWindowUnit
     {
         Seconds,
         Milliseconds,
-        Ticks
+        Ticks,
+        Minutes,
+        Hours,
+        Days
     }
     public enum ActionType
     {
@@ -32,4 +35,5 @@ namespace VisualHFT.TriggerEngine
         Warning,
         Error
     }
+    
 }

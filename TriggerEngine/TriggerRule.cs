@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,9 +14,9 @@ namespace VisualHFT.TriggerEngine
     public class TriggerRule
     {
         public string Name { get; set; }                   // Friendly name for UI
-        public List<TriggerCondition> Condition { get; set; }   // "WHEN"
+        public List<TriggerCondition> Condition { get; set; } = new List<TriggerCondition>();  // "WHEN"
         public List<TriggerAction> Actions { get; set; }        // "THEN"
         public bool IsEnabled { get; set; } = true;
-    }
-
+         
+    } 
 }

@@ -13,6 +13,6 @@ namespace VisualHFT.TriggerEngine
     public class TimeWindow
     {
         public int Duration { get; set; }                  // e.g. 3
-        public WindowUnit Unit { get; set; }               // e.g. Seconds, Ticks
+        public TimeWindowUnit Unit { get; set; }               // e.g. Seconds, Ticks
     }
 }

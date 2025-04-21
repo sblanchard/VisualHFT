@@ -16,6 +16,10 @@ namespace VisualHFT.TriggerEngine
     {
         public ActionType Type { get; set; } = ActionType.RestApi;
         public RestApiAction? RestApi { get; set; }         // Only required if Type == RestApi
-        // Future: Add more actions (e.g., UIAlertAction, PluginCommandAction)
+                                                            // Future: Add more actions (e.g., UIAlertAction, PluginCommandAction)
+
+        public int CooldownDuration { get; set; } = 0;
+        public TimeWindowUnit CooldownUnit { get; set; } = TimeWindowUnit.Seconds;
     }
+
 }

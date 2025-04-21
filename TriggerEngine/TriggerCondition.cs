@@ -10,6 +10,7 @@ namespace VisualHFT.TriggerEngine
     /// Describes the condition that must be met for a rule to be triggered.
     /// This includes the source plugin, the metric name, the comparison operator, the threshold value, and optionally a time window for smoothing or delay.
     /// </summary>
+
     public class TriggerCondition
     {
         public string Plugin { get; set; }                 // e.g. "MarketMicrostructure"
@@ -18,5 +19,4 @@ namespace VisualHFT.TriggerEngine
         public double Threshold { get; set; }              // e.g. 0.7
         public TimeWindow Window { get; set; }             // Optional smoothing/aggregation logic
     }
-
 }
