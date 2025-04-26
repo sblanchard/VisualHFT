@@ -18,6 +18,7 @@ using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
 using Websocket.Client;
+using JsonSerializerOptions = System.Text.Json.JsonSerializerOptions;
 using OrderBook = VisualHFT.Model.OrderBook;
 using Trade = VisualHFT.Model.Trade;
 
@@ -719,32 +720,43 @@ namespace MarketConnectors.Gemini
                 Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(item.Timestamp).DateTime
             });
         }
+        static readonly JsonSerializerOptions s_jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
         private void HandleMessage(string marketData, DateTime serverTime)
         {
-            string message = marketData;
-            MarketUpdate update = System.Text.Json.JsonSerializer.Deserialize<MarketUpdate>(message);
-            if (update == null)
-                return;
-
-            if (update.Type == "l2_updates")
-            {
-                string symbol = GetNormalizedSymbol(update.Symbol);
-                _eventBuffers.Add(update);
-            }
-            else if (update.Type == "heartbeat")
+            // heartbeat messages happen most often; skip any JSON work entirely
+            if (marketData.Contains("\"type\":\"heartbeat\"", StringComparison.Ordinal))
             {
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
+                return;
             }
-            else if (update.Type == "trade")
+
+            // level-2 updates
+            if (marketData.Contains("\"type\":\"l2_updates\"", StringComparison.Ordinal))
             {
-                MarketConnectors.Gemini.Model.Trade? item = JsonConvert.DeserializeObject<MarketConnectors.Gemini.Model.Trade>(message);
-                UpdateTrades(item);
+                var update = System.Text.Json.JsonSerializer.Deserialize<MarketUpdate>(marketData, s_jsonOptions);
+                // normalize once, on the object you actually use
+                update.Symbol = GetNormalizedSymbol(update.Symbol);
+                _eventBuffers.Add(update);
+                return;
             }
-            else
+
+            // trades
+            if (marketData.Contains("\"type\":\"trade\"", StringComparison.Ordinal))
             {
-                throw new Exception("Type not recognized " + update.Type);
+                var trade = System.Text.Json.JsonSerializer.Deserialize<MarketConnectors.Gemini.Model.Trade>(marketData, s_jsonOptions);
+                UpdateTrades(trade);
+                return;
             }
+
+            // to catch weird payloads:
+            throw new Exception("Type not recognized in " + marketData);
         }
+
+
         private void CheckConnectionStatus(object state)
         {
             bool isConnected = _socketClient != null && _socketClient.IsRunning;
