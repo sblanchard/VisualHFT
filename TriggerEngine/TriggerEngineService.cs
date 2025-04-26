@@ -10,6 +10,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Xml.Linq;
+using VisualHFT.Commons.Helpers;
 using VisualHFT.Helpers;
 using VisualHFT.ViewModel;
 using VisualHFT.ViewModels;
@@ -35,7 +36,7 @@ namespace VisualHFT.TriggerEngine
         private static readonly ConcurrentDictionary<string, DateTime> ActionLastFiredTimes = new();
 
         private static readonly Channel<MetricEvent> MetricChannel = Channel.CreateUnbounded<MetricEvent>();
-
+         
 
         /// <summary>   
         /// Registers a new incoming metric value from any plugin.
@@ -72,6 +73,12 @@ namespace VisualHFT.TriggerEngine
                 var rule = lstRule.FirstOrDefault(x => x.Name == name);
                 if (rule != null) lstRule.Remove(rule);
             }
+        }   public static void ClearAllRules()
+        {
+            lock (ruleLock)
+            {
+                lstRule.Clear(); 
+            }
         }
         public static List<TriggerRule> GetRules()
         {
@@ -104,38 +111,41 @@ namespace VisualHFT.TriggerEngine
             {
                 if (!rule.IsEnabled) continue;
 
-                bool allConditionsMet = true;
                 for (int i = 0; i < rule.Condition.Count; i++)
                 {
                     var condition = rule.Condition[i];
                     if (condition.Plugin != e.Plugin || condition.Metric != e.Metric)
                         continue;
 
-                    string condKey = $"{rule.Name}|{i}|{e.Plugin}.{e.Metric}";
-                    bool satisfied = condition.Window != null
-                        ? IsConditionSatisfiedWithWindow(condition, e.Value, previous, e.Timestamp, condKey)
-                        : EvaluateDirect(condition, e.Value, previous);
+                    bool isConditionMet = EvaluateDirect(condition, e.Value, previous);
+                    if (!isConditionMet)
+                        continue; // Skip if condition is not satisfied
 
-                    if (!satisfied)
+                    for (int j = 0; j < rule.Actions.Count; j++)
                     {
-                        allConditionsMet = false;
-                        break;
-                    }
-                }
+                        var action = rule.Actions[j];
+                        string actionKey = $"{rule.Name}|{j}";
 
-                if (allConditionsMet)
-                {
-                    for (int i = 0; i < rule.Actions.Count; i++)
-                    {
-                        var action = rule.Actions[i];
-                        string actionKey = $"{rule.Name}|{i}";
+                        var cooldown = GetCooldownSpan(action.CooldownDuration, action.CooldownUnit);
 
-                        TimeSpan cooldown = GetCooldownSpan(action.CooldownDuration, action.CooldownUnit);
-                        if (ActionLastFiredTimes.TryGetValue(actionKey, out var lastFireTime) && (e.Timestamp - lastFireTime) < cooldown)
-                            continue;
-
-                        ActionLastFiredTimes[actionKey] = e.Timestamp;
-                        _ = ExecuteActionAsync(action, e.Plugin, e.Metric, e.Value, e.Timestamp);
+                        if (!ActionLastFiredTimes.TryGetValue(actionKey, out var lastFireTime))
+                        {
+                            // First time, no previous firing. Fire immediately.
+                            ActionLastFiredTimes[actionKey] = e.Timestamp;
+                            
+                            //TODO: uncomment if we need to fire immediately if there is no previous firing
+                            //_ = ExecuteActionAsync(rule.Name, condition, action, e.Plugin, e.Metric, e.Value, e.Timestamp);
+                        }
+                        else
+                        {
+                            if ((e.Timestamp - lastFireTime) >= cooldown)
+                            {
+                                // Cooldown passed, fire again
+                                ActionLastFiredTimes[actionKey] = e.Timestamp;
+                                _ = ExecuteActionAsync(rule.Name, condition, action, e.Plugin, e.Metric, e.Value, e.Timestamp);
+                            }
+                            // else: cooldown not passed, do nothing
+                        }
                     }
                 }
             }
@@ -171,7 +181,7 @@ namespace VisualHFT.TriggerEngine
                 return false;
             }
 
-            return (timestamp - start) >= requiredWindow;
+            return (timestamp - start) > requiredWindow;
         }
 
         private static TimeSpan GetTimeSpan(TimeWindow window)
@@ -197,7 +207,7 @@ namespace VisualHFT.TriggerEngine
             };
         }
 
-        private static Task ExecuteActionAsync(TriggerAction action, string plugin, string metric, double value, DateTime timestamp)
+        private static Task ExecuteActionAsync(string ruleName, TriggerCondition condition, TriggerAction action, string plugin, string metric, double value, DateTime timestamp)
         {
             if (action.Type == ActionType.RestApi && action.RestApi != null)
             {
@@ -205,8 +215,12 @@ namespace VisualHFT.TriggerEngine
                     .Replace("{{metric}}", metric)
                     .Replace("{{value}}", value.ToString())
                     .Replace("{{timestamp}}", timestamp.ToString("o"));
-
-                 
+            } 
+            else if (action.Type == ActionType.UIAlert)
+            {
+                string formattedMessage = $"Plugin {plugin}, {metric} has triggered rule {ruleName} for condition {condition.Operator.ToString()}";
+                HelperNotificationManager.Instance.AddNotification("Alert",formattedMessage, HelprNorificationManagerTypes.TRIGGER_ACTION, 
+                    HelprNorificationManagerCategories.TRIGGER_ENGINE,null,condition.Plugin);
             }
             return Task.CompletedTask;
         }

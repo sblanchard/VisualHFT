@@ -17,6 +17,6 @@ namespace VisualHFT.TriggerEngine
         public string Metric { get; set; }                 // e.g. "LOBImbalance"
         public ConditionOperator Operator { get; set; }    // e.g. CrossesAbove, GreaterThan
         public double Threshold { get; set; }              // e.g. 0.7
-        public TimeWindow Window { get; set; }             // Optional smoothing/aggregation logic
+        public TimeWindow? Window { get; set; }             // Optional smoothing/aggregation logic
     }
 }
