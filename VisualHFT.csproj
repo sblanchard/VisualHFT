@@ -19,6 +19,7 @@
     <Compile Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <Compile Remove="VisualHFT.MarketConnectors.Test\**" />
     <Compile Remove="VisualHFT.Plugins\**" />
+    <Compile Remove="VisualHFT.TriggerService.TestingFramework\**" />
     <EmbeddedResource Remove="demoTradingCore\**" />
     <EmbeddedResource Remove="packages\**" />
     <EmbeddedResource Remove="VisualHFT.Commons.WPF\**" />
@@ -26,6 +27,7 @@
     <EmbeddedResource Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <EmbeddedResource Remove="VisualHFT.MarketConnectors.Test\**" />
     <EmbeddedResource Remove="VisualHFT.Plugins\**" />
+    <EmbeddedResource Remove="VisualHFT.TriggerService.TestingFramework\**" />
     <None Remove="demoTradingCore\**" />
     <None Remove="packages\**" />
     <None Remove="VisualHFT.Commons.WPF\**" />
@@ -33,6 +35,7 @@
     <None Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <None Remove="VisualHFT.MarketConnectors.Test\**" />
     <None Remove="VisualHFT.Plugins\**" />
+    <None Remove="VisualHFT.TriggerService.TestingFramework\**" />
     <Page Remove="demoTradingCore\**" />
     <Page Remove="packages\**" />
     <Page Remove="VisualHFT.Commons.WPF\**" />
@@ -40,6 +43,7 @@
     <Page Remove="VisualHFT.DataRetriever.TestingFramework\**" />
     <Page Remove="VisualHFT.MarketConnectors.Test\**" />
     <Page Remove="VisualHFT.Plugins\**" />
+    <Page Remove="VisualHFT.TriggerService.TestingFramework\**" />
   </ItemGroup>
 
   <ItemGroup>
