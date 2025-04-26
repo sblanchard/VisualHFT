@@ -98,7 +98,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
 
                 TriggerEngineService.RegisterMetric(PluginID, PluginName, 120, DateTime.UtcNow);
 
-                await Task.Delay(200); // let the background worker process
+                await Task.Delay(200);  
 
                 cts.Cancel();
                 await workerTask;
@@ -259,7 +259,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             TriggerEngineService.RegisterMetric(PluginID, PluginName, 125.0, baseTime.AddSeconds(3));
             await Task.Delay(100);
 
-            // Final assert — we expect only one firing (after cooldown from last true condition)
+            // Final assert — we expect no  firing (after cooldown from last true condition)
             int count = HelperNotificationManager.Instance.GetAllNotifications().Where(x => x.Category == HelprNorificationManagerCategories.TRIGGER_ENGINE && x.PluginID.Equals(PluginID)).Count();
             Assert.Equal(0, count);
 
