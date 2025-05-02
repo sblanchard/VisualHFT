@@ -5,6 +5,9 @@ using System.Globalization;
 using System.Windows.Markup;
 using VisualHFT.ViewModel;
 using VisualHFT.UserSettings;
+using VisualHFT.View;
+using VisualHFT.TriggerEngine.View;
+using VisualHFT.Commons.Helpers;
 
 namespace VisualHFT
 {
@@ -13,16 +16,28 @@ namespace VisualHFT
     /// </summary>
     public partial class Dashboard : Window
     {
+        /*
+         * 
+
+            VisualHFT.
+
+            Plugin = "PluginID1",
+                        Metric = "LOB",
+         * 
+         */
         public Dashboard()
         {
             FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement),
                 new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.Name)));
 
             InitializeComponent();
-            this.DataContext = new VisualHFT.ViewModel.vmDashboard(Helpers.HelperCommon.GLOBAL_DIALOGS);
+            var context = new VisualHFT.ViewModel.vmDashboard(Helpers.HelperCommon.GLOBAL_DIALOGS);
+            this.DataContext = context;
+
 
         }
 
+        
         private void ButtonAnalyticsReport_Click(object sender, RoutedEventArgs e)
         {
             /*
@@ -62,6 +77,12 @@ namespace VisualHFT
             var form = new View.PluginManagerWindow();
             form.DataContext = new vmPluginManager();
             form.Show();
+        }
+
+        private void triggerRules_Click(object sender, RoutedEventArgs e)
+        {
+            TriggerSettingsView frmView=new TriggerSettingsView((vmDashboard)this.DataContext);
+            frmView.Show();
         }
     }
 }
