@@ -12,12 +12,10 @@ namespace VisualHFT.Commons.Pools
         private bool _disposed = false;
         private double _utilizationPercentage;
         private DateTime _lastUpdateLog = DateTime.MinValue;
-        private string _poolName;
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         public CustomObjectPool(/*string poolName, */int maxPoolSize = 100)
         {
-            //_poolName = poolName;
             _maxPoolSize = maxPoolSize;
             _pool = new DefaultObjectPool<T>(new DefaultPooledObjectPolicy<T>(), _maxPoolSize);
             _availableObjects = _maxPoolSize;
@@ -43,13 +41,14 @@ namespace VisualHFT.Commons.Pools
         {
             (obj as VisualHFT.Commons.Model.IResettable)?.Reset();
             (obj as IList)?.Clear();
+            (obj as IDisposable)?.Dispose();
+
             _pool.Return(obj);
             Interlocked.Increment(ref _availableObjects);
             CalculatePercentageUtilization();
         }
         public int AvailableObjects => _availableObjects;
         public double UtilizationPercentage => _utilizationPercentage;
-        public string? ProviderName { get; set; }
         private void CalculatePercentageUtilization()
         {
             if (_maxPoolSize > 0)
@@ -60,12 +59,13 @@ namespace VisualHFT.Commons.Pools
                 {
                     var typeName = typeof(T).Name;
                     var stackTrace = new StackTrace();
-                    var callingMethod = stackTrace.GetFrame(2).GetMethod();
+                    
+                    var callingMethod = stackTrace.GetFrame(2)?.GetMethod();
+                    var callingClass = callingMethod?.ReflectedType?.Namespace + "." + callingMethod?.ReflectedType?.Name;
                     /*var caller = callingMethod.ReflectedType != null
                         ? callingMethod.ReflectedType.Name
                         : "Unknown" + "." + callingMethod.Name;*/
-
-                    log.Warn($"CustomObjectPool<{typeName}> -> {ProviderName}-> {callingMethod.ToString()} - utilization: {_utilizationPercentage.ToString("p2")}");
+                    log.Warn($"CustomObjectPool<{typeName}> -> {callingClass}::{callingMethod?.ToString()} - utilization: {_utilizationPercentage.ToString("p2")}");
                     _lastUpdateLog = DateTime.Now;
                 }
             }

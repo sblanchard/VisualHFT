@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.DirectoryServices.ActiveDirectory;
 using System.Threading.Tasks;
 using VisualHFT.Commons.PluginManager;
@@ -97,14 +98,25 @@ namespace VisualHFT.Studies
             AddCalculation(newItem);
         }
 
-        protected override void onDataAggregation(BaseStudyModel existing, BaseStudyModel newItem, int counterAggreated)
+        /// <summary>
+        /// This method defines how the internal AggregatedCollection should aggregate incoming items.
+        /// It is invoked whenever a new item is added to the collection and aggregation is required.
+        /// The method takes the existing collection of items, the new incoming item, and a counter indicating
+        /// how many times the last item has been aggregated. The aggregation logic should be implemented
+        /// within this method to combine or process the items as needed.
+        /// </summary>
+        /// <param name="dataCollection">The existing internal collection of items.</param>
+        /// <param name="newItem">The new incoming item to be aggregated.</param>
+        /// <param name="lastItemAggregationCount">Counter indicating how many times the last item has been aggregated.</param>
+        protected override void onDataAggregation(List<BaseStudyModel> dataCollection, BaseStudyModel newItem, int lastItemAggregationCount)
         {
             //Aggregation: last
+            var existing = dataCollection[^1]; // Get the last item in the collection
             existing.Value = newItem.Value;
             existing.ValueFormatted = newItem.ValueFormatted;
             existing.MarketMidPrice = newItem.MarketMidPrice;
 
-            base.onDataAggregation(existing, newItem, counterAggreated);
+            base.onDataAggregation(dataCollection, newItem, lastItemAggregationCount);
         }
 
         protected virtual void Dispose(bool disposing)

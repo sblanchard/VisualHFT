@@ -66,10 +66,20 @@ namespace VisualHFT.ViewModel
         {
             Dispose(false);
         }
-        private static void Aggregation(PlotInfo existing, PlotInfo newItem)
+        /// <summary>
+        /// This method defines how the internal AggregatedCollection should aggregate incoming items.
+        /// It is invoked whenever a new item is added to the collection and aggregation is required.
+        /// The method takes the existing collection of items, the new incoming item, and a counter indicating
+        /// how many times the last item has been aggregated. The aggregation logic should be implemented
+        /// within this method to combine or process the items as needed.
+        /// </summary>
+        /// <param name="dataCollection">The existing internal collection of items.</param>
+        /// <param name="newItem">The new incoming item to be aggregated.</param>
+        /// <param name="lastItemAggregationCount">Counter indicating how many times the last item has been aggregated.</param>
+        private static void Aggregation(List<PlotInfo> dataCollection, PlotInfo newItem, int lastItemAggregationCount)
         {
-            existing.Date = newItem.Date;
-            existing.Value = newItem.Value;
+            //dataCollection[^1].Date = newItem.Date;
+            dataCollection[^1].Value = newItem.Value;
         }
         public ObservableCollection<string> Symbols { get => _symbols; set => _symbols = value; }
         public string Title { get; set; }
