@@ -2,7 +2,7 @@
 
   <PropertyGroup>
 	  <OutputType>WinExe</OutputType>
-	  <TargetFramework>net8.0-windows8.0</TargetFramework>
+	  <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
 	  <Nullable>enable</Nullable>
 	  <UseWPF>true</UseWPF>
 	  <ApplicationIcon>Images\VisualHFT.ico</ApplicationIcon>
@@ -94,14 +94,15 @@
     <PackageReference Include="MaterialDesignThemes" Version="5.2.1" />
     <PackageReference Include="MaterialDesignThemes.MahApps" Version="5.2.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
     <PackageReference Include="Prism.Core" Version="9.0.537" />
     <PackageReference Include="PropertyChanged.Fody" Version="4.1.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\oxyplot\Source\OxyPlot.Wpf\OxyPlot.Wpf.csproj" />
     <ProjectReference Include="VisualHFT.Commons.WPF\VisualHFT.Commons.WPF.csproj" />
     <ProjectReference Include="VisualHFT.Commons\VisualHFT.Commons.csproj" />
+    <ProjectReference Include="VisualHFT.DataRetriever.TestingFramework\VisualHFT.DataRetriever.TestingFramework.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Binance\MarketConnectors.Binance.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.Bitfinex\MarketConnectors.Bitfinex.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.BitStamp\MarketConnectors.BitStamp.csproj" />
@@ -111,6 +112,7 @@
     <ProjectReference Include="VisualHFT.Plugins\MarketConnectors.KuCoin\MarketConnectors.KuCoin.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.L2_OTT_Ratio\Studies.L2_OTT_Ratio.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.LOBImbalance\Studies.LOBImbalance.csproj" />
+    <ProjectReference Include="VisualHFT.Plugins\Studies.MarketResilience.Test\Studies.MarketResilience.Test.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.MarketResilience\Studies.MarketResilience.csproj" />
     <ProjectReference Include="VisualHFT.Plugins\Studies.VPIN\Studies.VPIN.csproj" />
   </ItemGroup>
