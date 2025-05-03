@@ -129,7 +129,14 @@ namespace VisualHFT.Enums
         MARKET_CONNECTOR,
     }
 
-
+    public enum eLicenseLevel
+    {
+        COMMUNITY,
+        AMATEUR,
+        CORE,
+        PRO,
+        ENTERPRISE
+    }
 
     public enum eTestingPrivateMessageScenario
     {
