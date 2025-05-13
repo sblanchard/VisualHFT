@@ -55,6 +55,7 @@ namespace VisualHFT
 
             Task.Run(async () =>
             {
+                await TriggerEngineService.LoadAllRules();
                 await TriggerEngineService.StartBackgroundWorkerAsync(CancellationToken.None);
             });
              
@@ -68,6 +69,10 @@ namespace VisualHFT
 
         private async Task LoadPlugins()
         {
+            //Load the license manager and check if the user has access to the plugin
+            LicenseManager.Instance.LoadFromKeygen();
+
+
             PluginManager.PluginManager.AllPluginsReloaded = false;
             await PluginManager.PluginManager.LoadPlugins();
             await PluginManager.PluginManager.StartPlugins();

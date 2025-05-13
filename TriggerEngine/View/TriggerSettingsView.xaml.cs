@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -22,7 +23,7 @@ namespace VisualHFT.TriggerEngine.View
     /// </summary>
     public partial class TriggerSettingsView : Window
     {
-        List<TriggerEngineViewModel> lstCurrentRules = new List<TriggerEngineViewModel>();
+        List<TriggerEngineRuleViewModel> lstCurrentRules = new List<TriggerEngineRuleViewModel>();
         vmDashboard dashboard;
         public TriggerSettingsView(vmDashboard _dashboard)
         {
@@ -34,9 +35,11 @@ namespace VisualHFT.TriggerEngine.View
             
             TriggerEngineService.GetRules().ForEach(x =>
             {
-                TriggerEngineViewModel vm = new TriggerEngineViewModel();
+                TriggerEngineRuleViewModel vm = new TriggerEngineRuleViewModel();
                 vm.Name = x.Name;
                 vm.Condition = new BindingList<TriggerConditionViewModel>();
+                vm.Actions = new BindingList<TriggerActionViewModel>();
+
                 x.Condition.ForEach(y =>
                 {
                     TriggerConditionViewModel vmCondition = new TriggerConditionViewModel();
@@ -44,8 +47,32 @@ namespace VisualHFT.TriggerEngine.View
                     vmCondition.Metric = y.Metric;
                     vmCondition.Operator = y.Operator;
                     vmCondition.Threshold = y.Threshold;
+                    vmCondition.Window = y.Window; 
                     vm.Condition.Add(vmCondition);
                 });
+                x.Actions.ForEach(x =>
+                {
+                    TriggerActionViewModel vmAction = new TriggerActionViewModel();
+                    vmAction.Type = x.Type;
+                    vmAction.CooldownDuration = x.CooldownDuration;
+                    vmAction.CooldownUnit=x.CooldownUnit; 
+                    vmAction.RestApi = new RestApiActionViewModel();
+                    vmAction.RestApi.Url = x.RestApi.Url;
+                    vmAction.RestApi.BodyTemplate = x.RestApi.BodyTemplate;
+                    vmAction.RestApi.Url = x.RestApi.Url;
+                    vmAction.RestApi.Headers = new System.Collections.ObjectModel.ObservableCollection<RestAPIHeaderViewModel>();
+                    foreach (var item in x.RestApi.Headers)
+                    {
+                        RestAPIHeaderViewModel vmHeader = new RestAPIHeaderViewModel();
+                        vmHeader.HeaderName = item.Key;
+                        vmHeader.HeaderValue = item.Value;
+                        vmAction.RestApi.Headers.Add(vmHeader);
+                    } 
+                    vm.Actions.Add(vmAction);
+
+
+                }); 
+
                 lstCurrentRules.Add(vm);
             }); 
 
@@ -65,6 +92,14 @@ namespace VisualHFT.TriggerEngine.View
             {
             }
 
+        }
+
+        private void rule_Click(object sender, RoutedEventArgs e)
+        { 
+            Hyperlink hyperlink = (Hyperlink)sender;
+            TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;  
+            TriggerSettingAddOrUpdate frmRuleView = new TriggerSettingAddOrUpdate(selectedRule, dashboard);
+            frmRuleView.ShowDialog();
         }
     }
 }

@@ -13,7 +13,7 @@ namespace VisualHFT.PluginManager
         ISetting Settings { get; set; }
         ePluginStatus Status { get; set; }
         Action CloseSettingWindow { get; set; }
-
+        eLicenseLevel RequiredLicenseLevel { get; }
         string GetPluginUniqueID();
         object GetUISettings(); //using object type because this csproj doesn't support UI
         object GetCustomUI();   //Allow to setup own UI for the plugin

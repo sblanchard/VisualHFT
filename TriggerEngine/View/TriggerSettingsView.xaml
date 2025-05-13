@@ -17,8 +17,41 @@
         <TabControl VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
             <TabItem Header="All Rules">
                 <ScrollViewer>
-                
-                <Label Content="Display All Rules" />
+
+                    <ListView ItemsSource="{Binding}">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Rule Name" DisplayMemberBinding="{Binding Name}" />
+                                <GridViewColumn Header="Total Conditions">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Condition.Count}" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Total Actions">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Actions.Count}" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Actions">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock>
+                    <Hyperlink Click="rule_Click"  x:Name="rule"
+                               Command="{Binding DataContext.MethodCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                               CommandParameter="{Binding}"> Update
+                    </Hyperlink>
+                </TextBlock>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn> 
+                            
+                        </GridView>
+                        </ListView.View>
+                    </ListView>
 
                 </ScrollViewer>
             </TabItem>

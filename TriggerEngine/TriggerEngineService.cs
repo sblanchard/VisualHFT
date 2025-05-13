@@ -1,7 +1,9 @@
-﻿using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Text;
@@ -14,6 +16,7 @@ using VisualHFT.Commons.Helpers;
 using VisualHFT.Helpers;
 using VisualHFT.ViewModel;
 using VisualHFT.ViewModels;
+using Windows.Storage;
 
 namespace VisualHFT.TriggerEngine
 {
@@ -28,6 +31,10 @@ namespace VisualHFT.TriggerEngine
     /// </summary>
     public static class TriggerEngineService
     {
+        public static string TriggerEngineConfigFileName="TriggerEngineConfig.json";
+        public static string TriggerEngineConfigFilePath  = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisualHFT",
+            TriggerEngineConfigFileName); 
+         
         private static readonly List<TriggerRule> lstRule = new();
         private static readonly object ruleLock = new();
 
@@ -63,6 +70,17 @@ namespace VisualHFT.TriggerEngine
                 var existing = lstRule.Find(r => r.Name == rule.Name);
                 if (existing != null) lstRule.Remove(existing);
                 lstRule.Add(rule);
+
+                string directoryPath = Path.GetDirectoryName(TriggerEngineConfigFilePath);
+                if (!Directory.Exists(directoryPath))
+                {
+                    Directory.CreateDirectory(directoryPath);
+                }
+                string json= JsonConvert.SerializeObject(lstRule, Formatting.Indented);
+                File.WriteAllText(TriggerEngineConfigFilePath, json);
+
+
+
             }
         }
 
@@ -88,6 +106,14 @@ namespace VisualHFT.TriggerEngine
             }
         }
 
+        public static async Task LoadAllRules()
+        {
+            string directoryPath = Path.GetDirectoryName(TriggerEngineConfigFilePath);
+            string ruleJSON = File.ReadAllText(Path.Combine(directoryPath,TriggerEngineConfigFileName));
+
+           var rules=JsonConvert.DeserializeObject<List<TriggerRule>>(ruleJSON);
+            lstRule.AddRange(rules);
+        }
          public static async Task StartBackgroundWorkerAsync(CancellationToken token)
         {
             while (await MetricChannel.Reader.WaitToReadAsync(token))

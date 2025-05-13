@@ -41,6 +41,8 @@ namespace VisualHFT.Commons.PluginManager
         {
             get { return ePluginType.STUDY; }
         }
+        public virtual eLicenseLevel RequiredLicenseLevel => eLicenseLevel.COMMUNITY; // Default to Community, override in derived classes if needed
+
         protected abstract void LoadSettings();
         protected abstract void SaveSettings();
         protected abstract void InitializeDefaultSettings();

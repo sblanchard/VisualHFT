@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:VisualHFT.TriggerEngine.View"
         xmlns:enums="clr-namespace:VisualHFT.TriggerEngine"
+        xmlns:converters="clr-namespace:VisualHFT.Converters"
         mc:Ignorable="d"  
 TextElement.FontWeight="Regular"
 TextElement.FontSize="15"
@@ -13,9 +14,8 @@ TextOptions.TextRenderingMode="Auto"
       Background="{DynamicResource MaterialDesignPaper}"  
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
       Title="TriggerSettingsView" Height="450" Width="800">
-
+    
     <Window.Resources>
-        <!-- Enum values provider -->
         <ObjectDataProvider x:Key="ConditionOperatorEnum"
                             MethodName="GetValues"
                             ObjectType="{x:Type sys:Enum}">
@@ -23,15 +23,30 @@ TextOptions.TextRenderingMode="Auto"
                 <x:Type TypeName="enums:ConditionOperator" />
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
-    </Window.Resources>
-    
+        <ObjectDataProvider x:Key="ActionTypeOperatorEnum"
+                         MethodName="GetValues"
+                         ObjectType="{x:Type sys:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="enums:ActionType" />
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
+        <ObjectDataProvider x:Key="TimeWindowUnitOperatorEnum"
+                     MethodName="GetValues"
+                     ObjectType="{x:Type sys:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="enums:TimeWindowUnit" />
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
+        <converters:NewBoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </Window.Resources> 
+
     <Grid x:Name="MainGrid">
  
         <StackPanel VerticalAlignment="Stretch">
 
             <StackPanel>
-                <TextBlock Text="Rule Name" Style="{StaticResource MaterialDesignBody2TextBlock}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBox x:Name="txtTriggerName" Text="{Binding Name}"/>
+                <TextBlock Text="Rule Name" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBox x:Name="txtTriggerName" Text="{Binding Name}" Foreground="White"/>
             </StackPanel>
 
             
@@ -53,8 +68,7 @@ TextOptions.TextRenderingMode="Auto"
                             HorizontalScrollBarVisibility="Hidden" IsHitTestVisible="True" 
                             EnableRowVirtualization="True" 
                             EnableColumnVirtualization="False" 
-                            VerticalScrollBarVisibility="Auto" 
-                              MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}" 
+                            VerticalScrollBarVisibility="Auto"  
                             Padding="0" >
 
                                 <DataGrid.RowStyle>
@@ -77,9 +91,9 @@ TextOptions.TextRenderingMode="Auto"
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <ComboBox ItemsSource="{Binding PluginNames, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="TileName"
-                                      SelectedItem="{Binding SelectedPlugin, Mode=TwoWay}"
-                                      Width="150" />
-                                             
+                                              SelectedItem="{Binding SelectedPlugin, Mode=TwoWay}"
+                                              Width="150" />    
+
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
@@ -104,7 +118,75 @@ TextOptions.TextRenderingMode="Auto"
            
                 </TabItem>
                 <TabItem Header="Action">
-                    
+                    <StackPanel VerticalAlignment="Stretch" Height="5000">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">
+                            <Button HorizontalAlignment="Right" x:Name="btnAddNewAction" Click="btnAddNewAction_Click" Height="32">➕</Button>
+                        </StackPanel>
+                        <StackPanel>
+                            <DataGrid ItemsSource="{Binding Path=Actions, Mode=TwoWay}"
+                            AutoGenerateColumns="False" VerticalAlignment="Top" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            FontWeight="UltraLight" FontSize="9" FontFamily="Verdana" x:Name="lstDataAction"
+                                Style="{DynamicResource MaterialDesignDataGrid}" 
+                                SelectionUnit="FullRow" CanUserDeleteRows="False" CanUserAddRows="False" 
+                                ClipboardCopyMode="IncludeHeader" HeadersVisibility="Column" AlternationCount="2" IsReadOnly="false" BorderThickness="0" 
+                                CanUserReorderColumns="False" CanUserResizeColumns="False" CanUserResizeRows="False" CanUserSortColumns="False" 
+                                HorizontalScrollBarVisibility="Hidden" IsHitTestVisible="True" 
+                                EnableRowVirtualization="True" 
+                                EnableColumnVirtualization="False" 
+                                 
+                                VerticalScrollBarVisibility="Auto"  
+                                Padding="0" >       
+
+                                <DataGrid.RowStyle>
+                                    <Style TargetType="DataGridRow">
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="Margin" Value="0" />
+                                        <Style.Triggers>
+                                            <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                                                <Setter Property="Background" Value="Transparent"/>
+                                            </Trigger>
+                                            <Trigger Property="ItemsControl.AlternationIndex" Value="0">
+                                                <Setter Property="Background" Value="Black"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGrid.RowStyle>
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn  Header="Type"  HeaderStyle="{DynamicResource RightAlignedHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ComboBox ItemsSource="{Binding Source={StaticResource ActionTypeOperatorEnum}}" SelectedItem="{Binding Type}" Width="150"    SelectionChanged="ComboBox_SelectionChanged"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Cool down Duration" Binding="{Binding CooldownDuration}"
+                                          Width="150" ElementStyle="{DynamicResource RightAligned}" 
+                                          HeaderStyle="{DynamicResource RightAlignedHeader}"/>
+                                    <DataGridTemplateColumn  Header="Time Window"  HeaderStyle="{DynamicResource RightAlignedHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ComboBox ItemsSource="{Binding Source={StaticResource TimeWindowUnitOperatorEnum}}" SelectedItem="{Binding CooldownUnit}" Width="150" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Link" >
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Visibility="{Binding IsEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Hyperlink Click="ClickSetAPI">
+                                                        <Run Text="{Binding LinkText}" />
+                                                    </Hyperlink>        
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                       
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                                
+                            </DataGrid>
+
+                        </StackPanel>
+                    </StackPanel>
                     
                     
                 </TabItem>

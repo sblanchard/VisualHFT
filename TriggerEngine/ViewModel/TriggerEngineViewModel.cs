@@ -1,19 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls.Ribbon;
 using VisualHFT.TriggerEngine.Actions;
 
 namespace VisualHFT.TriggerEngine.ViewModel
 {
-    public class TriggerEngineViewModel : INotifyPropertyChanged
+    public class TriggerEngineRuleViewModel : INotifyPropertyChanged
     {
 
         private string _Name { get; set; }
-
+     
+        
         public BindingList<TriggerConditionViewModel> Condition { get; set; } = new BindingList<TriggerConditionViewModel>();
         public BindingList<TriggerActionViewModel> Actions { get; set; } = new BindingList<TriggerActionViewModel>();
 
@@ -37,7 +42,45 @@ namespace VisualHFT.TriggerEngine.ViewModel
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-         
+         public TriggerRule FromViewModel(TriggerEngineRuleViewModel view)
+        {
+            TriggerRule rule = new TriggerRule();
+            rule.Actions = new List<TriggerAction>();
+            rule.Condition = new List<TriggerCondition>();
+
+
+            rule.Name=view.Name;
+            foreach (var item in view.Condition)
+            {
+                rule.Condition.Add(new TriggerCondition
+                {
+                    Plugin = item.Plugin,
+                    Metric = item.Metric,
+                    Operator = item.Operator,
+                    Threshold = item.Threshold,
+                    Window = item.Window,
+
+                });
+            }
+
+            foreach (var item in view.Actions)
+            {
+                rule.Actions.Add(new TriggerAction
+                {
+                    Type = item.Type,
+                    RestApi = new RestApiAction
+                    {
+                        Url = item.RestApi.Url,
+                        Method = item.RestApi.Method,
+                        BodyTemplate = item.RestApi.BodyTemplate,
+                        Headers = item.RestApi.Headers.ToDictionary(x => x.HeaderName, x => x.HeaderValue)
+                    },
+                    CooldownDuration = item.CooldownDuration,
+                    CooldownUnit = item.CooldownUnit, 
+                });
+            }
+            return rule;
+        }
 
     }
 
@@ -90,23 +133,49 @@ namespace VisualHFT.TriggerEngine.ViewModel
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
+
+    public class RestAPIHeaderViewModel
+    {
+        public string HeaderName { get; set; }
+        public string HeaderValue { get; set; }
+    }
+
     public class TriggerActionViewModel:INotifyPropertyChanged
     {
         private ActionType _Type { get; set; } = ActionType.RestApi;
 
-        private RestApiAction? _RestApi { get; set; }         // Only required if Type == RestApi
+        private RestApiActionViewModel? _RestApi { get; set; }         // Only required if Type == RestApi
 
+
+
+        //Property Change implementation
+        public int CooldownDuration { get; set; } = 0;
+        public TimeWindowUnit CooldownUnit { get; set; } = TimeWindowUnit.Seconds; 
+
+        //For UI
+        public bool _IsEnabled { get; set; } = true;
+
+        public bool IsEnabled
+        {
+            get => _IsEnabled;
+            set { _IsEnabled = value; OnPropertyChanged(nameof(IsEnabled)); }
+        }
 
         public ActionType Type
         {
             get => _Type;
             set { _Type = value; OnPropertyChanged(nameof(Type)); }
         }  
-        public RestApiAction RestApi
+        public RestApiActionViewModel RestApi
         {
             get => _RestApi;
             set { _RestApi = value; OnPropertyChanged(nameof(RestApi)); }
         }
+
+        //For UI use Only
+        public string LinkText { get; set; } = "Set API";
+        public long id { get; set; }
+
 
 
 
@@ -115,5 +184,13 @@ namespace VisualHFT.TriggerEngine.ViewModel
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+    }
+    public class RestApiActionViewModel
+    {
+        public string Url { get; set; }                   // Destination API
+        public string Method { get; set; } = "POST";       // POST or GET (for now)
+        public string BodyTemplate { get; set; }           // JSON payload (e.g. includes {{metric}}, {{value}})
+        public ObservableCollection<RestAPIHeaderViewModel> Headers { get; set; } = new ObservableCollection<RestAPIHeaderViewModel>();
+         
     }
 }
