@@ -201,7 +201,11 @@ namespace VisualHFT.ViewModel
         public string ValueTooltip { get => _valueTooltip; set => SetProperty(ref _valueTooltip, value); }
         public SolidColorBrush ValueColor { get => _valueColor; set => SetProperty(ref _valueColor, value); }
         public string Title { get => _title; set => SetProperty(ref _title, value); }
-        public string PluginID { get => _title; set => SetProperty(ref _tile_id, value); }
+        public string PluginID
+        {
+            get => _tile_id;
+            set => SetProperty(ref _tile_id, value); // raises PropertyChanged
+        }
         public string Tooltip { get => _tileToolTip; set => SetProperty(ref _tileToolTip, value); }
         public string SelectedSymbol
         {

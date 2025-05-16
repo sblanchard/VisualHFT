@@ -34,13 +34,15 @@ namespace VisualHFT.TriggerEngine.View
 
         public TriggerSettingAddOrUpdate(TriggerEngineRuleViewModel _rule, vmDashboard dashboard)
         {
+            InitializeComponent();
 
             var vmDashboard = dashboard;
             PluginNames = new List<TilesView>();
             vmDashboard.Tiles.ToList().ForEach(x =>
             {
                 TilesView vm = new TilesView();
-                vm.TileName = x.Title;  
+                vm.TileName = x.Title;
+                vm.PluginID = x.PluginID;
                 PluginNames.Add(vm);
             });
 
@@ -48,8 +50,8 @@ namespace VisualHFT.TriggerEngine.View
             {
                 this.model = _rule;
             }
-            this.DataContext = this.model;
-            InitializeComponent();
+            DataContext = this.model;
+           
         }
 
         private void btnAddNewCondition_Click(object sender, RoutedEventArgs e)
@@ -61,14 +63,36 @@ namespace VisualHFT.TriggerEngine.View
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
+            if (string.IsNullOrEmpty(this.model.Name))
+            {
+                MessageBox.Show("Please enter a name for the rule", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            if (this.model.Condition.Count == 0)
+            {
+                MessageBox.Show("Please add at least one condition", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            if (this.model.Actions.Count == 0)
+            {
+                MessageBox.Show("Please add at least one action", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
             TriggerEngineRuleViewModel rule = this.model;
-
-
+             
             TriggerRule triggerRule=rule.FromViewModel(rule);
             TriggerEngineService.AddOrUpdateRule(triggerRule);
-
+            MessageBox.Show("Rule saved successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            this.DialogResult = true;
+            this.Close();
         }
-
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            this.DialogResult = false;
+            this.Close();
+        }
+            
         private void btnAddNewAction_Click(object sender, RoutedEventArgs e)
         {
             TriggerActionViewModel mod = new TriggerActionViewModel();
@@ -152,6 +176,11 @@ namespace VisualHFT.TriggerEngine.View
 
                 
             }
+
+        }
+
+        private void ComboBox_SelectionChanged_1(object sender, SelectionChangedEventArgs e)
+        {
 
         }
     }

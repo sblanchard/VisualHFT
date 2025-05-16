@@ -14,7 +14,7 @@
         Title="TriggerSettingsView" Height="450" Width="800">
     <Grid x:Name="MainGrid">
 
-        <TabControl VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+        <TabControl  >
             <TabItem Header="All Rules">
                 <ScrollViewer>
 

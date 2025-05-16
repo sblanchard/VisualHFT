@@ -40,12 +40,12 @@ TextOptions.TextRenderingMode="Auto"
         <converters:NewBoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     </Window.Resources> 
 
-    <Grid x:Name="MainGrid">
+    <Grid x:Name="MainGrid" Margin="10">
  
         <StackPanel VerticalAlignment="Stretch">
 
             <StackPanel>
-                <TextBlock Text="Rule Name" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Rule Name" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,0,10"/>
                 <TextBox x:Name="txtTriggerName" Text="{Binding Name}" Foreground="White"/>
             </StackPanel>
 
@@ -91,7 +91,7 @@ TextOptions.TextRenderingMode="Auto"
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <ComboBox ItemsSource="{Binding PluginNames, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="TileName"
-                                              SelectedItem="{Binding SelectedPlugin, Mode=TwoWay}"
+                                              SelectedValue="{Binding Plugin, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"  SelectedValuePath="PluginID" SelectionChanged="ComboBox_SelectionChanged_1"
                                               Width="150" />    
 
                                             </DataTemplate>
@@ -195,7 +195,7 @@ TextOptions.TextRenderingMode="Auto"
         </StackPanel>
         <StackPanel VerticalAlignment="Bottom" Orientation="Horizontal">
             <Button Name="Save" Margin="0,0,10,0" Click="Save_Click">Save</Button>
-            <Button Name="Cancel" Margin="0,0,10,0">Cancel</Button>
+            <Button Name="Cancel" Margin="0,0,10,0" Click="Cancel_Click">Cancel</Button>
         </StackPanel>
     </Grid> 
 </Window>

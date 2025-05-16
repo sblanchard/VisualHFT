@@ -63,21 +63,23 @@ namespace VisualHFT.TriggerEngine.ViewModel
                 });
             }
 
-            foreach (var item in view.Actions)
+            foreach (TriggerActionViewModel item in view.Actions)
             {
-                rule.Actions.Add(new TriggerAction
+                var triggerAction = new TriggerAction();
+                triggerAction.Type=item.Type;
+                if(item.Type==ActionType.RestApi)
                 {
-                    Type = item.Type,
-                    RestApi = new RestApiAction
+                    triggerAction.RestApi = new RestApiAction
                     {
                         Url = item.RestApi.Url,
                         Method = item.RestApi.Method,
                         BodyTemplate = item.RestApi.BodyTemplate,
                         Headers = item.RestApi.Headers.ToDictionary(x => x.HeaderName, x => x.HeaderValue)
-                    },
-                    CooldownDuration = item.CooldownDuration,
-                    CooldownUnit = item.CooldownUnit, 
-                });
+                    };
+                }
+                triggerAction.CooldownDuration = item.CooldownDuration;
+                triggerAction.CooldownUnit = item.CooldownUnit;
+                rule.Actions.Add(triggerAction);
             }
             return rule;
         }
@@ -87,6 +89,9 @@ namespace VisualHFT.TriggerEngine.ViewModel
     public class TilesView
     {
         public string TileName { get; set; }
+
+
+        public string PluginID { get; set; }
     }
     public class TriggerConditionViewModel : INotifyPropertyChanged
     {

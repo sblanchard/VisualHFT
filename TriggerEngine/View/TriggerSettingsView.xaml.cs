@@ -32,51 +32,8 @@ namespace VisualHFT.TriggerEngine.View
             
 
             this.dashboard= _dashboard;
-            
-            TriggerEngineService.GetRules().ForEach(x =>
-            {
-                TriggerEngineRuleViewModel vm = new TriggerEngineRuleViewModel();
-                vm.Name = x.Name;
-                vm.Condition = new BindingList<TriggerConditionViewModel>();
-                vm.Actions = new BindingList<TriggerActionViewModel>();
 
-                x.Condition.ForEach(y =>
-                {
-                    TriggerConditionViewModel vmCondition = new TriggerConditionViewModel();
-                    vmCondition.Plugin = y.Plugin;
-                    vmCondition.Metric = y.Metric;
-                    vmCondition.Operator = y.Operator;
-                    vmCondition.Threshold = y.Threshold;
-                    vmCondition.Window = y.Window; 
-                    vm.Condition.Add(vmCondition);
-                });
-                x.Actions.ForEach(x =>
-                {
-                    TriggerActionViewModel vmAction = new TriggerActionViewModel();
-                    vmAction.Type = x.Type;
-                    vmAction.CooldownDuration = x.CooldownDuration;
-                    vmAction.CooldownUnit=x.CooldownUnit; 
-                    vmAction.RestApi = new RestApiActionViewModel();
-                    vmAction.RestApi.Url = x.RestApi.Url;
-                    vmAction.RestApi.BodyTemplate = x.RestApi.BodyTemplate;
-                    vmAction.RestApi.Url = x.RestApi.Url;
-                    vmAction.RestApi.Headers = new System.Collections.ObjectModel.ObservableCollection<RestAPIHeaderViewModel>();
-                    foreach (var item in x.RestApi.Headers)
-                    {
-                        RestAPIHeaderViewModel vmHeader = new RestAPIHeaderViewModel();
-                        vmHeader.HeaderName = item.Key;
-                        vmHeader.HeaderValue = item.Value;
-                        vmAction.RestApi.Headers.Add(vmHeader);
-                    } 
-                    vm.Actions.Add(vmAction);
-
-
-                }); 
-
-                lstCurrentRules.Add(vm);
-            }); 
-
-            this.DataContext = lstCurrentRules;
+            LoadAllRules();
 
         }
 
@@ -94,12 +51,66 @@ namespace VisualHFT.TriggerEngine.View
 
         }
 
+        private void LoadAllRules()
+        {
+            lstCurrentRules = new List<TriggerEngineRuleViewModel>();
+            this.DataContext = null;
+            TriggerEngineService.GetRules().ForEach(x =>
+            {
+                TriggerEngineRuleViewModel vm = new TriggerEngineRuleViewModel();
+                vm.Name = x.Name;
+                vm.Condition = new BindingList<TriggerConditionViewModel>();
+                vm.Actions = new BindingList<TriggerActionViewModel>();
+
+                x.Condition.ForEach(y =>
+                {
+                    TriggerConditionViewModel vmCondition = new TriggerConditionViewModel();
+                    vmCondition.Plugin = y.Plugin;
+                    vmCondition.Metric = y.Metric;
+                    vmCondition.Operator = y.Operator;
+                    vmCondition.Threshold = y.Threshold;
+                    vmCondition.Window = y.Window;
+                    vm.Condition.Add(vmCondition);
+                });
+                x.Actions.ForEach(x =>
+                {
+                    TriggerActionViewModel vmAction = new TriggerActionViewModel();
+                    vmAction.Type = x.Type;
+                    vmAction.CooldownDuration = x.CooldownDuration;
+                    vmAction.CooldownUnit = x.CooldownUnit;
+                    vmAction.RestApi = new RestApiActionViewModel();
+                    vmAction.RestApi.Url = x.RestApi.Url;
+                    vmAction.RestApi.BodyTemplate = x.RestApi.BodyTemplate;
+                    vmAction.RestApi.Url = x.RestApi.Url;
+                    vmAction.RestApi.Headers = new System.Collections.ObjectModel.ObservableCollection<RestAPIHeaderViewModel>();
+                    foreach (var item in x.RestApi.Headers)
+                    {
+                        RestAPIHeaderViewModel vmHeader = new RestAPIHeaderViewModel();
+                        vmHeader.HeaderName = item.Key;
+                        vmHeader.HeaderValue = item.Value;
+                        vmAction.RestApi.Headers.Add(vmHeader);
+                    }
+                    vm.Actions.Add(vmAction);
+
+
+                });
+
+                lstCurrentRules.Add(vm);
+            });
+
+            this.DataContext = lstCurrentRules;
+        }
+
         private void rule_Click(object sender, RoutedEventArgs e)
         { 
             Hyperlink hyperlink = (Hyperlink)sender;
             TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;  
             TriggerSettingAddOrUpdate frmRuleView = new TriggerSettingAddOrUpdate(selectedRule, dashboard);
             frmRuleView.ShowDialog();
+            if (frmRuleView.DialogResult == true)
+            {
+                LoadAllRules();
+            }
         }
     }
 }

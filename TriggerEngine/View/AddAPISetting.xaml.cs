@@ -33,20 +33,32 @@ namespace VisualHFT.TriggerEngine.View
         {
           
             InitializeComponent();
-            this.restApiAction = _rule;
+         
             this.DataContext = _rule;
+
             if (_rule != null)
             {
+                this.restApiAction = _rule;
                 txtURL.Text = _rule.Url;
                 txtTemplate.Text = _rule.BodyTemplate;
                 lstHeaders.ItemsSource = _rule.Headers;
-            }
+            } 
         }
 
 
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
+            if(restApiAction.Url== null || restApiAction.Url == string.Empty || !CheckValidURL(restApiAction.Url))
+            {
+                MessageBox.Show("Please enter a valid URL.");
+                return;
+            }
+            if (restApiAction.BodyTemplate == null || restApiAction.BodyTemplate == string.Empty)
+            {
+                MessageBox.Show("Please enter a valid Body Template.");
+                return;
+            }
 
             restApiAction.Url = txtURL.Text;
             restApiAction.BodyTemplate = txtTemplate.Text;
@@ -74,6 +86,12 @@ namespace VisualHFT.TriggerEngine.View
         {
             DialogResult = false;
             Close();
+        }
+        private bool CheckValidURL(string url)
+        {
+            Uri uriResult;
+            return Uri.TryCreate(url, UriKind.Absolute, out uriResult) && uriResult.Scheme == Uri.UriSchemeHttp;
+
         }
     }
      
