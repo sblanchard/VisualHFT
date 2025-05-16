@@ -100,8 +100,7 @@ namespace VisualHFT.TriggerEngine.View
             this.model.Actions.Add(mod);
             lstDataAction.InvalidateVisual();
 
-        }
-
+        } 
         public T DeepClone<T>(T obj)
         {
             var json = JsonConvert.SerializeObject(obj);
@@ -182,6 +181,17 @@ namespace VisualHFT.TriggerEngine.View
         private void ComboBox_SelectionChanged_1(object sender, SelectionChangedEventArgs e)
         {
 
+        }
+
+        private void ShowConditionToolTip(object sender, MouseEventArgs e)
+        {
+            ConditionToolTip.IsOpen = true;
+
+        }
+
+        private void ShowActionToolTip(object sender, MouseEventArgs e)
+        {
+            ActionToolTip.IsOpen = true;
         }
     }
      

@@ -48,10 +48,43 @@ TextOptions.TextRenderingMode="Auto"
                 <TextBlock Text="Rule Name" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,0,10"/>
                 <TextBox x:Name="txtTriggerName" Text="{Binding Name}" Foreground="White"/>
             </StackPanel>
+ 
 
-            
             <TabControl>
-                <TabItem Header="Condition">
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal">
+
+                            <Label Margin="2,0,0,0" VerticalAlignment="Center" Foreground="White">Conditions</Label>
+                            <TextBlock Foreground="White" Name="img" Height="auto" Width="auto" MouseEnter="ShowConditionToolTip" >ℹ️</TextBlock>
+                            <Popup PopupAnimation="Fade" Placement="Mouse" AllowsTransparency="True" StaysOpen="False" x:Name="ConditionToolTip" >
+                                <Border Background="White" BorderBrush="Gray" CornerRadius="3" BorderThickness="1">
+                                    <StackPanel Margin="10" Orientation="Horizontal" >
+                                        <StackPanel>
+                                            <TextBlock TextWrapping="Wrap" Width="350" Foreground="Black" FontSize="12">
+         <Run FontWeight="Bold">How to configure a condition?</Run>
+<LineBreak />
+<LineBreak />
+<Run>Select a plugin from the list, for example, "LOB Imbalance". This plugin will be used to set a condition.</Run>
+<LineBreak />
+<LineBreak />
+<Run>Next, choose a condition operator such as "greater than", "less than", or "equal to". This operator defines how the plugin's value will be compared.</Run>
+<LineBreak />
+<LineBreak />
+<Run>You can add multiple conditions for the same plugin if needed.</Run>
+<LineBreak />
+<LineBreak />
+<Run>Then, enter a value to compare the plugin's data against. This value acts as the threshold for your condition.</Run>
+<LineBreak />
+<LineBreak />
+<Run>Together, these settings will check if the selected plugin’s value meets the condition. For example, if you select "greater than" and enter 2, it will check if the plugin’s value is greater than 2.</Run>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Popup> 
+                        </StackPanel>
+                    </TabItem.Header>
                     <StackPanel>
                        
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch"> 
@@ -117,7 +150,75 @@ TextOptions.TextRenderingMode="Auto"
             
            
                 </TabItem>
-                <TabItem Header="Action">
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal">
+
+                            <Label Margin="2,0,0,0" VerticalAlignment="Center" Foreground="White">Action</Label>
+                            <TextBlock Foreground="White" x:Name="Condtion" Height="auto" Width="auto" MouseEnter="ShowActionToolTip" >ℹ️</TextBlock>
+                            <Popup PopupAnimation="Fade" Placement="Mouse" AllowsTransparency="True" StaysOpen="False" x:Name="ActionToolTip" >
+                                <Border Background="White" BorderBrush="Gray" CornerRadius="3" BorderThickness="1">
+                                    <StackPanel Margin="10" Orientation="Horizontal" >
+                                        <StackPanel>
+                                            <TextBlock TextWrapping="Wrap" Width="350" Foreground="Black" FontSize="12">
+  <Run FontWeight="Bold">How to configure an action?</Run>
+  <LineBreak />
+  <LineBreak />
+  <Run>1. Select an action type from the available options:</Run>
+  <LineBreak />
+  <Run>   • </Run>
+  <Run FontWeight="Bold">UIAlert:</Run>
+  <Run> Displays an alert message within the application.</Run>
+  <LineBreak />
+  <Run>   • </Run>
+  <Run FontWeight="Bold">RestApi:</Run>
+  <Run> Calls an external API endpoint.</Run>
+  <LineBreak />
+  <LineBreak />
+  <Run>2. If you select </Run>
+  <Run FontWeight="Bold">RestApi</Run>
+  <Run>, specify the API details:</Run>
+  <LineBreak />
+  <Run>   • </Run>
+  <Run FontWeight="Bold">URL:</Run>
+  <Run> The destination endpoint for the API call.</Run>
+  <LineBreak />
+  <Run>   • </Run>
+  <Run FontWeight="Bold">Method:</Run>
+  <Run> Choose the HTTP method (e.g., POST or GET).</Run>
+  <LineBreak />
+  <Run>   • </Run>
+  <Run FontWeight="Bold">Body Template:</Run>
+  <Run> Provide the JSON payload template. You can include placeholders like </Run>
+  <Run FontStyle="Italic">{{metric}}</Run>
+  <Run> or </Run>
+  <Run FontStyle="Italic">{{value}}</Run>
+  <Run> that will be replaced dynamically.</Run>
+  <LineBreak />
+  <Run>   • </Run>
+  <Run FontWeight="Bold">Headers:</Run>
+  <Run> Add any custom HTTP headers required by the API.</Run>
+  <LineBreak />
+  <LineBreak />
+  <Run>3. Configure </Run>
+  <Run FontWeight="Bold">Cooldown</Run>
+  <Run> to specify a delay between repeated action triggers. Set the duration and its unit (seconds, minutes, etc.).</Run>
+  <LineBreak />
+  <LineBreak />
+  
+  <LineBreak />
+  <LineBreak />
+  <Run>4. Multiple actions can be added to execute sequentially when a condition is met.</Run>
+  <LineBreak />
+  <LineBreak />
+  <Run>Once configured, the action will automatically execute whenever its associated trigger conditions are satisfied.</Run>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
+                        </StackPanel>
+                    </TabItem.Header>
                     <StackPanel VerticalAlignment="Stretch" Height="5000">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">
                             <Button HorizontalAlignment="Right" x:Name="btnAddNewAction" Click="btnAddNewAction_Click" Height="32">➕</Button>
