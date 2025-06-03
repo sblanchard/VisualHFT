@@ -14,6 +14,7 @@ namespace VisualHFT.TriggerEngine
     /// </summary>
     public class TriggerAction
     {
+        public long ActionID { get; set; }
         public ActionType Type { get; set; } = ActionType.RestApi;
         public RestApiAction? RestApi { get; set; }         // Only required if Type == RestApi
                                                             // Future: Add more actions (e.g., UIAlertAction, PluginCommandAction)

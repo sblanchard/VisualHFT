@@ -188,11 +188,22 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="TriggerEngine\View\AddAPISetting.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
 	<ItemGroup>
 		<None Update="Images\VisualHFT.png">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
 		</None>
+	</ItemGroup>
+	<ItemGroup>
+	  <Page Update="TriggerEngine\View\AddAPISetting.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
 	</ItemGroup>
 
 </Project>

@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:VisualHFT.TriggerEngine.View"
+          xmlns:converters="clr-namespace:VisualHFT.Converters"
           TextElement.Foreground="{DynamicResource MaterialDesignBody}"
   TextElement.FontWeight="Regular"
   TextElement.FontSize="15"
@@ -12,9 +13,14 @@
         Background="{DynamicResource MaterialDesignPaper}"
         mc:Ignorable="d"
         Title="TriggerSettingsView" Height="450" Width="800">
+
+    <Window.Resources>
+        <converters:InverseBoolConverter x:Key="InverseBoolConverter" />
+        <converters:BoolToStatusConverter x:Key="BoolToStatusConverter" />
+    </Window.Resources>
     <Grid x:Name="MainGrid">
 
-        <TabControl  >
+        <TabControl>
             <TabItem Header="All Rules">
                 <ScrollViewer>
 
@@ -36,15 +42,23 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
+                                
+                                <GridViewColumn Header="Status">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding IsEnabled, Converter={StaticResource BoolToStatusConverter}}" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                                 <GridViewColumn Header="Actions">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
-                                            <TextBlock>
-                    <Hyperlink Click="rule_Click"  x:Name="rule"
-                               Command="{Binding DataContext.MethodCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                               CommandParameter="{Binding}"> Update
-                    </Hyperlink>
-                </TextBlock>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="▶"  Click="StartRule" IsEnabled="{Binding IsEnabled,Converter={StaticResource InverseBoolConverter}}"  CommandParameter="{Binding}" Margin="0, 0, 10, 0" />
+                                                <Button Content="⏹️" Click="StopRule" IsEnabled="{Binding IsEnabled}" CommandParameter="{Binding}" Margin="0, 0, 10, 0"/>
+                                                <Button Content="⚙" Click="UpdateRule"  CommandParameter="{Binding}" Margin="0, 0, 10, 0"/>
+                                                <Button Content="❌" Click="RemoveRule"  CommandParameter="{Binding}" Margin="0, 0, 10, 0"/>
+                                            </StackPanel> 
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn> 

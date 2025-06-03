@@ -23,6 +23,7 @@ TextOptions.TextRenderingMode="Auto"
                 <x:Type TypeName="enums:ConditionOperator" />
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
+        
         <ObjectDataProvider x:Key="ActionTypeOperatorEnum"
                          MethodName="GetValues"
                          ObjectType="{x:Type sys:Enum}">
@@ -36,8 +37,9 @@ TextOptions.TextRenderingMode="Auto"
             <ObjectDataProvider.MethodParameters>
                 <x:Type TypeName="enums:TimeWindowUnit" />
             </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
-        <converters:NewBoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        </ObjectDataProvider> 
+        <converters:EnumDescriptionConverter x:Key="EnumDescriptionConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     </Window.Resources> 
 
     <Grid x:Name="MainGrid" Margin="10">
@@ -141,6 +143,17 @@ TextOptions.TextRenderingMode="Auto"
                                     <DataGridTextColumn Header="Value" Binding="{Binding Threshold}"
                                           Width="80" ElementStyle="{DynamicResource RightAligned}" 
                                           HeaderStyle="{DynamicResource RightAlignedHeader}"/>
+
+
+                                    <DataGridTemplateColumn Header="Actions" >
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock ><Hyperlink Click="RemoveCondition" CommandParameter="{Binding}"> <Run  Text="Remove"/></Hyperlink>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
 
@@ -161,54 +174,48 @@ TextOptions.TextRenderingMode="Auto"
                                     <StackPanel Margin="10" Orientation="Horizontal" >
                                         <StackPanel>
                                             <TextBlock TextWrapping="Wrap" Width="350" Foreground="Black" FontSize="12">
-  <Run FontWeight="Bold">How to configure an action?</Run>
+ 
+ <Run FontWeight="Bold">How to configure an action?</Run>
   <LineBreak />
   <LineBreak />
-  <Run>1. Select an action type from the available options:</Run>
-  <LineBreak />
-  <Run>   • </Run>
-  <Run FontWeight="Bold">UIAlert:</Run>
-  <Run> Displays an alert message within the application.</Run>
+  <Run>1. Each action has a predefined type such as:</Run>
   <LineBreak />
   <Run>   • </Run>
-  <Run FontWeight="Bold">RestApi:</Run>
-  <Run> Calls an external API endpoint.</Run>
+  <Run FontWeight="Bold">Notify In-APP:</Run>
+  <Run> Shows a message inside the application UI.</Run>
+  <LineBreak />
+  <Run>   • </Run>
+  <Run FontWeight="Bold">WebHook URL:</Run>
+  <Run> Sends an HTTP/HTTPS POST request to a specified API endpoint.</Run>
+  <LineBreak />
+  <Run>   • </Run>
   <LineBreak />
   <LineBreak />
-  <Run>2. If you select </Run>
-  <Run FontWeight="Bold">RestApi</Run>
-  <Run>, specify the API details:</Run>
+  <Run>2. If the Action type is </Run>
+  <Run FontWeight="Bold">WebHook API</Run>
+  <Run>, configure the following fields:</Run>
   <LineBreak />
   <Run>   • </Run>
   <Run FontWeight="Bold">URL:</Run>
-  <Run> The destination endpoint for the API call.</Run>
+  <Run> Destination endpoint for the request.</Run>
   <LineBreak />
   <Run>   • </Run>
   <Run FontWeight="Bold">Method:</Run>
-  <Run> Choose the HTTP method (e.g., POST or GET).</Run>
+  <Run> HTTP method like POST or GET. Currently on POST is supported</Run>
   <LineBreak />
   <Run>   • </Run>
   <Run FontWeight="Bold">Body Template:</Run>
-  <Run> Provide the JSON payload template. You can include placeholders like </Run>
-  <Run FontStyle="Italic">{{metric}}</Run>
+  <Run> JSON payload with dynamic placeholders like </Run>
+  <Run FontStyle="Italic">{{plugin}}</Run>
   <Run> or </Run>
-  <Run FontStyle="Italic">{{value}}</Run>
-  <Run> that will be replaced dynamically.</Run>
+  <Run FontStyle="Italic">{{condition}} etc</Run><Run>.</Run>
   <LineBreak />
   <Run>   • </Run>
   <Run FontWeight="Bold">Headers:</Run>
-  <Run> Add any custom HTTP headers required by the API.</Run>
+  <Run> Optional custom HTTP headers.</Run>
   <LineBreak />
   <LineBreak />
-  <Run>3. Configure </Run>
-  <Run FontWeight="Bold">Cooldown</Run>
-  <Run> to specify a delay between repeated action triggers. Set the duration and its unit (seconds, minutes, etc.).</Run>
-  <LineBreak />
-  <LineBreak />
-  
-  <LineBreak />
-  <LineBreak />
-  <Run>4. Multiple actions can be added to execute sequentially when a condition is met.</Run>
+
   <LineBreak />
   <LineBreak />
   <Run>Once configured, the action will automatically execute whenever its associated trigger conditions are satisfied.</Run>
@@ -219,7 +226,46 @@ TextOptions.TextRenderingMode="Auto"
                             </Popup>
                         </StackPanel>
                     </TabItem.Header>
-                    <StackPanel VerticalAlignment="Stretch" Height="5000">
+
+                    <StackPanel Orientation="Vertical"  HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                        <!-- Notify in app -->
+                        <StackPanel Orientation="Horizontal" Margin="0,10">
+                            <CheckBox Checked="InAppChecked" x:Name="inappCheck" Unchecked="InAppUnChecked" IsChecked="False" VerticalAlignment="Top" Margin="0,4,10,0"/>
+                            <StackPanel>
+                                <TextBlock Text="Notify in app" Foreground="White" FontWeight="Bold"/>
+                                <TextBlock Text="Provides a push notification in the Visual HFT App notification centre." 
+                       Foreground="#CCCCCC" 
+                       TextWrapping="Wrap" 
+                       FontSize="12"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Webhook URL -->
+                        <StackPanel Orientation="Horizontal" Margin="0,10">
+                            <CheckBox x:Name="webhookCheck"
+              Checked="WebHookChecked"
+              Unchecked="WebHookUnChecked"
+              IsChecked="False"
+              VerticalAlignment="Top"
+              Margin="0,4,10,0"/>
+
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Webhook URL" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock Text=" ?" Foreground="LightGray" FontWeight="Bold" Margin="5,0,0,0"/>
+ 
+                                    <TextBlock Margin="5,0,0,0" Visibility="{Binding IsChecked, ElementName=webhookCheck, Converter={StaticResource BoolToVisibilityConverter}}"><Hyperlink Click="ClickSetAPI"><Run Text="Configure" /></Hyperlink></TextBlock>
+                                </StackPanel>
+
+                                <TextBlock Text="Sends a POST request to your specified URL when your alert triggers."
+                   Foreground="#CCCCCC" 
+                   TextWrapping="Wrap" 
+                   FontSize="12"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!--<StackPanel VerticalAlignment="Stretch" Height="5000">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">
                             <Button HorizontalAlignment="Right" x:Name="btnAddNewAction" Click="btnAddNewAction_Click" Height="32">➕</Button>
                         </StackPanel>
@@ -253,10 +299,17 @@ TextOptions.TextRenderingMode="Auto"
                                     </Style>
                                 </DataGrid.RowStyle>
                                 <DataGrid.Columns>
+
                                     <DataGridTemplateColumn  Header="Type"  HeaderStyle="{DynamicResource RightAlignedHeader}">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <ComboBox ItemsSource="{Binding Source={StaticResource ActionTypeOperatorEnum}}" SelectedItem="{Binding Type}" Width="150"    SelectionChanged="ComboBox_SelectionChanged"/>
+                                                <ComboBox ItemsSource="{Binding Source={StaticResource ActionTypeOperatorEnum}}" SelectedItem="{Binding Type}" Width="150"   SelectedValuePath="Value"  DisplayMemberPath="Description"   SelectionChanged="ComboBox_SelectionChanged">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Converter={StaticResource EnumDescriptionConverter}}" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
@@ -282,12 +335,22 @@ TextOptions.TextRenderingMode="Auto"
                                         </DataGridTemplateColumn.CellTemplate>
                                        
                                     </DataGridTemplateColumn>
+                                    
+                                    <DataGridTemplateColumn Header="Actions" >
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock ><Hyperlink Click="RemoveAction" CommandParameter="{Binding}"> <Run  Text="Remove"/></Hyperlink>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                                 
                             </DataGrid>
 
                         </StackPanel>
-                    </StackPanel>
+                    </StackPanel>-->
                     
                     
                 </TabItem>

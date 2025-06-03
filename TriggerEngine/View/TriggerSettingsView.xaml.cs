@@ -61,6 +61,8 @@ namespace VisualHFT.TriggerEngine.View
                 vm.Name = x.Name;
                 vm.Condition = new BindingList<TriggerConditionViewModel>();
                 vm.Actions = new BindingList<TriggerActionViewModel>();
+                vm.IsEnabled = x.IsEnabled;
+                vm.RuleID = x.RuleID; 
 
                 x.Condition.ForEach(y =>
                 {
@@ -70,6 +72,7 @@ namespace VisualHFT.TriggerEngine.View
                     vmCondition.Operator = y.Operator;
                     vmCondition.Threshold = y.Threshold;
                     vmCondition.Window = y.Window;
+                    vmCondition.ConditionID= y.ConditionID;
                     vm.Condition.Add(vmCondition);
                 });
                 x.Actions.ForEach(x =>
@@ -78,17 +81,21 @@ namespace VisualHFT.TriggerEngine.View
                     vmAction.Type = x.Type;
                     vmAction.CooldownDuration = x.CooldownDuration;
                     vmAction.CooldownUnit = x.CooldownUnit;
-                    vmAction.RestApi = new RestApiActionViewModel();
-                    vmAction.RestApi.Url = x.RestApi.Url;
-                    vmAction.RestApi.BodyTemplate = x.RestApi.BodyTemplate;
-                    vmAction.RestApi.Url = x.RestApi.Url;
-                    vmAction.RestApi.Headers = new System.Collections.ObjectModel.ObservableCollection<RestAPIHeaderViewModel>();
-                    foreach (var item in x.RestApi.Headers)
+                    vmAction.ActionID = x.ActionID;
+                    if (x.Type==ActionType.RestApi && x.RestApi != null)
                     {
-                        RestAPIHeaderViewModel vmHeader = new RestAPIHeaderViewModel();
-                        vmHeader.HeaderName = item.Key;
-                        vmHeader.HeaderValue = item.Value;
-                        vmAction.RestApi.Headers.Add(vmHeader);
+                        vmAction.RestApi = new RestApiActionViewModel();
+                        vmAction.RestApi.Url = x.RestApi.Url;
+                        vmAction.RestApi.BodyTemplate = x.RestApi.BodyTemplate;
+                        vmAction.RestApi.Url = x.RestApi.Url;
+                        vmAction.RestApi.Headers = new System.Collections.ObjectModel.ObservableCollection<RestAPIHeaderViewModel>();
+                        foreach (var item in x.RestApi.Headers)
+                        {
+                            RestAPIHeaderViewModel vmHeader = new RestAPIHeaderViewModel();
+                            vmHeader.HeaderName = item.Key;
+                            vmHeader.HeaderValue = item.Value;
+                            vmAction.RestApi.Headers.Add(vmHeader);
+                        }
                     }
                     vm.Actions.Add(vmAction);
 
@@ -101,14 +108,50 @@ namespace VisualHFT.TriggerEngine.View
             this.DataContext = lstCurrentRules;
         }
 
-        private void rule_Click(object sender, RoutedEventArgs e)
-        { 
-            Hyperlink hyperlink = (Hyperlink)sender;
+        private void UpdateRule(object sender, RoutedEventArgs e)
+        {
+            Button hyperlink = (Button)sender;
             TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;  
             TriggerSettingAddOrUpdate frmRuleView = new TriggerSettingAddOrUpdate(selectedRule, dashboard);
             frmRuleView.ShowDialog();
-            if (frmRuleView.DialogResult == true)
+            LoadAllRules();
+        }
+
+        private void StopRule(object sender, RoutedEventArgs e)
+        {
+            Button hyperlink = (Button)sender;
+            TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;
+            MessageBoxResult result = MessageBox.Show($"Are you sure you want to stop the rule '{selectedRule.Name}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Yes)
             {
+                TriggerEngineService.StopRule(selectedRule.Name);
+                LoadAllRules();
+            }
+        }
+
+        private void StartRule(object sender, RoutedEventArgs e)
+        {
+           
+                Button hyperlink = (Button)sender;
+            TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;
+            MessageBoxResult result = MessageBox.Show($"Are you sure you want to start the rule '{selectedRule.Name}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Yes)
+            {
+                TriggerEngineService.StartRule(selectedRule.Name);
+                LoadAllRules();
+            }
+
+        }
+
+        private void RemoveRule(object sender, RoutedEventArgs e)
+        {
+            Button hyperlink = (Button)sender;
+            TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;
+
+            MessageBoxResult result = MessageBox.Show($"Are you sure you want to remove the rule '{selectedRule.Name}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Yes)
+            {
+                TriggerEngineService.RemoveRule(selectedRule.Name);
                 LoadAllRules();
             }
         }

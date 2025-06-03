@@ -38,11 +38,14 @@ namespace VisualHFT.TriggerEngine.View
 
             if (_rule != null)
             {
-                this.restApiAction = _rule;
-                txtURL.Text = _rule.Url;
-                txtTemplate.Text = _rule.BodyTemplate;
+                this.restApiAction = _rule; 
                 lstHeaders.ItemsSource = _rule.Headers;
-            } 
+            }
+            else
+            {
+                restApiAction.BodyTemplate = "{\r\n\r\n\"plugin\":\"{{plugin}}\",\r\n\"value\":\"{{value}}\",\r\n\"timestamp\":\"{{timestamp}}\", \r\n}";
+            }
+            this.DataContext = restApiAction;
         }
 
 
@@ -89,8 +92,9 @@ namespace VisualHFT.TriggerEngine.View
         }
         private bool CheckValidURL(string url)
         {
-            Uri uriResult;
-            return Uri.TryCreate(url, UriKind.Absolute, out uriResult) && uriResult.Scheme == Uri.UriSchemeHttp;
+            return Uri.TryCreate(url, UriKind.Absolute, out var uriResult)
+           && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+
 
         }
     }

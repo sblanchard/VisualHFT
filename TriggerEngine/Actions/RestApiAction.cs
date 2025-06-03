@@ -19,7 +19,9 @@ namespace VisualHFT.TriggerEngine.Actions
         public string BodyTemplate { get; set; }           // JSON payload (e.g. includes {{metric}}, {{value}})
         public Dictionary<string, string> Headers { get; set; } = new();
 
-        public async Task ExecuteAsync(string plugin, string metric, double value, DateTime timestamp)
+
+
+        public async Task ExecuteAsync(string BodyTemplate)
         {
             try
             {
@@ -31,12 +33,13 @@ namespace VisualHFT.TriggerEngine.Actions
                     httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
                 }
 
-                string body = BodyTemplate
-                    .Replace("{{plugin}}", plugin)
-                    .Replace("{{metric}}", metric)
-                    .Replace("{{value}}", value.ToString(CultureInfo.InvariantCulture))
-                    .Replace("{{timestamp}}", timestamp.ToString("o"));
+                string body = BodyTemplate;
 
+                    var content = new StringContent(body, Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync(Url, content);
+                
+                /*
+                Console.WriteLine($"[RestApiAction] POST {response.StatusCode}: {Url}");
                 if (Method.ToUpper() == "GET")
                 {
                     // Assume body data goes in query string (optional enhancement)
@@ -46,14 +49,14 @@ namespace VisualHFT.TriggerEngine.Actions
                 }
                 else if (Method.ToUpper() == "POST")
                 {
-                    var content = new StringContent(body, Encoding.UTF8, "application/json");
-                    var response = await httpClient.PostAsync(Url, content);
-                    Console.WriteLine($"[RestApiAction] POST {response.StatusCode}: {Url}");
+                    
                 }
                 else
                 {
                     Console.WriteLine($"[RestApiAction] Unsupported method: {Method}");
                 }
+                */
+
             }
             catch (Exception ex)
             {

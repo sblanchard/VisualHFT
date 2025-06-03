@@ -17,6 +17,6 @@ namespace VisualHFT.TriggerEngine
         public List<TriggerCondition> Condition { get; set; } = new List<TriggerCondition>();  // "WHEN"
         public List<TriggerAction> Actions { get; set; }        // "THEN"
         public bool IsEnabled { get; set; } = true;
-         
+        public long RuleID { get; set; }
     } 
 }

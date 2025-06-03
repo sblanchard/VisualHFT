@@ -13,6 +13,7 @@ namespace VisualHFT.TriggerEngine
 
     public class TriggerCondition
     {
+        public long ConditionID { get; set; }
         public string Plugin { get; set; }                 // e.g. "MarketMicrostructure"
         public string Metric { get; set; }                 // e.g. "LOBImbalance"
         public ConditionOperator Operator { get; set; }    // e.g. CrossesAbove, GreaterThan

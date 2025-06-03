@@ -25,12 +25,12 @@ TextOptions.TextRenderingMode="Auto"
             </StackPanel>
             <StackPanel Margin="10">
                 <TextBlock Text="URL" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBox x:Name="txtURL"  Foreground="White"/>
+                <TextBox x:Name="txtURL"  Text="{Binding Url}" Foreground="White"/>
             </StackPanel>
          
             <StackPanel Margin="10">
                 <TextBlock Text="Template" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBox  x:Name="txtTemplate"  Foreground="White" Height="100"  TextWrapping="Wrap" AcceptsReturn="True"/>
+                <TextBox  x:Name="txtTemplate" Text="{Binding BodyTemplate}" Foreground="White" Height="100"  TextWrapping="Wrap" AcceptsReturn="True"/>
             </StackPanel>
             <StackPanel Margin="10">
                 <TextBlock Text="Headers" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>

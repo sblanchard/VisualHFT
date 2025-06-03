@@ -78,9 +78,7 @@ namespace VisualHFT.TriggerEngine
                 }
                 string json= JsonConvert.SerializeObject(lstRule, Formatting.Indented);
                 File.WriteAllText(TriggerEngineConfigFilePath, json);
-
-
-
+                LoadAllRules();
             }
         }
 
@@ -89,9 +87,16 @@ namespace VisualHFT.TriggerEngine
             lock (ruleLock)
             {
                 var rule = lstRule.FirstOrDefault(x => x.Name == name);
-                if (rule != null) lstRule.Remove(rule);
+                if (rule != null)
+                {
+                    lstRule.Remove(rule);
+                    string json = JsonConvert.SerializeObject(lstRule, Formatting.Indented);
+                    File.WriteAllText(TriggerEngineConfigFilePath, json);
+                    LoadAllRules();
+                }
             }
-        }   public static void ClearAllRules()
+        } 
+        public static void ClearAllRules()
         {
             lock (ruleLock)
             {
@@ -105,7 +110,29 @@ namespace VisualHFT.TriggerEngine
                 return lstRule.ToList();
             }
         }
+        public static void StopRule(string name)
+        {
+            lock (ruleLock)
+            {
+                TriggerRule? rule = lstRule.FirstOrDefault(x => x.Name == name);
+                if (rule != null)
+                {
+                    rule.IsEnabled = false;
 
+                }
+            } 
+        }
+        public static void StartRule(string name)
+        {
+            lock (ruleLock)
+            {
+                var rule = lstRule.FirstOrDefault(x => x.Name == name);
+                if (rule != null)
+                {
+                    rule.IsEnabled = true;
+                }
+            }
+        }
         public static async Task LoadAllRules()
         {
             string directoryPath = Path.GetDirectoryName(TriggerEngineConfigFilePath);
@@ -140,7 +167,7 @@ namespace VisualHFT.TriggerEngine
                 for (int i = 0; i < rule.Condition.Count; i++)
                 {
                     var condition = rule.Condition[i];
-                    if (condition.Plugin != e.Plugin || condition.Metric != e.Metric)
+                    if (condition.Plugin != e.Plugin)
                         continue;
 
                     bool isConditionMet = EvaluateDirect(condition, e.Value, previous);
@@ -238,9 +265,15 @@ namespace VisualHFT.TriggerEngine
             if (action.Type == ActionType.RestApi && action.RestApi != null)
             {
                 var body = action.RestApi.BodyTemplate
-                    .Replace("{{metric}}", metric)
+                    .Replace("{{rulename}}", ruleName)
+                    .Replace("{{plugin}}", metric)
+                    .Replace("{{condition}}", condition.Operator.ToString())
+                    .Replace("{{threshold}}", condition.Threshold.ToString())
                     .Replace("{{value}}", value.ToString())
                     .Replace("{{timestamp}}", timestamp.ToString("o"));
+                    
+                _ = action.RestApi.ExecuteAsync(body); // Fire and forget
+
             } 
             else if (action.Type == ActionType.UIAlert)
             {

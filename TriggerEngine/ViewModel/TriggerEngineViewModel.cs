@@ -16,14 +16,14 @@ namespace VisualHFT.TriggerEngine.ViewModel
     public class TriggerEngineRuleViewModel : INotifyPropertyChanged
     {
 
+        public long? RuleID { get; set; }
         private string _Name { get; set; }
      
         
         public BindingList<TriggerConditionViewModel> Condition { get; set; } = new BindingList<TriggerConditionViewModel>();
         public BindingList<TriggerActionViewModel> Actions { get; set; } = new BindingList<TriggerActionViewModel>();
-
-
-        private bool IsEnabled { get; set; } = true;
+         
+        public bool IsEnabled { get; set; }
 
 
         public string Name
@@ -47,8 +47,7 @@ namespace VisualHFT.TriggerEngine.ViewModel
             TriggerRule rule = new TriggerRule();
             rule.Actions = new List<TriggerAction>();
             rule.Condition = new List<TriggerCondition>();
-
-
+            rule.RuleID = view.RuleID.Value;
             rule.Name=view.Name;
             foreach (var item in view.Condition)
             {
@@ -59,6 +58,7 @@ namespace VisualHFT.TriggerEngine.ViewModel
                     Operator = item.Operator,
                     Threshold = item.Threshold,
                     Window = item.Window,
+                    ConditionID= item.ConditionID
 
                 });
             }
@@ -67,6 +67,7 @@ namespace VisualHFT.TriggerEngine.ViewModel
             {
                 var triggerAction = new TriggerAction();
                 triggerAction.Type=item.Type;
+                triggerAction.ActionID = item.ActionID;
                 if(item.Type==ActionType.RestApi)
                 {
                     triggerAction.RestApi = new RestApiAction
@@ -95,6 +96,7 @@ namespace VisualHFT.TriggerEngine.ViewModel
     }
     public class TriggerConditionViewModel : INotifyPropertyChanged
     {
+        public long ConditionID { get; set; }
         private string _Plugin { get; set; }                 // e.g. "MarketMicrostructure"
         private string _Metric { get; set; }                 // e.g. "LOBImbalance"
         private ConditionOperator _Operator { get; set; }    // e.g. CrossesAbove, GreaterThan
@@ -147,6 +149,7 @@ namespace VisualHFT.TriggerEngine.ViewModel
 
     public class TriggerActionViewModel:INotifyPropertyChanged
     {
+        public long ActionID { get; set; }
         private ActionType _Type { get; set; } = ActionType.RestApi;
 
         private RestApiActionViewModel? _RestApi { get; set; }         // Only required if Type == RestApi
@@ -178,8 +181,7 @@ namespace VisualHFT.TriggerEngine.ViewModel
         }
 
         //For UI use Only
-        public string LinkText { get; set; } = "Set API";
-        public long id { get; set; }
+        public string LinkText { get; set; } = "Set API"; 
 
 
 
