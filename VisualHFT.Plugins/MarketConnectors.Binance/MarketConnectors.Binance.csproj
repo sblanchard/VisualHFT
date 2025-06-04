@@ -56,7 +56,7 @@
 
   <ItemGroup>
     <PackageReference Include="Binance.Net" Version="10.19.1" />
-    <PackageReference Include="log4net" Version="3.0.4" />
+    <PackageReference Include="log4net" Version="3.1.0" />
   </ItemGroup>
 
   <ItemGroup>

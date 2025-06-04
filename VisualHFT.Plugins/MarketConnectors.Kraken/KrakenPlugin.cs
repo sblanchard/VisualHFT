@@ -856,8 +856,8 @@ namespace MarketConnectors.Kraken
         public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
         {
             var localModel = new KrakenOrderBook();
-            localModel.Bids = snapshotModel.Bids.Select(x => new KrakenOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal(), Timestamp = x.LocalTimeStamp}).ToList();
-            localModel.Asks = snapshotModel.Asks.Select(x => new KrakenOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal(), Timestamp = x.LocalTimeStamp}).ToList();
+            localModel.Bids = snapshotModel.Bids.Select(x => new KrakenOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal(), Timestamp = x.LocalTimeStamp}).ToArray();
+            localModel.Asks = snapshotModel.Asks.Select(x => new KrakenOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal(), Timestamp = x.LocalTimeStamp}).ToArray();
             _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
 
             var symbol = snapshotModel.Symbol;
@@ -872,8 +872,8 @@ namespace MarketConnectors.Kraken
             UpdateOrderBookSnapshot(new KrakenBookUpdate()
             {
                 Symbol = symbol,
-                Asks = snapshotModel.Asks.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList(),
-                Bids = snapshotModel.Bids.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList()
+                Asks = snapshotModel.Asks.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray(),
+                Bids = snapshotModel.Bids.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray()
             }, symbol);
             _localOrderBooks[symbol].Sequence = sequence;// KRAKEN does not provide sequence numbers
 
@@ -890,8 +890,8 @@ namespace MarketConnectors.Kraken
             var ts = DateTime.Now;
 
             var localModel = new KrakenBookUpdate();
-            localModel.Bids = bidDeltaModel?.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal()}).ToList();
-            localModel.Asks = askDeltaModel?.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+            localModel.Bids = bidDeltaModel?.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal()}).ToArray();
+            localModel.Asks = askDeltaModel?.Select(x => new KrakenBookUpdateEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray();
 
             //************************************************************************************************************************
             //sequence is not provided by KRAKEN (then make adjustments to this method, so Unit tests don't fail)
@@ -905,9 +905,9 @@ namespace MarketConnectors.Kraken
                     bidDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
                     askDeltaModel.RemoveAll(x => x.Sequence <= _localOrderBooks[symbol].Sequence);
                     localModel.Bids = bidDeltaModel?.Select(x => new KrakenBookUpdateEntry()
-                        { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+                        { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray();
                     localModel.Asks = askDeltaModel?.Select(x => new KrakenBookUpdateEntry()
-                        { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+                        { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray();
                 }
                 else if (minSequence != _localOrderBooks[symbol].Sequence + 1)
                 {

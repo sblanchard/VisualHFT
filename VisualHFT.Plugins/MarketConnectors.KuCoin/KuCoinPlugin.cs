@@ -21,11 +21,10 @@ using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using Kucoin.Net.Objects.Models.Spot;
 using Kucoin.Net.Objects.Models.Spot.Socket;
-using CryptoExchange.Net.CommonObjects;
 using Kucoin.Net.Interfaces.Clients;
 using VisualHFT.Commons.Interfaces;
-using Order = CryptoExchange.Net.CommonObjects.Order;
 using Newtonsoft.Json.Linq;
+using CryptoExchange.Net.Authentication;
 
 namespace MarketConnectors.KuCoin
 {
@@ -91,14 +90,14 @@ namespace MarketConnectors.KuCoin
 
         public override async Task StartAsync()
         {
-
+            
             await base.StartAsync(); //call the base first
             _socketClient = new KucoinSocketClient(options =>
             {
                 if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) &&
                     !string.IsNullOrEmpty(_settings.APIPassPhrase))
                 {
-                    options.ApiCredentials = new Kucoin.Net.Objects.KucoinApiCredentials(_settings.ApiKey,
+                    options.ApiCredentials = new ApiCredentials(_settings.ApiKey,
                         _settings.ApiSecret, _settings.APIPassPhrase);
                 }
 
@@ -111,7 +110,7 @@ namespace MarketConnectors.KuCoin
                 if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) &&
                     !string.IsNullOrEmpty(_settings.APIPassPhrase))
                 {
-                    options.ApiCredentials = new Kucoin.Net.Objects.KucoinApiCredentials(_settings.ApiKey,
+                    options.ApiCredentials = new ApiCredentials(_settings.ApiKey,
                         _settings.ApiSecret, _settings.APIPassPhrase);
                 }
 
@@ -274,10 +273,10 @@ namespace MarketConnectors.KuCoin
             if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret) &&
                 !string.IsNullOrEmpty(_settings.APIPassPhrase))
             {
-                var orders = await _restClient.SpotApi.CommonSpotClient.GetOpenOrdersAsync();
-                if (orders != null)
+                var orders = await _restClient.SpotApi.Trading.GetOrdersAsync();
+                if (orders != null && orders.Success)
                 {
-                    foreach (Order item in orders.Data)
+                    foreach (KucoinOrder item in orders.Data.Items)
                     {
                         VisualHFT.Model.Order localuserOrder;
                         if (!this._localUserOrders.ContainsKey(item.Id))
@@ -285,12 +284,12 @@ namespace MarketConnectors.KuCoin
                             localuserOrder = new VisualHFT.Model.Order();
                             localuserOrder.ClOrdId = item.Id;
                             localuserOrder.Currency = GetNormalizedSymbol(item.Symbol);
-                            localuserOrder.CreationTimeStamp = item.Timestamp;
+                            localuserOrder.CreationTimeStamp = item.CreateTime;
                             localuserOrder.OrderID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                             //localuserOrder.OrderID = long.Parse(item.OrderId);
                             localuserOrder.ProviderId = _settings!.Provider.ProviderID;
                             localuserOrder.ProviderName = _settings.Provider.ProviderName;
-                            localuserOrder.CreationTimeStamp = item.Timestamp;
+                            localuserOrder.CreationTimeStamp = item.CreateTime;
                             localuserOrder.Quantity = (double)item.Quantity;
                             localuserOrder.PricePlaced = (double)item.Price;
                             localuserOrder.Symbol = GetNormalizedSymbol(item.Symbol);
@@ -320,11 +319,11 @@ namespace MarketConnectors.KuCoin
                         }
 
 
-                        if (item.Type == CommonOrderType.Market)
+                        if (item.Type == OrderType.Market)
                         {
                             localuserOrder.OrderType = eORDERTYPE.MARKET;
                         }
-                        else if (item.Type == CommonOrderType.Limit)
+                        else if (item.Type == OrderType.Limit)
                         {
                             localuserOrder.OrderType = eORDERTYPE.LIMIT;
 
@@ -335,14 +334,14 @@ namespace MarketConnectors.KuCoin
                         }
 
 
-                        if (item.Side == CommonOrderSide.Buy)
+                        if (item.Side == OrderSide.Buy)
                         {
                             localuserOrder.PricePlaced = (double)item.Price;
                             localuserOrder.BestBid = (double)item.Price;
                             localuserOrder.Side = eORDERSIDE.Buy;
                         }
 
-                        if (item.Side == CommonOrderSide.Sell)
+                        if (item.Side == OrderSide.Sell)
                         {
                             localuserOrder.Side = eORDERSIDE.Sell;
                             localuserOrder.BestAsk = (double)item.Price;
@@ -988,12 +987,12 @@ namespace MarketConnectors.KuCoin
             {
                 Price = x.Price.ToDecimal(),
                 Quantity = x.Size.ToDecimal()
-            });
+            }).ToArray();
             localModel.Bids = snapshotModel.Bids.Select(x => new KucoinOrderBookEntry()
             {
                 Price = x.Price.ToDecimal(),
                 Quantity = x.Size.ToDecimal()
-            });
+            }).ToArray();
             localModel.Timestamp = DateTime.Now;
             localModel.Sequence = sequence;
             _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
@@ -1027,13 +1026,13 @@ namespace MarketConnectors.KuCoin
                     Price = x.Price.ToDecimal(),
                     Quantity = x.Size.ToDecimal(),
                     Sequence = x.Sequence
-                }),
+                }).ToArray(),
                 Asks = askDeltaModel?.Select(x => new KucoinStreamOrderBookEntry()
                 {
                     Price = x.Price.ToDecimal(),
                     Quantity = x.Size.ToDecimal(),
                     Sequence = x.Sequence
-                }),
+                }).ToArray(),
                 Timestamp = DateTime.Now
             };
             localModel.SequenceStart = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));

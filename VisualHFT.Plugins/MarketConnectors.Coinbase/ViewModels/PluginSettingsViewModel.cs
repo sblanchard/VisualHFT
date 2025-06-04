@@ -1,4 +1,4 @@
-﻿ 
+﻿
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -17,9 +17,7 @@ namespace MarketConnectors.Coinbase.ViewModel
     {
         private string _apiKey;
         private string _apiSecret;
-        private string _apiSigningKey;
-        private string _hostName;
-        private int _port;
+        private int _depthLevels;
         private int _providerId;
         private string _providerName;
         private string _validationMessage;
@@ -29,7 +27,7 @@ namespace MarketConnectors.Coinbase.ViewModel
 
         public ICommand OkCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
-        public Action UpdateSettingsFromUI{ get; set; }
+        public Action UpdateSettingsFromUI { get; set; }
 
         public PluginSettingsViewModel(Action actionCloseWindow)
         {
@@ -37,16 +35,7 @@ namespace MarketConnectors.Coinbase.ViewModel
             CancelCommand = new RelayCommand<object>(ExecuteCancelCommand);
             _actionCloseWindow = actionCloseWindow;
         }
-        public string HostName
-        {
-            get => _hostName;
-            set { _hostName = value; OnPropertyChanged(nameof(HostName)); }
-        }
-        public int Port
-        {
-            get => _port;
-            set { _port = value; OnPropertyChanged(nameof(Port)); }
-        }
+
         public int ProviderId
         {
             get => _providerId;
@@ -78,7 +67,7 @@ namespace MarketConnectors.Coinbase.ViewModel
         public string ValidationMessage
         {
             get { return _validationMessage; }
-            set { _validationMessage = value; OnPropertyChanged(nameof(ValidationMessage));}
+            set { _validationMessage = value; OnPropertyChanged(nameof(ValidationMessage)); }
         }
 
         public string SuccessMessage
@@ -90,7 +79,7 @@ namespace MarketConnectors.Coinbase.ViewModel
 
         public string SymbolsText
         {
-            get{return Symbols==null?string.Empty: string.Join(",", Symbols); }
+            get { return Symbols == null ? string.Empty : string.Join(",", Symbols); }
             set
             {
                 Symbols = value.Split(',').Select(s => s.Trim()).ToList();
@@ -105,11 +94,6 @@ namespace MarketConnectors.Coinbase.ViewModel
             get => _apiSecret;
             set { _apiSecret = value; OnPropertyChanged(nameof(ApiSecret)); }
         }
-        public string APISigningKey
-        {
-            get => _apiSigningKey;
-            set { _apiSigningKey = value; OnPropertyChanged(nameof(APISigningKey)); }
-        }
 
         public List<string> Symbols
         {
@@ -118,6 +102,17 @@ namespace MarketConnectors.Coinbase.ViewModel
             {
                 _symbols = value;
                 OnPropertyChanged(nameof(Symbols));
+                RaiseCanExecuteChanged();
+            }
+        }
+
+        public int DepthLevels
+        {
+            get => _depthLevels;
+            set
+            {
+                _depthLevels = value;
+                OnPropertyChanged(nameof(DepthLevels));
                 RaiseCanExecuteChanged();
             }
         }
@@ -138,6 +133,11 @@ namespace MarketConnectors.Coinbase.ViewModel
                             return "API Secret cannot be empty.";
                         break;*/
 
+                    case nameof(DepthLevels):
+                        if (DepthLevels <= 0)
+                            return "Depth levels should be a positive integer.";
+                        break;
+
                     case nameof(ProviderId):
                         if (ProviderId <= 0)
                             return "Provider ID should be a positive integer.";
@@ -156,7 +156,7 @@ namespace MarketConnectors.Coinbase.ViewModel
         }
 
         private void ExecuteOkCommand(object obj)
-        {            
+        {
             SuccessMessage = "Settings saved successfully!";
             UpdateSettingsFromUI?.Invoke();
             _actionCloseWindow?.Invoke();
@@ -168,9 +168,8 @@ namespace MarketConnectors.Coinbase.ViewModel
         private bool CanExecuteOkCommand(object obj)
         {
             // This checks if any validation message exists for any of the properties
-            return string.IsNullOrWhiteSpace(this[nameof(HostName)]) &&
-                   string.IsNullOrWhiteSpace(this[nameof(Port)]) &&
-                   string.IsNullOrWhiteSpace(this[nameof(ProviderId)]) &&
+            return string.IsNullOrWhiteSpace(this[nameof(ProviderId)]) &&
+                       string.IsNullOrWhiteSpace(this[nameof(DepthLevels)]) &&
                    string.IsNullOrWhiteSpace(this[nameof(ProviderName)]);
         }
         private void RaiseCanExecuteChanged()

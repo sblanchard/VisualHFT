@@ -1000,8 +1000,8 @@ namespace MarketConnectors.Binance
 
             var localModel = new BinanceOrderBook();
             localModel.Symbol = snapshotModel.Symbol;
-            localModel.Bids = snapshotModel.Bids.Select(x => new BinanceOrderBookEntry() {  Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal()}).ToList();
-            localModel.Asks = snapshotModel.Asks.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+            localModel.Bids = snapshotModel.Bids.Select(x => new BinanceOrderBookEntry() {  Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal()}).ToArray();
+            localModel.Asks = snapshotModel.Asks.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray();
             localModel.LastUpdateId = sequence;
             _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
 
@@ -1027,8 +1027,8 @@ namespace MarketConnectors.Binance
             var ts = DateTime.Now;
 
             var localModel = new BinanceEventOrderBook();
-            localModel.Bids = bidDeltaModel?.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
-            localModel.Asks = askDeltaModel?.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToList();
+            localModel.Bids = bidDeltaModel?.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray();
+            localModel.Asks = askDeltaModel?.Select(x => new BinanceOrderBookEntry() { Price = x.Price.ToDecimal(), Quantity = x.Size.ToDecimal() }).ToArray();
             long minSequence = Math.Min(bidDeltaModel.Min(x => x.Sequence), askDeltaModel.Min(x => x.Sequence));
             long maxSequence = Math.Max(bidDeltaModel.Max(x => x.Sequence), askDeltaModel.Max(x => x.Sequence));
             localModel.FirstUpdateId = minSequence;
