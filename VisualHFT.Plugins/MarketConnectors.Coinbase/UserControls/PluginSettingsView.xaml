@@ -55,9 +55,9 @@
 
             <Label Content="API Secret" Margin="0,20,0,0"/>
             <TextBox Text="{Binding ApiSecret, UpdateSourceTrigger=PropertyChanged}" Margin="0,5" />
- 
-            <Label Content="API Signing Key" Margin="0,20,0,0"/>
-            <TextBox Text="{Binding APISigningKey, UpdateSourceTrigger=PropertyChanged}" Margin="0,5" />
+
+            <Label Content="Depth Levels" Margin="0,20,0,0"/>
+            <TextBox Text="{Binding DepthLevels, ValidatesOnDataErrors=True, UpdateSourceTrigger=PropertyChanged}" Margin="0,5" />
 
             <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                 <Label Content="Symbols (comma separated)" />
