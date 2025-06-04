@@ -1,15 +1,10 @@
-﻿using Newtonsoft.Json;
-using System.Net.WebSockets;
-using VisualHFT.Commons.PluginManager;
-using VisualHFT.DataRetriever;
-using VisualHFT.DataRetriever.DataParsers;
+﻿using VisualHFT.Commons.PluginManager;
 using VisualHFT.Enums;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
 using MarketConnectors.Coinbase.Model;
 using MarketConnectors.Coinbase.UserControls;
 using MarketConnectors.Coinbase.ViewModel;
-using System.Diagnostics;
 using CryptoExchange.Net.Objects.Sockets;
 using CryptoExchange.Net.Objects;
 using VisualHFT.Commons.Helpers;
@@ -19,8 +14,6 @@ using Coinbase.Net.Objects.Models;
 using Coinbase.Net.Enums;
 using Newtonsoft.Json.Linq;
 using VisualHFT.Commons.Model;
-using VisualHFT.Model;
-
 using Coinbase.Net;
 using CryptoExchange.Net.Authentication;
 using System.IO;
