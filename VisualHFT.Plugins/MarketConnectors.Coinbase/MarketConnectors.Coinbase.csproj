@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CryptoExchange.Net" Version="8.8.0" />
+    <PackageReference Include="CryptoExchange.Net" Version="9.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="Websocket.Client" Version="5.1.2" />
+    <PackageReference Include="Websocket.Client" Version="5.2.0" />
   </ItemGroup>
 
   <ItemGroup>

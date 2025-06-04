@@ -16,7 +16,6 @@ namespace MarketConnectors.KuCoin
         {
             JsonSerializerOptions options = new JsonSerializerOptions();
             options.Converters.Add(new MapEnumConverterFactory());
-            options.Converters.Add(new EnumConverter());
             options.Converters.Add(new DateTimeConverter());
             options.Converters.Add(new BoolConverter());
             options.Converters.Add(new DecimalConverter());

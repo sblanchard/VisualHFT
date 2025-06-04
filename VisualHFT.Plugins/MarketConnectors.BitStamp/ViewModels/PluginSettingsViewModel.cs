@@ -1,14 +1,5 @@
-﻿using CryptoExchange.Net.CommonObjects;
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.ComponentModel;
 using System.Windows.Input;
-using System.Windows.Navigation;
-using VisualHFT.DataRetriever;
 using VisualHFT.Helpers;
 
 namespace MarketConnectors.BitStamp.ViewModel

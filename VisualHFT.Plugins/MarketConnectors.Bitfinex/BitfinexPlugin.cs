@@ -1,8 +1,6 @@
 ﻿using Bitfinex.Net;
 using Bitfinex.Net.Clients;
 using Bitfinex.Net.Objects.Models;
-using Bitfinex.Net.Enums;
-
 using CryptoExchange.Net.Authentication;
 using CryptoExchange.Net.Objects;
 using MarketConnectors.Bitfinex.Model;
@@ -14,7 +12,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using CryptoExchange.Net.Converters.JsonNet;
+using Bitfinex.Net.Enums;
+using CryptoExchange.Net.Converters.SystemTextJson;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.UserSettings;
 using VisualHFT.Commons.Pools;
@@ -27,7 +26,6 @@ using VisualHFT.Commons.Interfaces;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
 using VisualHFT.Commons.Exceptions;
-using CryptoExchange.Net.Interfaces;
 
 namespace MarketConnectors.Bitfinex
 {
@@ -716,8 +714,8 @@ namespace MarketConnectors.Bitfinex
         public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
         {
             var localModel = new BitfinexOrderBook();
-            localModel.Asks = snapshotModel.Asks.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
-            localModel.Bids = snapshotModel.Bids.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToList();
+            localModel.Asks = snapshotModel.Asks.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToArray();
+            localModel.Bids = snapshotModel.Bids.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToArray();
             _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
             var symbol = snapshotModel.Symbol;
 
@@ -848,10 +846,10 @@ namespace MarketConnectors.Bitfinex
                 var _status = "";
                 if (arr[13].ToString().IndexOf(" ") > -1)
                 {
-                    _status = arr[13].ToString().Split(' ')[0];
+                    _status = arr[13].ToString().Split(' ')[0].Trim();
                 }
                 else
-                    _status = arr[13].ToString();
+                    _status = arr[13].ToString().Trim();
 
                 return new BitfinexOrder
                 {
@@ -862,7 +860,7 @@ namespace MarketConnectors.Bitfinex
                     // Convert the Unix timestamps or apply your DateTimeConverter logic:
                     CreateTime = DateTimeOffset.FromUnixTimeMilliseconds(arr[4].Value<long>()).LocalDateTime,
                     UpdateTime = DateTimeOffset.FromUnixTimeMilliseconds(arr[5].Value<long>()).LocalDateTime,
-                    QuantityRemaining = arr[6].Value<decimal>(),
+                    QuantityRemainingRaw = arr[6].Value<decimal>(),
                     QuantityRaw = arr[7].Value<decimal>(),
                     //Type = (OrderType)Enum.Parse(typeof(OrderType), arr[8].Value<string>(), true),
                     //TypePrevious = (OrderType)Enum.Parse(typeof(OrderType), arr[9].Value<string>(), true),
@@ -959,12 +957,21 @@ namespace MarketConnectors.Bitfinex
         }
         private T DeserializeEnumWithConverter<T>(JToken token)
         {
-            // Create settings with the converter that handles the Map attribute
             var settings = new JsonSerializerSettings();
-            settings.Converters.Add(new EnumConverter());
-            // Serialize the token’s value (which is just a string) into proper JSON (with quotes)
-            string json = JsonConvert.SerializeObject(token.Value<string>());
-            return JsonConvert.DeserializeObject<T>(json, settings);
+
+            if (typeof(T) == typeof(OrderType))
+            {
+                settings.Converters.Add(new BitfinexOrderTypeNewtonsoftConverter() as Newtonsoft.Json.JsonConverter);
+            }
+            else if (typeof(T) == typeof(OrderStatus))
+            {
+                settings.Converters.Add(new BitfinexOrderStatusNewtonsoftConverter() as Newtonsoft.Json.JsonConverter);
+            }
+
+            string jsonStringValue = token.Value<string>();
+            string jsonToDeserialize = JsonConvert.SerializeObject(jsonStringValue);
+
+            return JsonConvert.DeserializeObject<T>(jsonToDeserialize, settings);
         }
     }
 }
