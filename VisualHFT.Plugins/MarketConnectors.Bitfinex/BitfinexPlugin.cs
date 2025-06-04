@@ -843,14 +843,27 @@ namespace MarketConnectors.Bitfinex
 
 
                 //parse status (ie: CANCELED, "EXECUTED @ 96211.0(0.0005)"
-                var _status = "";
-                if (arr[13].ToString().IndexOf(" ") > -1)
-                {
-                    _status = arr[13].ToString().Split(' ')[0].Trim();
-                }
-                else
-                    _status = arr[13].ToString().Trim();
 
+                OrderStatus status=OrderStatus.Unknown;
+                if (arr[13].ToString() == "ACTIVE")
+                    status= OrderStatus.Active;
+                else if (arr[13].ToString() == "EXECUTED")
+                    status = OrderStatus.Executed;
+                else if (arr[13].ToString() == "CANCELED")
+                    status = OrderStatus.Canceled;
+                else if (arr[13].ToString() == "FORCED EXECUTED")
+                    status = OrderStatus.ForcefullyExecuted;
+                else if (arr[13].ToString() == "PARTIALLY FILLED")
+                    status = OrderStatus.PartiallyFilled;
+
+                else if (arr[13].ToString().Contains("CANCELED"))
+                    status = OrderStatus.Canceled;
+
+                else if (arr[13].ToString().Contains("EXECUTED @"))
+                {
+                    status = OrderStatus.Executed;
+                }
+                 
                 return new BitfinexOrder
                 {
                     Id = arr[0].Value<long>(),
@@ -867,7 +880,7 @@ namespace MarketConnectors.Bitfinex
                     //Status = (OrderStatus)Enum.Parse(typeof(OrderStatus), arr[13].Value<string>(), true),
                     Type = DeserializeEnumWithConverter<OrderType>(arr[8]),
                     TypePrevious = DeserializeEnumWithConverter<OrderType>(arr[9]),
-                    Status = DeserializeEnumWithConverter<OrderStatus>(_status),
+                    Status = status,
                     Price = arr[16].Type == JTokenType.Null ? 0 : arr[16].Value<decimal>(),
                     PriceAverage = arr[17].Type == JTokenType.Null ? null : arr[17].Value<decimal?>(),
                     PriceTrailing = arr[18].Type == JTokenType.Null ? 0 : arr[18].Value<decimal>(),
