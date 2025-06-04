@@ -41,19 +41,26 @@ namespace VisualHFT.Commons.PluginManager
         {
             get { return ePluginType.STUDY; }
         }
+        public virtual eLicenseLevel RequiredLicenseLevel => eLicenseLevel.COMMUNITY; // Default to Community, override in derived classes if needed
+
         protected abstract void LoadSettings();
         protected abstract void SaveSettings();
         protected abstract void InitializeDefaultSettings();
 
         /// <summary>
-        /// As we send the calculated data, this method will tell the internal AggregatedCollection how to aggregate the items.
+        /// This method defines how the internal AggregatedCollection should aggregate incoming items.
+        /// It is invoked whenever a new item is added to the collection and aggregation is required.
+        /// The method takes the existing collection of items, the new incoming item, and a counter indicating
+        /// how many times the last item has been aggregated. The aggregation logic should be implemented
+        /// within this method to combine or process the items as needed.
         /// </summary>
-        /// <param name="existing">The existing.</param>
-        /// <param name="newItem">The new item.</param>
-        protected virtual void onDataAggregation(BaseStudyModel existing, BaseStudyModel newItem, int counterAggreated)
+        /// <param name="dataCollection">The existing internal collection of items.</param>
+        /// <param name="newItem">The new incoming item to be aggregated.</param>
+        /// <param name="lastItemAggregationCount">Counter indicating how many times the last item has been aggregated.</param>
+        protected virtual void onDataAggregation(List<BaseStudyModel> dataCollection, BaseStudyModel newItem, int lastItemAggregationCount)
         {
 
-            OnCalculated?.Invoke(this, existing);
+            OnCalculated?.Invoke(this, dataCollection.LastOrDefault());
         }
         protected virtual void onDataAdded()
         {

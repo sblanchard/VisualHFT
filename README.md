@@ -22,6 +22,8 @@ We are open to hearing from the community to add more features. Make sure you op
 - market data from any market data source
 - ready to use from Binance, Okex (btc/usd) (soon plugins to add other sources)
 
+VisualHFT’s open‑source edition delivers a community‑backed platform for real‑time market microstructure analysis. For professional and institutional users who need deeper trading surveillance, richer execution insights or dedicated support, we’ll soon offer commercial editions tailored to those requirements.
+
 ## Getting started
 To install and run the project, you need to:
 

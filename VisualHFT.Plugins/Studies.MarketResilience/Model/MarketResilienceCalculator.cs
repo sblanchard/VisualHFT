@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using VisualHFT.Commons.Model;
 using VisualHFT.Commons.Pools;
 using VisualHFT.Model;
 using VisualHFT.Studies.MarketResilience.Model;
@@ -85,10 +87,15 @@ namespace Studies.MarketResilience.Model
                 CheckAndCalculateIfShock();
             }
         }
-        public void OnOrderBookUpdate(OrderBook orderBook)
+        public void OnOrderBookUpdate(OrderBookSnapshot orderBook)
         {
             lock (_syncLock)
             {
+                if (orderBook == null
+                    || orderBook.Asks == null || orderBook.Bids == null
+                    || !orderBook.Asks.Any() || !orderBook.Bids.Any())
+                    return;
+
                 var currentSpread = (decimal)orderBook.Spread;
                 if (ShockSpread == null
                     && IsLargeWideningSpread(currentSpread))
@@ -110,8 +117,8 @@ namespace Studies.MarketResilience.Model
                 }
                 recentSpreads.Add(currentSpread);
                 _lastMidPrice = (decimal?)orderBook.MidPrice;
-                _lastBidPrice = (decimal?)orderBook.Bids.FirstOrDefault()?.Price;
-                _lastAskPrice = (decimal?)orderBook.Asks.FirstOrDefault()?.Price;
+                _lastBidPrice = (decimal?)orderBook.Bids[0]?.Price;
+                _lastAskPrice = (decimal?)orderBook.Asks[0]?.Price;
                 CheckAndCalculateIfShock();
             }
         }

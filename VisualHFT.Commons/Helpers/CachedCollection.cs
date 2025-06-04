@@ -39,20 +39,6 @@ namespace VisualHFT.Helpers
             }
         }
 
-
-        public ReadOnlyCollection<T> AsReadOnly()
-        {
-            lock (_lock)
-            {
-                if (_cachedReadOnlyCollection != null)
-                {
-                    return _cachedReadOnlyCollection.AsReadOnly();
-                }
-                else
-                    return _internalList.AsReadOnly();
-            }
-        }
-
         public void Update(IEnumerable<T> newData)
         {
             lock (_lock)
@@ -308,77 +294,6 @@ namespace VisualHFT.Helpers
                 }
             }
         }
-
-        public void ShallowCopyFrom(CachedCollection<T> sourceList)
-        {
-            ShallowCopyFrom(sourceList, null);
-        }
-        public void ShallowCopyFrom(CachedCollection<T> sourceList, CustomObjectPool<T> pool = null)
-        {
-            if (sourceList == null)
-                return;
-            lock (_lock)
-            {
-                Clear();
-                if (sourceList.Count() > _internalList.Count) //add empty items to match the source list
-                {
-                    for (int i = 0; i < sourceList.Count(); i++)
-                    {
-                        if (pool != null)
-                            _internalList.Add(pool.Get());
-                        else
-                            _internalList.Add(new T());
-                    }
-                }
-
-                for (int i = 0; i < _internalList.Count; i++)
-                {
-                    if (i < sourceList.Count())
-                    {
-                        if (!_internalList[i].Equals(sourceList[i]))
-                            (_internalList[i] as ICopiable<T>)?.CopyFrom(sourceList[i]);
-                    }
-                    else
-                        (_internalList[i] as IResettable)?.Reset();
-                }
-                Sort();
-            }
-        }
-        /// <summary>
-        /// ShallowUpdateFrom
-        /// Will update an existing list that will never change.
-        /// This is very useful when keeping a Collection locally and want to avoid swapping and allocations
-        /// One place that is being used is in vmOrderBook, to keep the Grids updated.
-        /// </summary>
-        /// <param name="sourceList">The source list.</param>
-        public void ShallowUpdateFrom(CachedCollection<T> sourceList)
-        {
-            if (sourceList == null)
-                return;
-            lock (_lock)
-            {
-                if (sourceList.Count() > _internalList.Count) //add empty items to match the source list
-                {
-                    for (int i = 0; i < sourceList.Count() - _internalList.Count + 1; i++)
-                    {
-                        _internalList.Add(new T());
-                    }
-                }
-
-                for (int i = 0; i < _internalList.Count; i++)
-                {
-                    if (i < sourceList.Count())
-                    {
-                        if (!_internalList[i].Equals(sourceList[i]))
-                            (_internalList[i] as ICopiable<T>)?.CopyFrom(sourceList[i]);
-                    }
-                    else
-                        (_internalList[i] as IResettable)?.Reset();
-                }
-                Sort();
-            }
-        }
-
         public void Dispose()
         {
             _internalList.Clear();

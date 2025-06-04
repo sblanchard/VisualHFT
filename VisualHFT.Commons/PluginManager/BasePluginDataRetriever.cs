@@ -1,11 +1,8 @@
-﻿using log4net.Plugin;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using VisualHFT.Commons.Helpers;
-using VisualHFT.Commons.Studies;
 using VisualHFT.DataRetriever;
-using VisualHFT.DataTradeRetriever;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
@@ -42,6 +39,8 @@ namespace VisualHFT.Commons.PluginManager
         {
             get { return ePluginType.MARKET_CONNECTOR; }
         }
+        public virtual eLicenseLevel RequiredLicenseLevel => eLicenseLevel.COMMUNITY; // Default to Community, override in derived classes if needed
+
         protected abstract void LoadSettings();
         protected abstract void SaveSettings();
         protected abstract void InitializeDefaultSettings();

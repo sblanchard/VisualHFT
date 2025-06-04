@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Studies.MarketResilience.Model;
 using VisualHFT.Commons.Helpers;
+using VisualHFT.Commons.Model;
 using VisualHFT.Commons.PluginManager;
+using VisualHFT.Commons.Pools;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
@@ -14,12 +17,18 @@ using VisualHFT.UserSettings;
 
 namespace VisualHFT.Studies
 {
+
     public class MarketResilienceBiasStudy : BasePluginStudy
     {
+        private static class OrderBookSnapshotPool
+        {
+            // Create a pool for OrderBookSnapshot objects.
+            public static readonly CustomObjectPool<OrderBookSnapshot> Instance = new CustomObjectPool<OrderBookSnapshot>(maxPoolSize: 1000);
+        }
         private bool _disposed = false; // to track whether the object has been disposed
         private PlugInSettings _settings;
         private MarketResilienceWithBias _mrBiasCalc;
-        private HelperCustomQueue<OrderBook> _QUEUE;
+        private HelperCustomQueue<OrderBookSnapshot> _QUEUE;
 
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
@@ -40,7 +49,7 @@ namespace VisualHFT.Studies
 
         public MarketResilienceBiasStudy()
         {
-            _QUEUE = new HelperCustomQueue<OrderBook>($"<OrderBook>_{this.Name}", QUEUE_onRead, QUEUE_onError);
+            _QUEUE = new HelperCustomQueue<OrderBookSnapshot>($"<OrderBookSnapshot>_{this.Name}", QUEUE_onRead, QUEUE_onError);
         }
 
         ~MarketResilienceBiasStudy()
@@ -93,19 +102,23 @@ namespace VisualHFT.Studies
             if (_settings.Provider.ProviderID != e.ProviderID || _settings.Symbol != e.Symbol)
                 return;
 
-            var currentLOB = new OrderBook();
-            currentLOB.ShallowCopyFrom(e, null);
-            _QUEUE.Add(currentLOB);
+            OrderBookSnapshot snapshot = OrderBookSnapshotPool.Instance.Get();
+            // Initialize its state based on the master OrderBook.
+            snapshot.UpdateFrom(e);
+            // Enqueue for processing.
+            _QUEUE.Add(snapshot);
+
         }
         private void TRADE_OnDataReceived(Trade e)
         {
             _mrBiasCalc.OnTrade(e);
             DoCalculationAndSend();
         }
-        private void QUEUE_onRead(OrderBook e)
+        private void QUEUE_onRead(OrderBookSnapshot e)
         {
             _mrBiasCalc.OnOrderBookUpdate(e);
             DoCalculationAndSend();
+            OrderBookSnapshotPool.Instance.Return(e);
         }
         private void QUEUE_onError(Exception ex)
         {
@@ -117,14 +130,25 @@ namespace VisualHFT.Studies
             Task.Run(() => HandleRestart(_error, ex));
         }
 
-        protected override void onDataAggregation(BaseStudyModel existing, BaseStudyModel newItem, int counterAggreated)
+        /// <summary>
+        /// This method defines how the internal AggregatedCollection should aggregate incoming items.
+        /// It is invoked whenever a new item is added to the collection and aggregation is required.
+        /// The method takes the existing collection of items, the new incoming item, and a counter indicating
+        /// how many times the last item has been aggregated. The aggregation logic should be implemented
+        /// within this method to combine or process the items as needed.
+        /// </summary>
+        /// <param name="dataCollection">The existing internal collection of items.</param>
+        /// <param name="newItem">The new incoming item to be aggregated.</param>
+        /// <param name="lastItemAggregationCount">Counter indicating how many times the last item has been aggregated.</param>
+        protected override void onDataAggregation(List<BaseStudyModel> dataCollection, BaseStudyModel newItem, int lastItemAggregationCount)
         {
             //Aggregation: last
+            var existing = dataCollection[^1]; // Get the last item in the collection
             existing.Value = newItem.Value;
             existing.ValueFormatted = newItem.ValueFormatted;
             existing.MarketMidPrice = newItem.MarketMidPrice;
 
-            base.onDataAggregation(existing, newItem, counterAggreated);
+            base.onDataAggregation(dataCollection, newItem, lastItemAggregationCount);
         }
 
 
@@ -166,6 +190,7 @@ namespace VisualHFT.Studies
                     HelperTrade.Instance.Unsubscribe(TRADE_OnDataReceived);
                     _QUEUE.Dispose();
                     _mrBiasCalc.Dispose();
+                    OrderBookSnapshotPool.Instance.Dispose();
                     base.Dispose();
                 }
 

@@ -1,11 +1,9 @@
-﻿using log4net.Plugin;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Controls;
 using VisualHFT.Commons.Helpers;
 using VisualHFT.Commons.Studies;
@@ -169,7 +167,11 @@ namespace VisualHFT.PluginManager
                             var plugin = Activator.CreateInstance(type) as IPlugin;
                             if (string.IsNullOrEmpty(plugin.Name))
                                 continue;
+                            if (!LicenseManager.Instance.HasAccess(plugin.RequiredLicenseLevel))
+                                continue;
+
                             plugin.Status = ePluginStatus.LOADING;
+                            
                             ALL_PLUGINS.Add(plugin);
                             log.Info("Plugin assemblies for: " + plugin.Name + " have loaded OK.");
                         }
