@@ -55,7 +55,7 @@ namespace VisualHFT
 
             Task.Run(async () =>
             {
-                await TriggerEngineService.LoadAllRules();
+                TriggerEngineService.LoadAllRules();
                 await TriggerEngineService.StartBackgroundWorkerAsync(CancellationToken.None);
             });
              

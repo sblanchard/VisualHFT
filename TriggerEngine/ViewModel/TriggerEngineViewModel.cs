@@ -47,6 +47,7 @@ namespace VisualHFT.TriggerEngine.ViewModel
             TriggerRule rule = new TriggerRule();
             rule.Actions = new List<TriggerAction>();
             rule.Condition = new List<TriggerCondition>();
+
             rule.RuleID = view.RuleID.Value;
             rule.Name=view.Name;
             foreach (var item in view.Condition)

@@ -99,13 +99,14 @@ namespace VisualHFT.TriggerEngine.View
                     return;
                 }
             }
+            if (!this.model.RuleID.HasValue)
+            {
+                model.RuleID = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            }
 
             TriggerEngineRuleViewModel rule = this.model;             
             TriggerRule triggerRule=rule.FromViewModel(rule);
-            if(!this.model.RuleID.HasValue)
-            {
-                triggerRule.RuleID = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            }
+           
 
             TriggerEngineService.AddOrUpdateRule(triggerRule);
             MessageBox.Show("Rule saved successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information);

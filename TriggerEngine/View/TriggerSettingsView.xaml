@@ -24,7 +24,7 @@
             <TabItem Header="All Rules">
                 <ScrollViewer>
 
-                    <ListView ItemsSource="{Binding}">
+                    <ListView ItemsSource="{Binding}" x:Name="lstRules">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="Rule Name" DisplayMemberBinding="{Binding Name}" />

@@ -44,6 +44,7 @@ namespace VisualHFT.TriggerEngine.View
 
                 TriggerSettingAddOrUpdate frmRuleView = new TriggerSettingAddOrUpdate(null, dashboard);
                 frmRuleView.ShowDialog();
+                LoadAllRules();
             }
             catch (Exception ex)
             {
@@ -55,6 +56,8 @@ namespace VisualHFT.TriggerEngine.View
         {
             lstCurrentRules = new List<TriggerEngineRuleViewModel>();
             this.DataContext = null;
+            lstRules.ItemsSource = null;
+
             TriggerEngineService.GetRules().ForEach(x =>
             {
                 TriggerEngineRuleViewModel vm = new TriggerEngineRuleViewModel();
@@ -106,6 +109,8 @@ namespace VisualHFT.TriggerEngine.View
             });
 
             this.DataContext = lstCurrentRules;
+            lstRules.ItemsSource = lstCurrentRules;
+
         }
 
         private void UpdateRule(object sender, RoutedEventArgs e)

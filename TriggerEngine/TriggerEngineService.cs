@@ -78,8 +78,10 @@ namespace VisualHFT.TriggerEngine
                 }
                 string json= JsonConvert.SerializeObject(lstRule, Formatting.Indented);
                 File.WriteAllText(TriggerEngineConfigFilePath, json);
-                LoadAllRules();
+               
             }
+            LoadAllRules();
+            Task.Run(() => EvaluateAllRulesAgainstLatestMetrics());
         }
 
         public static void RemoveRule(string name)
@@ -92,9 +94,11 @@ namespace VisualHFT.TriggerEngine
                     lstRule.Remove(rule);
                     string json = JsonConvert.SerializeObject(lstRule, Formatting.Indented);
                     File.WriteAllText(TriggerEngineConfigFilePath, json);
-                    LoadAllRules();
+                   
                 }
             }
+            LoadAllRules();
+            Task.Run(() => EvaluateAllRulesAgainstLatestMetrics());
         } 
         public static void ClearAllRules()
         {
@@ -133,10 +137,15 @@ namespace VisualHFT.TriggerEngine
                 }
             }
         }
-        public static async Task LoadAllRules()
+        public static void LoadAllRules()
         {
+            lstRule.Clear();
             string directoryPath = Path.GetDirectoryName(TriggerEngineConfigFilePath);
-            string ruleJSON = File.ReadAllText(Path.Combine(directoryPath,TriggerEngineConfigFileName));
+            string filePath = Path.Combine(directoryPath, TriggerEngineConfigFileName);
+            if (!File.Exists(filePath))
+                return;
+
+            string ruleJSON = File.ReadAllText(filePath);
 
            var rules=JsonConvert.DeserializeObject<List<TriggerRule>>(ruleJSON);
             lstRule.AddRange(rules);
@@ -282,7 +291,30 @@ namespace VisualHFT.TriggerEngine
                     HelprNorificationManagerCategories.TRIGGER_ENGINE,null,condition.Plugin);
             }
             return Task.CompletedTask;
+        } 
+
+            private static void EvaluateAllRulesAgainstLatestMetrics()
+        { 
+            Task.Run(() =>
+            {
+                var latestMetrics = LastMetricValues.ToArray(); // Snapshot current metrics
+
+                foreach (var kvp in latestMetrics)
+                {
+                    var parts = kvp.Key.Split('.');
+                    if (parts.Length != 2)
+                        continue;
+
+                    var plugin = parts[0];
+                    var metric = parts[1];
+                    var value = kvp.Value;
+
+                    var metricEvent = new MetricEvent(plugin, metric, value, DateTime.UtcNow);
+                    _ = MetricChannel.Writer.WriteAsync(metricEvent);
+                }
+            });
         }
+
 
     }
 
