@@ -37,24 +37,6 @@ namespace VisualHFT
 
         }
 
-        
-        private void ButtonAnalyticsReport_Click(object sender, RoutedEventArgs e)
-        {
-            /*
-            AnalyticReport.AnalyticReport oReport = new AnalyticReport.AnalyticReport();
-            try
-            {
-                oReport.Signals = VisualHFT.Commons.Helpers.HelperCommon.EXECUTEDORDERS.Positions.Where(x => x.PipsPnLInCurrency.HasValue && cboSelectedSymbol.SelectedValue.ToString() == x.Symbol).OrderBy(x => x.CreationTimeStamp).ToList();
-            }
-            catch (Exception ex)
-            {
-
-                MessageBox.Show(ex.ToString(), "ERRROR", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            oReport.Show();
-            */
-        }
-
         private void ButtonAppSettings_Click(object sender, RoutedEventArgs e)
         {
             var vm = new vmUserSettings();
