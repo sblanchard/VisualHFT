@@ -116,8 +116,9 @@ namespace VisualHFT.TriggerEngine.View
         private void UpdateRule(object sender, RoutedEventArgs e)
         {
             Button hyperlink = (Button)sender;
-            TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;  
+            TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;
             TriggerSettingAddOrUpdate frmRuleView = new TriggerSettingAddOrUpdate(selectedRule, dashboard);
+            frmRuleView.Title = selectedRule.Name;
             frmRuleView.ShowDialog();
             LoadAllRules();
         }
