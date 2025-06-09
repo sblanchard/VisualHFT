@@ -143,6 +143,7 @@ namespace VisualHFT.TriggerEngine.View
 
                 var restAPIAction = DeepClone<RestApiActionViewModel>(webHookAlert.RestApi);
                 AddAPISetting frmRuleView = new AddAPISetting(restAPIAction);
+                frmRuleView.Title = this.Title + " " + "Webhook URL Configuration";
                 var d = frmRuleView.ShowDialog();
                 if (d == true)
                 {
