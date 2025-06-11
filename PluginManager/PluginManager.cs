@@ -77,7 +77,7 @@ namespace VisualHFT.PluginManager
                     study.StartAsync();
                     study.OnCalculated += (sender, e) =>
                     {
-                        TriggerEngineService.RegisterMetric(plugin.GetPluginUniqueID(), plugin.Name, e.Value.ToDouble(), e.Timestamp);
+                        TriggerEngineService.RegisterMetric(plugin.GetPluginUniqueID(), plugin.Name,plugin.Settings.Provider.ProviderName,plugin.Settings.Symbol, e.Value.ToDouble(), e.Timestamp);
 
                     };
                 }

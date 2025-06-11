@@ -142,6 +142,8 @@ namespace VisualHFT.TriggerEngine.View
                 var webHookAlert = model.Actions.Where(x => x.Type == ActionType.RestApi).FirstOrDefault();
 
                 var restAPIAction = DeepClone<RestApiActionViewModel>(webHookAlert.RestApi);
+                restAPIAction.CooldownPeriod=webHookAlert.CooldownDuration;
+                restAPIAction.CoolDownUnit=webHookAlert.CooldownUnit;
                 AddAPISetting frmRuleView = new AddAPISetting(restAPIAction);
                 frmRuleView.Title = this.Title + " " + "Webhook URL Configuration";
                 var d = frmRuleView.ShowDialog();
@@ -152,6 +154,28 @@ namespace VisualHFT.TriggerEngine.View
                     if (replaceMod.Count > 0)
                     {
                         replaceMod[0].RestApi = mod;
+                        replaceMod[0].CooldownUnit = mod.CoolDownUnit;
+                        replaceMod[0].CooldownDuration = mod.CooldownPeriod;
+                    }
+                }
+            }
+        }
+         private void ClickSetInAppNotification(object sender, RoutedEventArgs e)
+        {
+            if (sender is Hyperlink hyperlink )
+            {
+                TriggerActionViewModel? triggerAction = model.Actions.Where(x => x.Type == ActionType.UIAlert).FirstOrDefault();
+                 
+                AddUIAlertSetting frmRuleView = new AddUIAlertSetting(triggerAction);
+                frmRuleView.Title = this.Title + " " + "In-App UI Alert Configuration";
+                var d = frmRuleView.ShowDialog();
+                if (d == true)
+                {
+                    TriggerActionViewModel mod = frmRuleView.rule;
+                    List<TriggerActionViewModel> replaceMod = this.model.Actions.Where(e => e.Type == ActionType.UIAlert).ToList();
+                    if (replaceMod.Count > 0)
+                    {
+                        replaceMod[0] = mod;
                     }
                 }
             }

@@ -61,6 +61,17 @@ namespace VisualHFT.TriggerEngine.View
             {
                 MessageBox.Show("Please enter a valid Body Template.");
                 return;
+            }   
+            
+            if (restApiAction.CoolDownUnit == null)
+            {
+                MessageBox.Show("Please enter a valid Cooldown Unit.");
+                return;
+            }
+            if (restApiAction.CooldownPeriod== null || restApiAction.CooldownPeriod<=0)
+            {
+                MessageBox.Show("Please enter a valid Cooldown Period.");
+                return;
             }
 
             restApiAction.Url = txtURL.Text;
@@ -96,6 +107,11 @@ namespace VisualHFT.TriggerEngine.View
            && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
 
 
+        }
+
+        private void ShowCooldownToolTip(object sender, MouseEventArgs e)
+        {
+            CooldownToolTip.IsOpen = true;
         }
     }
      

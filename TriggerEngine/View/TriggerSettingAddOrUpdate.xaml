@@ -232,7 +232,11 @@ TextOptions.TextRenderingMode="Auto"
                         <StackPanel Orientation="Horizontal" Margin="0,10">
                             <CheckBox Checked="InAppChecked" x:Name="inappCheck" Unchecked="InAppUnChecked" IsChecked="False" VerticalAlignment="Top" Margin="0,4,10,0"/>
                             <StackPanel>
-                                <TextBlock Text="Notify in app" Foreground="White" FontWeight="Bold"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Notify in app" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock Margin="5,0,0,0" Visibility="{Binding IsChecked, ElementName=inappCheck, Converter={StaticResource BoolToVisibilityConverter}}"><Hyperlink Click="ClickSetInAppNotification"><Run Text="Configure" /></Hyperlink></TextBlock>
+                                </StackPanel>
+                                                                
                                 <TextBlock Text="Provides a push notification in the Visual HFT App notification centre." 
                        Foreground="#CCCCCC" 
                        TextWrapping="Wrap" 

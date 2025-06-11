@@ -13,12 +13,54 @@ TextOptions.TextRenderingMode="Auto"
       Background="{DynamicResource MaterialDesignPaper}"  
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
       Title="Add API Setting" Height="650" Width="500">
-    
-  
+
+    <Window.Resources>
+        <ObjectDataProvider x:Key="TimeWindowUnitOperatorEnum"
+             MethodName="GetValues"
+             ObjectType="{x:Type sys:Enum}">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="enums:TimeWindowUnit" />
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
+    </Window.Resources>
 
     <Grid x:Name="MainGrid" Margin="10">
  
         <StackPanel VerticalAlignment="Stretch">
+            <StackPanel Margin="10">
+                <TextBlock Text="Cooldown Period ℹ️" Style="{StaticResource MaterialDesignBody2TextBlock}" MouseEnter="ShowCooldownToolTip" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                <Popup PopupAnimation="Fade" Placement="Mouse" AllowsTransparency="True" StaysOpen="False" x:Name="CooldownToolTip" >
+                    <Border Background="White" BorderBrush="Gray" CornerRadius="3" BorderThickness="1">
+                        <StackPanel Margin="10" Orientation="Horizontal" >
+                            <StackPanel>
+                                <TextBlock TextWrapping="Wrap" Width="350" Foreground="Black" FontSize="12">
+         <Run FontWeight="Bold">What is a cooldown Period?</Run>
+<LineBreak />
+<LineBreak />
+<Run>The Trigger Action Cooldown Period defines the minimum amount of time that must pass before a specific Trigger Action can be executed again after it has been triggered.</Run>
+<LineBreak />
+<LineBreak />
+                                </TextBlock>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="0.5*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBox  Grid.Column="0" x:Name="txtDuration"  Text="{Binding CooldownPeriod}" Foreground="White" HorizontalAlignment="Left" MinWidth="100" />
+                    <ComboBox Foreground="White" Grid.Column="1" ItemsSource="{Binding Source={StaticResource TimeWindowUnitOperatorEnum}}" SelectedItem="{Binding CoolDownUnit}" HorizontalAlignment="Stretch" />
+                </Grid>
+                
+                
+            </StackPanel> 
+            
             <StackPanel Margin="10">
                 <TextBlock Text="Method" Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="POST"  Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>

@@ -21,7 +21,7 @@ using Windows.Storage;
 namespace VisualHFT.TriggerEngine
 {
 
-    public record MetricEvent(string Plugin, string Metric, double Value, DateTime Timestamp);
+    public record MetricEvent(string Plugin, string Metric, string Exchange, string Symbol, double Value, DateTime Timestamp);
 
 
     /// <summary>
@@ -53,21 +53,21 @@ namespace VisualHFT.TriggerEngine
         /// <param name="pluginName">Metric identifier.</param>
         /// <param name="value">Numeric value of the metric.</param>
         /// <param name="timestamp">Timestamp of the value.</param>
-        public static void RegisterMetric(string pluginID, string pluginName, double value, DateTime timestamp)
+        public static void RegisterMetric(string pluginID, string pluginName, string exchange, string symbol, double value, DateTime timestamp)
         {
             // 1. Store value in memory (e.g., rolling buffer)
             // 2. Find active rules matching this plugin + metric
             // 3. Evaluate each rule
             // 4. If condition is met, execute all associated actions 
 
-            _ = MetricChannel.Writer.WriteAsync(new MetricEvent(pluginID, pluginName, value, timestamp));
+            _ = MetricChannel.Writer.WriteAsync(new MetricEvent(pluginID, pluginName,exchange,symbol, value, timestamp));
         }
 
         public static void AddOrUpdateRule(TriggerRule rule)
         {
             lock (ruleLock)
             {
-                var existing = lstRule.Find(r => r.Name == rule.Name);
+                var existing = lstRule.Find(r => r.RuleID == rule.RuleID);
                 if (existing != null) lstRule.Remove(existing);
                 lstRule.Add(rule);
 
@@ -204,7 +204,7 @@ namespace VisualHFT.TriggerEngine
                             {
                                 // Cooldown passed, fire again
                                 ActionLastFiredTimes[actionKey] = e.Timestamp;
-                                _ = ExecuteActionAsync(rule.Name, condition, action, e.Plugin, e.Metric, e.Value, e.Timestamp);
+                                _ = ExecuteActionAsync(rule.Name, condition, action, e.Plugin, e.Metric, e.Exchange,e.Symbol, e.Value, e.Timestamp);
                             }
                             // else: cooldown not passed, do nothing
                         }
@@ -269,7 +269,7 @@ namespace VisualHFT.TriggerEngine
             };
         }
 
-        private static Task ExecuteActionAsync(string ruleName, TriggerCondition condition, TriggerAction action, string plugin, string metric, double value, DateTime timestamp)
+        private static Task ExecuteActionAsync(string ruleName, TriggerCondition condition, TriggerAction action, string plugin, string metric,string exchange, string symbol, double value, DateTime timestamp)
         {
             if (action.Type == ActionType.RestApi && action.RestApi != null)
             {
@@ -284,9 +284,10 @@ namespace VisualHFT.TriggerEngine
                 _ = action.RestApi.ExecuteAsync(body); // Fire and forget
 
             } 
-            else if (action.Type == ActionType.UIAlert)
+            
+            if (action.Type == ActionType.UIAlert)
             {
-                string formattedMessage = $"Plugin {plugin}, {metric} has triggered rule {ruleName} for condition {condition.Operator.ToString()}";
+                string formattedMessage = $"{metric} - {exchange} - {symbol}: \"{condition.Operator.ToString()} {condition.Threshold} \" has been triggered ";
                 HelperNotificationManager.Instance.AddNotification("Alert",formattedMessage, HelprNorificationManagerTypes.TRIGGER_ACTION, 
                     HelprNorificationManagerCategories.TRIGGER_ENGINE,null,condition.Plugin);
             }
@@ -307,9 +308,11 @@ namespace VisualHFT.TriggerEngine
 
                     var plugin = parts[0];
                     var metric = parts[1];
+                    var exchange = parts[2];
+                    var symbol= parts[3];
                     var value = kvp.Value;
 
-                    var metricEvent = new MetricEvent(plugin, metric, value, DateTime.UtcNow);
+                    var metricEvent = new MetricEvent(plugin, metric, exchange,symbol, value, DateTime.UtcNow);
                     _ = MetricChannel.Writer.WriteAsync(metricEvent);
                 }
             });

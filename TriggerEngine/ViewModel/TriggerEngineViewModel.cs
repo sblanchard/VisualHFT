@@ -199,6 +199,9 @@ namespace VisualHFT.TriggerEngine.ViewModel
         public string Method { get; set; } = "POST";       // POST or GET (for now)
         public string BodyTemplate { get; set; }           // JSON payload (e.g. includes {{metric}}, {{value}})
         public ObservableCollection<RestAPIHeaderViewModel> Headers { get; set; } = new ObservableCollection<RestAPIHeaderViewModel>();
-         
+
+        public int CooldownPeriod { get; set; }
+        public TimeWindowUnit CoolDownUnit { get; set; }
+
     }
 }
