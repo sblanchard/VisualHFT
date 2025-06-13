@@ -84,11 +84,11 @@ namespace VisualHFT.TriggerEngine
             Task.Run(() => EvaluateAllRulesAgainstLatestMetrics());
         }
 
-        public static void RemoveRule(string name)
+        public static void RemoveRule(long RuleID)
         {
             lock (ruleLock)
             {
-                var rule = lstRule.FirstOrDefault(x => x.Name == name);
+                var rule = lstRule.FirstOrDefault(x => x.RuleID == RuleID);
                 if (rule != null)
                 {
                     lstRule.Remove(rule);

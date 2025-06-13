@@ -155,9 +155,9 @@ namespace VisualHFT.TriggerEngine.View
             TriggerEngineRuleViewModel selectedRule = (TriggerEngineRuleViewModel)hyperlink.DataContext;
 
             MessageBoxResult result = MessageBox.Show($"Are you sure you want to remove the rule '{selectedRule.Name}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (result == MessageBoxResult.Yes)
+            if (result == MessageBoxResult.Yes && selectedRule.RuleID.HasValue)
             {
-                TriggerEngineService.RemoveRule(selectedRule.Name);
+                TriggerEngineService.RemoveRule(selectedRule.RuleID.Value);
                 LoadAllRules();
             }
         }

@@ -17,11 +17,13 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         private const double Threshold = 100.0;
         public const string PluginID = "PluginID1";
         public const string PluginName = "TestPlugin";
+        public const string Exchange = "Binance";
+        public const string Symbol = "BTC-USD";
          
         [Fact]
         public void AddOrUpdateRule_ShouldAddNewRule()
         {
-            var rule = new TriggerRule { Name = "TestRule1", IsEnabled = true };
+            var rule = new TriggerRule { Name = "TestRule1", IsEnabled = true,RuleID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
             TriggerEngineService.AddOrUpdateRule(rule);
 
             var rules = TriggerEngineService.GetRules();
@@ -31,8 +33,8 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void AddOrUpdateRule_ShouldUpdateExistingRule()
         {
-            var rule1 = new TriggerRule { Name = "TestRule2", IsEnabled = true };
-            var rule2 = new TriggerRule { Name = "TestRule2", IsEnabled = false };
+            var rule1 = new TriggerRule { Name = "TestRule2", IsEnabled = true, RuleID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+            var rule2 = new TriggerRule { Name = "TestRule2", IsEnabled = false , RuleID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
 
             TriggerEngineService.AddOrUpdateRule(rule1);
             TriggerEngineService.AddOrUpdateRule(rule2);
@@ -45,12 +47,12 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
         [Fact]
         public void RemoveRule_ShouldRemoveRuleByName()
         {
-            var rule = new TriggerRule { Name = "TestRule3" };
+            var rule = new TriggerRule { Name = "TestRule3", RuleID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
             TriggerEngineService.AddOrUpdateRule(rule);
-            TriggerEngineService.RemoveRule("TestRule3");
+            TriggerEngineService.RemoveRule(rule.RuleID);
 
             var rules = TriggerEngineService.GetRules();
-            Assert.DoesNotContain(rules, r => r.Name == "TestRule3");
+            Assert.DoesNotContain(rules, r => r.RuleID == rule.RuleID);
         }
 
         [Fact]
@@ -62,6 +64,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             {
                 Name = "TestRunRule",
                 IsEnabled = true,
+                RuleID=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 Condition = new List<TriggerCondition>
             {
                 new TriggerCondition
@@ -96,7 +99,7 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
                 var cts = new CancellationTokenSource();
                 var workerTask = TriggerEngineService.StartBackgroundWorkerAsync(cts.Token);
 
-                TriggerEngineService.RegisterMetric(PluginID, PluginName, 120, DateTime.UtcNow);
+                TriggerEngineService.RegisterMetric(PluginID, PluginName,Exchange,Symbol, 120, DateTime.UtcNow);
 
                 await Task.Delay(200);  
 
@@ -152,10 +155,12 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             {
                 Name = "TestRule",
                 IsEnabled = true,
+                RuleID = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 Condition = new List<TriggerCondition>
             {
                 new TriggerCondition
                 {
+                    ConditionID= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     Plugin = PluginID,
                     Metric = PluginName,
                     Operator = ConditionOperator.GreaterThan,
@@ -190,12 +195,12 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var now = DateTime.UtcNow;
 
             // Act: Register first metric (meets condition)
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 120.0, now);
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 120.0, now);
 
             await Task.Delay(200); // simulate time for async processing
 
             // Act again before cooldown ends
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 130.0, now.AddSeconds(3));
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 130.0, now.AddSeconds(3));
 
             await Task.Delay(200);
 
@@ -219,15 +224,15 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var baseTime = DateTime.UtcNow;
 
             // Act 1: Trigger first match
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 120.0, baseTime);
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 120.0, baseTime);
             await Task.Delay(100);
 
             // Act 2: Not yet past cooldown
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 125.0, baseTime.AddSeconds(2));
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 125.0, baseTime.AddSeconds(2));
             await Task.Delay(100);
 
             // Act 3: Past cooldown
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 130.0, baseTime.AddSeconds(4));
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 130.0, baseTime.AddSeconds(4));
             await Task.Delay(100);
 
             int count = HelperNotificationManager.Instance.GetAllNotifications().Where(x => x.Category == HelprNorificationManagerCategories.TRIGGER_ENGINE && x.PluginID.Equals(PluginID)).Count();
@@ -248,15 +253,15 @@ namespace VisualHFT.DataRetriever.TestingFramework.TestCases
             var baseTime = DateTime.UtcNow;
 
             // Act: Trigger condition
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 120.0, baseTime);
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 120.0, baseTime);
             await Task.Delay(100);
 
             // Now condition breaks
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 80.0, baseTime.AddSeconds(2));
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 80.0, baseTime.AddSeconds(2));
             await Task.Delay(100);
 
             // Condition true again, but should reset the cooldown
-            TriggerEngineService.RegisterMetric(PluginID, PluginName, 125.0, baseTime.AddSeconds(3));
+            TriggerEngineService.RegisterMetric(PluginID, PluginName, Exchange, Symbol, 125.0, baseTime.AddSeconds(3));
             await Task.Delay(100);
 
             // Final assert — we expect no  firing (after cooldown from last true condition)

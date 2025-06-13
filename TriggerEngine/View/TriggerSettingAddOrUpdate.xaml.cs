@@ -102,6 +102,10 @@ namespace VisualHFT.TriggerEngine.View
             if (!this.model.RuleID.HasValue)
             {
                 model.RuleID = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                foreach (var item in this.model.Condition)
+                { 
+                    item.ConditionID= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                }
             }
 
             TriggerEngineRuleViewModel rule = this.model;             
