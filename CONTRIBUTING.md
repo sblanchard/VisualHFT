@@ -3,9 +3,47 @@
 First off, thanks for taking the time to contribute!
 
 
-The following is a set of guidelines for contributing to VisualHFT.
-These are just guidelines, not rules, use your best judgment and feel free to
-propose changes to this document in a pull request.
+Welcome! Whether you're here to fix a bug, propose a new feature, or build something major — thank you.
+
+We’re building VisualHFT to make real-time market microstructure visible, explainable, and actionable.
+
+This repo is open for contributions, but we also offer a high-trust, high-responsibility equity track for long-term builders. More on that below.
+
+## Quick Start
+1. Fork the repo
+2. Clone locally and follow setup in /docs
+3. Open an issue if you're unsure where to start
+4. Submit a clean pull request with context and motivation
+5. Be kind. Stay async. Respect the product’s direction.
+
+## Types of Contributions
+
+| Type | Examples |
+|------|----------|
+| **Minor Fixes** | Bug fixes, README clarifications, refactors |
+| **Infra Improvements** | Latency handling, connectors (e.g., Kafka, FIX, ITCH) |
+| **Quant Signals** | New microstructure indicators, replay features |
+| **Visual Modules** | UI improvements, execution slippage layers, etc. |
+| **Feature Proposals** | Open an issue with your idea + motivation |
+
+
+---
+
+## 🧠 Partner Quant Program (Equity)
+
+If you're here to **build something substantial** — and stay involved — consider applying to the [Partner Quant Program](PartnerQuantProgram.md).
+
+This program grants real **equity in VisualHFT** for those who:
+- Build production-grade modules
+- Stick around to evolve + maintain them
+- Operate like pre-funding technical cofounders
+
+> ⚠️ This is not a paid role. Equity only.
+> Cash roles may become available once the company is funded or profitable.🔗 **[Learn more and apply →](PartnerQuantProgram.md)**
+
+---
+
+
 
 ## Issues
 
