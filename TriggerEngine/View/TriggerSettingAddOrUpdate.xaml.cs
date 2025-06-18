@@ -47,7 +47,7 @@ namespace VisualHFT.TriggerEngine.View
             vmDashboard.Tiles.ToList().ForEach(x =>
             {
                 TilesView vm = new TilesView();
-                vm.TileName = x.Title;
+                vm.TileName = x.Title + Environment.NewLine + x.SelectedProviderName + ": " + x.SelectedSymbol;
                 vm.PluginID = x.PluginID;
                 
                 PluginNames.Add(vm);
