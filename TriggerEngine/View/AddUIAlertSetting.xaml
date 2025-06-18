@@ -26,7 +26,7 @@ TextOptions.TextRenderingMode="Auto"
     <Grid x:Name="MainGrid" Margin="10">
 
         <StackPanel Margin="10">
-            <TextBlock Text="Cooldown Period ℹ️" Style="{StaticResource MaterialDesignBody2TextBlock}" MouseEnter="ShowCooldownToolTip" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBlock Text="Trigger Rate Limit ℹ️" Style="{StaticResource MaterialDesignBody2TextBlock}" MouseEnter="ShowCooldownToolTip" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
 
             <Popup PopupAnimation="Fade" Placement="Mouse" AllowsTransparency="True" StaysOpen="False" x:Name="CooldownToolTip" >
                 <Border Background="White" BorderBrush="Gray" CornerRadius="3" BorderThickness="1">
