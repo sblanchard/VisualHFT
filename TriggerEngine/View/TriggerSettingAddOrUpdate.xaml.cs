@@ -108,6 +108,18 @@ namespace VisualHFT.TriggerEngine.View
                 }
             }
 
+            if (webhookCheck.IsChecked.HasValue && webhookCheck.IsChecked.Value)
+            {
+                var restAPI = this.model.Actions.Where(x => x.Type == ActionType.RestApi).FirstOrDefault();
+                if (restAPI != null)
+                {
+                    if (restAPI.RestApi == null || string.IsNullOrEmpty(restAPI.RestApi.Url))
+                    {
+                        MessageBox.Show("Rest API is not in correct form", "Error", MessageBoxButton.OK);
+                        return;
+                    }
+                }
+            }
             TriggerEngineRuleViewModel rule = this.model;             
             TriggerRule triggerRule=rule.FromViewModel(rule);
            
@@ -141,13 +153,16 @@ namespace VisualHFT.TriggerEngine.View
 
         private void ClickSetAPI(object sender, RoutedEventArgs e)
         {
-            if (sender is Hyperlink hyperlink )
+            if (sender is Hyperlink hyperlink)
             {
                 var webHookAlert = model.Actions.Where(x => x.Type == ActionType.RestApi).FirstOrDefault();
 
                 var restAPIAction = DeepClone<RestApiActionViewModel>(webHookAlert.RestApi);
-                restAPIAction.CooldownPeriod=webHookAlert.CooldownDuration;
-                restAPIAction.CoolDownUnit=webHookAlert.CooldownUnit;
+                if (restAPIAction != null)
+                {
+                    restAPIAction.CooldownPeriod = webHookAlert.CooldownDuration;
+                    restAPIAction.CoolDownUnit = webHookAlert.CooldownUnit;
+                }
                 AddAPISetting frmRuleView = new AddAPISetting(restAPIAction);
                 frmRuleView.Title = this.Title + " " + "Webhook URL Configuration";
                 var d = frmRuleView.ShowDialog();

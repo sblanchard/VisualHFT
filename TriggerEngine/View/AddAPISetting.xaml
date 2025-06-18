@@ -28,18 +28,22 @@ TextOptions.TextRenderingMode="Auto"
  
         <StackPanel VerticalAlignment="Stretch">
             <StackPanel Margin="10">
-                <TextBlock Text="Cooldown Period ℹ️" Style="{StaticResource MaterialDesignBody2TextBlock}" MouseEnter="ShowCooldownToolTip" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Trigger Rate Limit ℹ️" Style="{StaticResource MaterialDesignBody2TextBlock}" MouseEnter="ShowCooldownToolTip" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
 
                 <Popup PopupAnimation="Fade" Placement="Mouse" AllowsTransparency="True" StaysOpen="False" x:Name="CooldownToolTip" >
                     <Border Background="White" BorderBrush="Gray" CornerRadius="3" BorderThickness="1">
                         <StackPanel Margin="10" Orientation="Horizontal" >
                             <StackPanel>
                                 <TextBlock TextWrapping="Wrap" Width="350" Foreground="Black" FontSize="12">
-         <Run FontWeight="Bold">What is a cooldown Period?</Run>
+         <Run FontWeight="Bold">What is Trigger Rate Limit?</Run>
 <LineBreak />
 <LineBreak />
-<Run>The Trigger Action Cooldown Period defines the minimum amount of time that must pass before a specific Trigger Action can be executed again after it has been triggered.</Run>
-<LineBreak />
+<Run>This setting defines the minimum time that must pass before a specific action can be triggered again after its previous execution. </Run>
+<Run>It prevents actions (like sending emails or UI alerts) from being repeatedly triggered too quickly, ensuring a controlled frequency.</Run>
+<LineBreak/>
+<LineBreak/>
+<Run FontWeight="Bold">For example, if set to "5 seconds," the action will wait at least 5 seconds before it can be triggered again, even if the triggering condition is continuously met.</Run>
+                                    <LineBreak />
 <LineBreak />
                                 </TextBlock>
                             </StackPanel>
