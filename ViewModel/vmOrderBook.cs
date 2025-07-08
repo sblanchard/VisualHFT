@@ -105,6 +105,12 @@
        - Minimizes allocations in hot paths
        - Implements efficient grid updates by reusing existing objects
 */
+/*
+    LATEST FROM PROFILING = Jun-2025
+    * Profiling shows that most of the pressure (memory allocation, CPU and GC) are coming from the Scatter plotting.
+    * When chart component redraws the scatter series, it will redraw point by point, re-creating the entire plot.
+ */
+
 
 using System;
 using System;
