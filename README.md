@@ -2,10 +2,10 @@
 See details [here](#release-notes-1)
 
 # Coming Soon
-- ability to connect to any market data source, including, equities, futures, forex, and even news feeds.
-- open plug-in architecture, to allow 3rd party developers to create their analytics, data sources, and more
-- new advanced studies around market microstructure.
-- trading surveillance & infra monitoring
+- **Ability to connect to any market data source** (equities, futures, forex and news feeds) via new data‑retriever plug‑ins.
+- **Open plug‑in architecture** for third‑party developers to add analytics, data sources and more.
+- **New advanced studies** on market microstructure.
+- **Trading surveillance & infrastructure monitoring** tools.
 - and much more...
 
 We are open to hearing from the community to add more features. Make sure you open new Issues with suggestions.
@@ -13,35 +13,28 @@ We are open to hearing from the community to add more features. Make sure you op
 
 # VisualHFT
 
-**VisualHFT** is a cutting-edge GUI platform for market analysis, focusing on real-time visualization of market microstructure. Built with WPF & C#, it displays key metrics like Limit Order Book dynamics and execution quality. Its modular design ensures adaptability for developers and traders, enabling tailored analytical solutions.
+**VisualHFT** is an open‑source desktop application for real‑time market microstructure analysis. Built in C# using WPF, it renders the limit‑order book, trades and strategy exposures from multiple venues so traders and quants can observe order‑flow dynamics and algorithmic behaviour. 
+
+The platform emphasises a modular plug‑in architecture – new market‑connectors and analytics can be added without modifying the core.
+
 
 ![Limit Order Book Visualization](https://github.com/silahian/VisualHFT/blob/master/docImages/LOB_imbalances_2.gif)
 
-- built with #wpf (desktop app)
-- 10 or more levels of depth on each side
-- market data from any market data source
-- ready to use from Binance, Okex (btc/usd) (soon plugins to add other sources)
 
-VisualHFT’s open‑source edition delivers a community‑backed platform for real‑time market microstructure analysis. For professional and institutional users who need deeper trading surveillance, richer execution insights or dedicated support, we’ll soon offer commercial editions tailored to those requirements.
+## Key Capabilities
+
+- **Real‑time market data via plug‑ins**: **VisualHFT** retrieves market data through plug‑ins. The open‑source edition ships with plug‑ins for several cryptocurrency venues: **Binance, Bitfinex, BitStamp, Coinbase, Gemini, Kraken, KuCoin** and a generic WebSocket connector. Each plug‑in normalises order‑book and trade updates and pushes them into the common data bus.
+- **Real‑time market microstructure visualisation**: View the full depth of the order book (10+ levels per side), recent trades and order flow dynamics in real time. The WPF UI uses high‑performance charts to display depth, spreads and other microstructure patterns.
+- **Advanced microstructure studies**: Built‑in study plug‑ins compute microstructure analytics like **VPIN** (Volume‑synchronised Probability of Informed Trading), **LOB Imbalance**, **Market Resilience** and **OTT Ratio**. Each study listens to order book/trade events and publishes computed metrics via the trigger engine.
+- **Trigger engine & alerts**: A rules‑based trigger engine registers metrics from study plug‑ins and evaluates user‑defined conditions (e.g., “VPIN > threshold”). Alerts can be surfaced through the UI or used by custom plug‑ins.
+- **Modular plug‑in architecture**: All connectors and studies implement an `IPlugin` interface and are loaded at runtime by the `PluginManager`. New data sources or analytics can be added by developing a DLL that implements the appropriate base class and dropping it in the plug‑ins folder.
+
 
 ## Getting started
-To install and run the project, you need to:
-
-1. Download the project
-2. When compiling, make sure to reference the included plug-ins
-3. Execute the solution.
-4. You will need to choose the Provider (venue) and Symbol from the dropdowns.
-
-## Long Description
-**VisualHFT** is a state-of-the-art GUI platform engineered for sophisticated market analysis, emphasizing the real-time visualization of market microstructure. It is specifically designed to cater to the needs of both developers and traders seeking a deeper understanding of market dynamics.
-
-Developed using WPF & C#, **VisualHFT** stands out for its ability to vividly display critical trading metrics such as Limit Order Book movements, transaction latencies, and execution quality. These features provide users with an unparalleled view into the intricacies of market behavior, aiding in strategic decision-making.
-
-The platform's strength lies in its modular architecture, which allows for a high degree of customization through plugins. This flexibility makes **VisualHFT** an ideal solution for creating tailored market analysis tools that can adapt to various trading strategies and requirements.
-
-**VisualHFT** not only delivers powerful analytics but also focuses on user accessibility. Its intuitive interface is designed to make complex data understandable, enabling users to quickly interpret and act on market insights.
-
-Whether for monitoring trading performance, analyzing algorithmic strategies, or gaining comprehensive market insights, **VisualHFT** equips users with the tools necessary for a refined and informed trading experience.
+1. **Prerequisites**: **VisualHFT** targets .NET 7.0. Ensure you have a recent .NET SDK and Visual Studio Community version.
+2. **Clone the repository**: `git clone https://github.com/visualHFT/VisualHFT.git`
+3. **Build the solution**: Open `VisualHFT.sln` in Visual Studio and build. The solution includes the core application, the commons library, the WPF UI and several plug‑ins. The plug‑ins are referenced projects and will be built automatically.
+4. **Run VisualHFT**: Launch the **VisualHFT** project. On startup you will be prompted to select a provider (venue) and symbol. Choose one of the available venues (e.g., Binance or Kraken) and a supported symbol (e.g., `BTC-USD`, which is the normalized symbol) to begin streaming data.
 
 ## Features
 - **Real-time market data from any source**: Add multiple market data using plugins.
@@ -50,40 +43,25 @@ Whether for monitoring trading performance, analyzing algorithmic strategies, or
 - **Interactive Charts and Graphs**: Dynamic and interactive visual representations of market data.
 - **User-Centric Design**: An intuitive interface designed for ease of use, making complex data accessible.
 - **Performance Metrics and Reporting**: Robust reporting tools to track and analyze trading performance metrics.
-- more coming...
+- **Real‑Time Data Bus**: Helper classes (`HelperOrderBook`, `HelperTrade`, etc.) act as a real‑time bus. Data‑retriever plug‑ins push order‑book and trade events into these helpers; the UI and study plug‑ins subscribe to them.
+- **Interactive Charts**: **OxyPlot**‑based charts display depth, spread, volumes and study outputs in real time.
+- **User‑Centric Design**: The interface emphasises clarity, speed and customisation. Users can configure which studies are active, adjust triggers and save layout settings.
+- **Extensibility**: Developers can build their own plug‑ins for proprietary data feeds or custom analytics. See the `VisualHFT.Plugins` folder for examples of data‑retriever and study plug‑ins.
 
-## About me
-I’ve been building high-frequency trading software for the past 10 years. Primarily using C++, for the core system, which always runs in a collocated server next to the exchange.
-
-I'm a passionate software engineer with a deep interest in the world of electronic trading. With extensive experience in the field, I have developed a keen understanding of the complexities and challenges that traders face in today's fast-paced, high-frequency trading environment.
-
-My journey in electronic trading began with my work at a proprietary trading firm, where I was involved in developing and optimizing high-frequency trading systems. This experience gave me a firsthand look at the need for tools that provide real-time insights into trading operations, leading to the creation of **VisualHFT**.
-
-In addition to my work in electronic trading, I have a broad background in software development, with skills in a range of programming languages and technologies. I am always eager to learn and explore new areas, and I believe in the power of open-source software to drive innovation and collaboration.
-
-Through **VisualHFT**, I hope to contribute to the trading community and provide a valuable tool for traders and developers alike. I welcome feedback and contributions to the project and look forward to seeing how it evolves with the input of the community.
+Even though some of these items do not yet appear in the open‑source code, they are part of the project’s roadmap and will be added as development continues.
 
 
-## History
-The inception of **VisualHFT** was driven by a need for transparency and control in high-frequency trading operations. As the core high-frequency trading system operates in a collocated server with minimal human interaction, it was crucial to develop a mechanism that could provide real-time insights into the system's operations.
+## About the founder
+Ariel Silahian has been building high-frequency trading software for the past 10 years. Primarily using C++, for the core system, which always runs in a collocated server next to the exchange.
 
-**VisualHFT** was designed as a visualization dashboard to fulfill this need. It provides a real-time view of the trading system's operations, including the volume and nature of orders being sent, the state of the market, and the ability to control some strategy parameters.
+He's a passionate software engineer with a deep interest in the world of electronic trading. With extensive experience in the field, he has developed a keen understanding of the complexities and challenges that traders face in today's fast-paced, high-frequency trading environment.
 
-The goal was to create a tool that could offer a quick, comprehensive snapshot of what was happening in the trading system at any given moment. This allowed for more informed decision-making and improved operational control, even in a high-speed, automated trading environment.
+His journey in electronic trading began with his work at a proprietary trading firm, where he was involved in developing and optimizing high-frequency trading systems. This experience gave him a firsthand look at the need for tools that provide real-time insights into trading operations, leading to the creation of **VisualHFT**.
 
-Over time, **VisualHFT** has evolved to support a broader range of trading operations, not just high-frequency trading. However, its core purpose remains the same: to provide a clear, real-time view of trading operations, enabling users to make informed decisions and maintain control over their trading strategies.
+In addition to his work in electronic trading, he has a broad background in software development, with skills in a range of programming languages and technologies. He's always eager to learn and explore new areas, and he believes in the power of open-source software to drive innovation and collaboration.
 
-## How to Install and Run the project
+Through **VisualHFT**, we hope to contribute to the trading community and provide a valuable tool for traders and developers alike. We welcome feedback and contributions to the project and look forward to seeing how it evolves with the input of the community.
 
-1. Prerequisites: Ensure you have the following software installed on your machine:
-- .NET Framework 7.0
-2. Clone the Repository: Clone the **VisualHFT** repository to your local machine using the following command in your terminal: git clone https://github.com/silahian/VisualHFT.git
-3. Start the GUI: Finally, navigate to the root of the project and run the **VisualHFT** GUI. You should now be able to see real-time trading data in the GUI.
-
-
-## Enterprise-Level Data Feed Integrations
-
-VisualHFT is architecturally designed with a modular and extensible framework, making it an ideal solution for enterprise-level systems that rely on diverse data sources. Whether your infrastructure leverages sophisticated messaging systems like [Kafka](https://kafka.apache.org/), [RabbitMQ](https://www.rabbitmq.com/), the [FIX protocol via QuickFIX](http://www.quickfixengine.org/), or any other advanced data transmission method, VisualHFT stands ready to assimilate and visualize the data with precision. It's pertinent to note that, in this modular integration mode, the primary focus is on the visualization of market data.
 
 ## Screenshots
 
@@ -94,27 +72,6 @@ VisualHFT is architecturally designed with a modular and extensible framework, m
 ![Limit Order Book](/docImages/Aspose.Words.5b849bdf-d96d-4013-ad76-8c3daba3aead.007.png)
 ![Stats](/docImages/Aspose.Words.5b849bdf-d96d-4013-ad76-8c3daba3aead.008.png)
 
-## Why I decided to open the project and the motivations
-The decision to open-source VisualHFT was driven by a desire to contribute to the broader trading community and to foster innovation in the field of high-frequency trading.
-
-Having worked extensively in the realm of electronic trading, I recognized the need for a tool that could provide real-time insights into the operations of a high-frequency trading system. While the core trading system operates with minimal human interaction, having a clear, real-time view of its operations is crucial for informed decision-making and effective control.
-
-VisualHFT was developed to meet this need. However, I realized that its potential could be greatly amplified if it were open to the broader community. By open-sourcing VisualHFT, I aimed to provide a valuable resource for other traders and developers, enabling them to understand better and navigate the complex world of high-frequency trading.
-
-Moreover, I believe that innovation thrives in a collaborative environment. By making VisualHFT open-source, I hope to encourage others to contribute their ideas and improvements, driving the project forward and ensuring it continues to evolve in line with the needs of the trading community.
-
-## Things to improve
-- documentation and wiki page.
-- code architecture.
-- be sure to maintain a MVVC pattern.
-- be able to add more UI (ie: web-base UI)
-- generalization of the strategy parameters and their UI elements.
-- scalability (able to be used by multiple users at the same time)
-- more real-time analytics and risk measurements
-- add unit tests
-- Ability to have a FIX network sniffer as input data (as an alternative to websockets)
-- Security: even though these kinds of applications run inside a private network, there is no security at all involved.
-
 
 ## Contributing
 
@@ -123,7 +80,7 @@ If you are interested in reporting/fixing issues and contributing directly to th
 > Important: We **will not accept** any changes to any of the existing input json message format. This is fixed and cannot be changed. The main reason for this is that we can break all existing installations of this system. Unless there is a “very strong” case that needs to be addressed, and all the community agrees upon that. However, we could accept having new json messages, to be parsed and processed accordingly, without breaking any of the existing ones.*
 
 
-## How to contact me
+## How to contact us
 For project questions use the repository’s forums or any of my social media profiles.
 [Twitter](https://twitter.com/sisSoftware) | [LinkedIn](https://www.linkedin.com/in/silahian/) | Forums
 
