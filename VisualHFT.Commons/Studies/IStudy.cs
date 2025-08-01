@@ -11,6 +11,9 @@ namespace VisualHFT.Commons.Studies
         Task StopAsync();
         string TileTitle { get; set; }
         string TileToolTip { get; set; }
+        object GetCustomUI();   //Allow to setup own UI for the plugin
+        //using object type because this csproj doesn't support UI
+
     }
 
 }
