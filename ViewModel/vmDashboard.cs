@@ -48,21 +48,23 @@ namespace VisualHFT.ViewModel
             {
                 try
                 {
-                    //first, load single studies
-                    foreach (var study in PluginManager.PluginManager.AllPlugins.Where(x => x is IStudy && x.GetCustomUI() == null))
-                    {
+                    var allPlugins = PluginManager.PluginManager.AllPlugins;
+
+                    // Group plugins by their type and UI characteristics
+                    var singleStudiesWithoutUI = allPlugins.Where(x => x is IStudy && x.GetCustomUI() == null);
+                    var multiStudiesWithoutUI = allPlugins.Where(x => x is IMultiStudy && x.GetCustomUI() == null);
+                    var pluginsWithUI = allPlugins.Where(x => x is PluginManager.IPlugin && x.GetCustomUI() != null);
+
+                    // Load tiles in this specific order (single studies, multi studies, plugins with UI)
+                    foreach (var study in singleStudiesWithoutUI)
                         Tiles.Add(new vmTile(study as IStudy));
-                    }
-                    //then, load multi-studies
-                    foreach (var study in PluginManager.PluginManager.AllPlugins.Where(x => x is IMultiStudy && x.GetCustomUI() == null))
-                    {
+
+                    foreach (var study in multiStudiesWithoutUI)
                         Tiles.Add(new vmTile(study as IMultiStudy));
-                    }
-                    //then, load custom UIs
-                    foreach (var study in PluginManager.PluginManager.AllPlugins.Where(x => x is PluginManager.IPlugin && x.GetCustomUI() != null))
-                    {
+
+                    foreach (var study in pluginsWithUI)
                         Tiles.Add(new vmTile(study as PluginManager.IPlugin));
-                    }
+
                 }
                 catch (Exception ex)
                 {
@@ -155,7 +157,8 @@ namespace VisualHFT.ViewModel
                     RaisePropertyChanged(nameof(SelectedStrategy));
                     RaisePropertyChanged(nameof(SelectedSymbol));
                     RaisePropertyChanged(nameof(SelectedLayer));
-                };
+                }
+                ;
             }
         }
         public string SelectedSymbol
