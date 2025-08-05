@@ -342,7 +342,52 @@ namespace VisualHFT.Model
             GetAndResetChangeCounts();
         }
 
+        public void UpdateSnapshot(IEnumerable<BookItem> asks, IEnumerable<BookItem> bids)
+        {
+            lock (_data.Lock)
+            {
+                // Clear existing data and return items to pool to avoid allocation
+                if (_data.Asks.Count() > 0)
+                {
+                    _poolBookItems.Return(_data.Asks);
+                    _data.Asks.Clear();
+                }
 
+                if (_data.Bids.Count() > 0)
+                {
+                    _poolBookItems.Return(_data.Bids);
+                    _data.Bids.Clear();
+                }
+
+                // Copy asks using pooled objects
+                if (asks != null)
+                {
+                    foreach (var askItem in asks.Where(x => x != null && x.Price.HasValue && x.Size.HasValue))
+                    {
+                        var pooledItem = _poolBookItems.Get();
+                        pooledItem.CopyFrom(askItem);
+                        _data.Asks.Add(pooledItem);
+                    }
+                }
+
+                // Copy bids using pooled objects
+                if (bids != null)
+                {
+                    foreach (var bidItem in bids.Where(x => x != null && x.Price.HasValue && x.Size.HasValue))
+                    {
+                        var pooledItem = _poolBookItems.Get();
+                        pooledItem.CopyFrom(bidItem);
+                        _data.Bids.Add(pooledItem);
+                    }
+                }
+
+                // Calculate accumulated sizes
+                _data.CalculateAccummulated();
+            }
+
+            // Calculate metrics outside the lock for better performance
+            CalculateMetrics();
+        }
         public void Clear()
         {
             lock (_data.Lock)
