@@ -309,8 +309,12 @@ namespace VisualHFT.Commons.PluginManager
             return null;
         }
 
+        private string _pluginUniqueID = null;
         public virtual string GetPluginUniqueID()
         {
+            if (_pluginUniqueID != null)
+                return _pluginUniqueID;
+
             // Get the fully qualified name of the assembly
             string assemblyName = GetType().Assembly.FullName;
 
@@ -326,8 +330,9 @@ namespace VisualHFT.Commons.PluginManager
                 {
                     builder.Append(bytes[i].ToString("x2"));
                 }
-                return builder.ToString();
+                _pluginUniqueID = builder.ToString();
             }
+            return _pluginUniqueID;
         }
         public abstract object GetUISettings(); //using object type because this csproj doesn't support UI
         public virtual object GetCustomUI()
