@@ -13,8 +13,8 @@ namespace VisualHFT.Helpers
 
         public UIUpdater(Action updateAction, double debounceTimeInMilliseconds = 30)
         {
+            debounceTimeInMilliseconds = Math.Max(debounceTimeInMilliseconds, 1); // Ensure debounce time is at least 1 ms
             _updateAction = updateAction;
-
             _debounceTimer = new DispatcherTimer();
             _debounceTimer.Interval = TimeSpan.FromMilliseconds(debounceTimeInMilliseconds);
             _debounceTimer.Tick += _debounceTimer_Tick;

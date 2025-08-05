@@ -10,7 +10,7 @@ using System.Windows.Media;
 using VisualHFT.Commons.Studies;
 using VisualHFT.View;
 using System.Collections.ObjectModel;
-using System.Windows.Controls; 
+using System.Windows.Controls;
 
 namespace VisualHFT.ViewModel
 {
@@ -52,9 +52,11 @@ namespace VisualHFT.ViewModel
             IsGroup = false;
 
             _study = study;
+            _customControl = _study.GetCustomUI() as UserControl;
+            IsUserControl = _customControl != null;
             _tile_id = ((PluginManager.IPlugin)_study).GetPluginUniqueID();
             Title = _study.TileTitle;
-            Tooltip = _study.TileToolTip; 
+            Tooltip = _study.TileToolTip;
 
             _localModel.ValueFormatted = ".";
             _localModel.Tooltip = "Waiting for data...";
@@ -63,13 +65,18 @@ namespace VisualHFT.ViewModel
 
             OpenSettingsCommand = new RelayCommand<vmTile>(OpenSettings);
             OpenChartCommand = new RelayCommand<vmTile>(OpenChartClick);
-             
-
             uiUpdater = new UIUpdater(uiUpdaterAction, UI_UPDATE_TIME_MS);
 
+            if (IsUserControl)
+            {
+                IsGroup = true;
+                ValueVisibility = Visibility.Hidden;
+                UCVisibility = Visibility.Visible;
+
+                OpenSettingsCommand = new RelayCommand<vmTile>(OpenSettings);
+            }
             RaisePropertyChanged(nameof(SelectedSymbol));
             RaisePropertyChanged(nameof(SelectedProviderName));
-
             RaisePropertyChanged(nameof(IsGroup));
             SettingButtonVisibility = Visibility.Visible;
             ChartButtonVisibility = Visibility.Visible;
@@ -194,7 +201,7 @@ namespace VisualHFT.ViewModel
             RaisePropertyChanged(nameof(SelectedProviderName));
         }
 
-        public ICommand OpenSettingsCommand { get; set; } 
+        public ICommand OpenSettingsCommand { get; set; }
         public ICommand OpenChartCommand { get; private set; }
 
         public string Value { get => _value; set => SetProperty(ref _value, value); }
@@ -300,7 +307,7 @@ namespace VisualHFT.ViewModel
             RaisePropertyChanged(nameof(SelectedProviderName));
 
         }
-         
+
         protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
