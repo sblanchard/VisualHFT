@@ -6,9 +6,8 @@
              xmlns:local="clr-namespace:VisualHFT.View"
              xmlns:Formatters="clr-namespace:VisualHFT.Converters"
              xmlns:ViewModel="clr-namespace:VisualHFT.ViewModel"
-             xmlns:oxyplot="http://oxyplot.org/wpf"
+             xmlns:oxy="clr-namespace:OxyPlot.SkiaSharp.Wpf;assembly=OxyPlot.SkiaSharp.Wpf"
              xmlns:componentModel="clr-namespace:System.ComponentModel;assembly=WindowsBase"
-             xmlns:userControls="clr-namespace:VisualHFT.UserControls"
              d:DataContext="{d:DesignInstance Type=ViewModel:vmOrderBook}"
              mc:Ignorable="d" 
     
@@ -243,23 +242,23 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <!--CUMMULATIVE BIDS-->
-            <oxyplot:PlotView 
+            <oxy:PlotView 
                 Grid.Column="0"
                 HorizontalContentAlignment="Stretch" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" 
                 IsEnabled="False"
                 IsMouseWheelEnabled="False"
                 Style="{StaticResource BaseChartStyle}"
                 Model="{Binding CummulativeBidsChartModel, Mode=OneWay}" >
-            </oxyplot:PlotView>
+            </oxy:PlotView>
             <!--CUMMULATIVE ASKS-->
-            <oxyplot:PlotView 
+            <oxy:PlotView 
                 Grid.Column="1"
                 HorizontalContentAlignment="Stretch" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" 
                 IsEnabled="False"
                 IsMouseWheelEnabled="False"
                 Style="{StaticResource BaseChartStyle}"
                 Model="{Binding CummulativeAsksChartModel, Mode=OneWay}" >
-            </oxyplot:PlotView>
+            </oxy:PlotView>
 
             <Border Margin="0, 10, 0, 120" Grid.Column="0" Grid.ColumnSpan="2" HorizontalAlignment="Center" Background="#20FFFFFF" CornerRadius="10" Height="60">
                 <StackPanel Orientation="Vertical" VerticalAlignment="Center" >
@@ -290,16 +289,15 @@
                     </ToolTip>
                 </Grid.ToolTip>
 
-                <oxyplot:PlotView 
+                <oxy:PlotView 
                     x:Name="chtPrice" 
                     Visibility="Visible"
                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch" 
                     IsEnabled="False"
                     IsMouseWheelEnabled="False" 
-                    TextMeasurementMethod="GlyphTypeface"
                     Style="{StaticResource BaseChartStyle}" 
                     Model="{Binding RealTimePricePlotModel, Mode=OneWay}" >
-                </oxyplot:PlotView>
+                </oxy:PlotView>
 
 
             </Grid>
@@ -311,14 +309,14 @@
             <Button x:Name="butPopSpreadChart" ToolTip="Open this section into a new popup-Window" Click="butPopSpreadChart_Click" HorizontalAlignment="Right" VerticalAlignment="Top" Panel.ZIndex="999" Margin="0,0,50,0" Padding="0" Height="20" Width="20">
                 <Image Source="/Images/pop-up.png" />
             </Button>
-            <oxyplot:PlotView 
+            <oxy:PlotView 
                 x:Name="chtSpread" 
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch" 
                 IsEnabled="False" 
                 IsMouseWheelEnabled="False"
                 Style="{StaticResource BaseChartStyle}"
                 Model="{Binding RealTimeSpreadModel, Mode=OneWay}" >
-            </oxyplot:PlotView>
+            </oxy:PlotView>
 
 
         </Grid>
