@@ -22,14 +22,7 @@ namespace VisualHFT
             log4net.Config.XmlConfigurator.Configure(new System.IO.FileInfo("log4net.config"));
 
             /*----------------------------------------------------------------------------------------------------------------------*/
-            /*  This is to avoid errors when rendering too much in short times
-             *
-             *  Exception thrown: 'System.Runtime.InteropServices.COMException' in PresentationCore.dll
-             *  An unhandled exception of type 'System.Runtime.InteropServices.COMException' occurred in PresentationCore.dll
-             *  UCEERR_RENDERTHREADFAILURE (0x88980406)
-             *  
-             */
-            //RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly; 
+            RenderOptions.ProcessRenderMode = RenderMode.Default; 
             /*----------------------------------------------------------------------------------------------------------------------*/
 
 
