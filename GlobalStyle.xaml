@@ -3,9 +3,9 @@
                     xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
                     xmlns:oxyplot="http://oxyplot.org/wpf" 
                     xmlns:local="clr-namespace:VisualHFT"
-                    >
+                    xmlns:wpf="http://oxyplot.org/skiawpf">
 
-    <Style x:Key="BaseChartStyle" TargetType="{x:Type oxyplot:PlotView}">
+    <Style x:Key="BaseChartStyle" TargetType="{x:Type wpf:PlotView}">
         <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}" />
         <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBody}" />
 
