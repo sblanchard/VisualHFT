@@ -35,16 +35,17 @@ namespace VisualHFT.ViewModel
             this.OrderBook = new vmOrderBook(Helpers.HelperCommon.GLOBAL_DIALOGS);
             this.NotificationsViewModel = new vmNotifications();
 
-            Task.Run(LoadTilesAsync);
+            PluginManager.PluginManager.OnLoaded += (sender, args) =>
+            {
+                // After plugins are loaded, load tiles
+                Task.Run(LoadTilesAsync);
+            };
         }
 
         private async Task LoadTilesAsync()
         {
-            while (!PluginManager.PluginManager.AllPluginsReloaded)
-                await Task.Delay(1000); // allow plugins to be loaded in
-
             Tiles = new ObservableCollection<vmTile>();
-            Application.Current.Dispatcher.Invoke(() =>
+            await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 try
                 {

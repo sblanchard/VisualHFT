@@ -327,7 +327,7 @@ namespace VisualHFT.ViewModel
                             s.Dispose();
                         }
                     }
-                    uiUpdater.Dispose();
+                    uiUpdater?.Dispose();
                 }
                 _disposed = true;
             }
