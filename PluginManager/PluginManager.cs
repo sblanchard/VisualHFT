@@ -12,28 +12,39 @@ using VisualHFT.TriggerEngine;
 
 namespace VisualHFT.PluginManager
 {
+    public class PluginsLoadedEventArgs : EventArgs
+    {
+        public List<IPlugin> LoadedPlugins { get; }
+        public int SuccessfullyLoadedCount { get; }
+        public int TotalAttemptedCount { get; }
+        public DateTime LoadedAt { get; }
+
+        public PluginsLoadedEventArgs(List<IPlugin> loadedPlugins)
+        {
+            LoadedPlugins = loadedPlugins;
+            LoadedAt = DateTime.Now;
+        }
+    }
+
     public static class PluginManager
     {
         private static List<IPlugin> ALL_PLUGINS = new List<IPlugin>();
-        private static object _locker = new object();
+        private readonly static object _locker = new object();
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        // Event declaration
+        public static event EventHandler<PluginsLoadedEventArgs> OnLoaded;
 
-        public static async Task LoadPlugins()
+        public static void LoadPlugins()
         {
             // 1. By default load all dll's in current Folder. 
             var pluginsDirectory = AppDomain.CurrentDomain.BaseDirectory; // This gets the directory where your WPF app is running
-            await Task.Run(() =>
+            lock (_locker)
             {
-                lock (_locker)
-                {
-                    LoadPluginsByDirectory(pluginsDirectory);
-                }
-            });
+                LoadPluginsByDirectory(pluginsDirectory);
+            }
         }
         public static List<IPlugin> AllPlugins { get { lock (_locker) return ALL_PLUGINS; } }
-        public static bool AllPluginsReloaded { get; internal set; }
-
-        public static async Task StartPlugins()
+        public static async Task StartPluginsAsync()
         {
             List<Task> startTasks = new List<Task>();
             lock (_locker)
@@ -62,6 +73,8 @@ namespace VisualHFT.PluginManager
 
             // Await all the tasks
             await Task.WhenAll(startTasks);
+            // Trigger the OnLoaded event
+            OnPluginsLoaded(new PluginsLoadedEventArgs(ALL_PLUGINS.ToList()));
         }
         public static void StartPlugin(IPlugin plugin)
         {
@@ -77,7 +90,7 @@ namespace VisualHFT.PluginManager
                     study.StartAsync();
                     study.OnCalculated += (sender, e) =>
                     {
-                        TriggerEngineService.RegisterMetric(plugin.GetPluginUniqueID(), plugin.Name,plugin.Settings.Provider.ProviderName,plugin.Settings.Symbol, e.Value.ToDouble(), e.Timestamp);
+                        TriggerEngineService.RegisterMetric(plugin.GetPluginUniqueID(), plugin.Name, plugin.Settings.Provider.ProviderName, plugin.Settings.Symbol, e.Value.ToDouble(), e.Timestamp);
 
                     };
                 }
@@ -85,8 +98,6 @@ namespace VisualHFT.PluginManager
                     mstudy.StartAsync();
             }
         }
-
-        
         public static void StopPlugin(IPlugin plugin)
         {
             try
@@ -181,7 +192,7 @@ namespace VisualHFT.PluginManager
                                 continue;
 
                             plugin.Status = ePluginStatus.LOADING;
-                            
+
                             ALL_PLUGINS.Add(plugin);
                             log.Info("Plugin assemblies for: " + plugin.Name + " have loaded OK.");
                         }
@@ -197,6 +208,9 @@ namespace VisualHFT.PluginManager
             }
 
         }
-
+        private static void OnPluginsLoaded(PluginsLoadedEventArgs e)
+        {
+            OnLoaded?.Invoke(null, e);
+        }
     }
 }

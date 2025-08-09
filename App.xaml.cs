@@ -22,14 +22,7 @@ namespace VisualHFT
             log4net.Config.XmlConfigurator.Configure(new System.IO.FileInfo("log4net.config"));
 
             /*----------------------------------------------------------------------------------------------------------------------*/
-            /*  This is to avoid errors when rendering too much in short times
-             *
-             *  Exception thrown: 'System.Runtime.InteropServices.COMException' in PresentationCore.dll
-             *  An unhandled exception of type 'System.Runtime.InteropServices.COMException' occurred in PresentationCore.dll
-             *  UCEERR_RENDERTHREADFAILURE (0x88980406)
-             *  
-             */
-            //RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly; 
+            RenderOptions.ProcessRenderMode = RenderMode.Default; 
             /*----------------------------------------------------------------------------------------------------------------------*/
 
 
@@ -46,7 +39,7 @@ namespace VisualHFT
                 catch (Exception ex)
                 {
                     // Handle the exception
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    Application.Current.Dispatcher.Invoke(() =>
                     {
                         MessageBox.Show("ERROR LOADING Plugins: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     });
@@ -67,18 +60,14 @@ namespace VisualHFT
             base.OnExit(e);
         }
 
-        private async Task LoadPlugins()
+        private static async Task LoadPlugins()
         {
             //Load the license manager and check if the user has access to the plugin
             LicenseManager.Instance.LoadFromKeygen();
-
-
-            PluginManager.PluginManager.AllPluginsReloaded = false;
-            await PluginManager.PluginManager.LoadPlugins();
-            await PluginManager.PluginManager.StartPlugins();
-            PluginManager.PluginManager.AllPluginsReloaded = true;
+            PluginManager.PluginManager.LoadPlugins();
+            await PluginManager.PluginManager.StartPluginsAsync();
         }
-        private async Task GCCleanupAsync()
+        private static async Task GCCleanupAsync()
         {
             //due to the high volume of data do this periodically.(this will get fired every 5 secs)
 
@@ -86,7 +75,7 @@ namespace VisualHFT
             {
                 await Task.Delay(5000);
                 GC.Collect(0, GCCollectionMode.Forced, false); //force garbage collection
-            };
+            }
 
         }
     }
