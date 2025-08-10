@@ -10,7 +10,14 @@
 	  <PackageIcon>VisualHFT.png</PackageIcon>
 	  <SupportedOSPlatformVersion>8.0</SupportedOSPlatformVersion>
   </PropertyGroup>
-
+	<ItemGroup>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>VisualHFT.DataRetriever.TestingFramework</_Parameter1>
+		</AssemblyAttribute>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>VisualHFT.TriggerService.TestingFramework</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
   <ItemGroup>
     <Compile Remove="demoTradingCore\**" />
     <Compile Remove="packages\**" />
