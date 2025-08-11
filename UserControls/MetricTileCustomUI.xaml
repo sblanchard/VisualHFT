@@ -14,8 +14,8 @@
             TextOptions.TextRenderingMode="Auto"
             Background="{DynamicResource MaterialDesignPaper}"
             FontFamily="{StaticResource MaterialDesignFont}"
-             
-             d:DesignHeight="300" d:DesignWidth="300">
+            VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+            d:DesignHeight="300" d:DesignWidth="300">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -24,7 +24,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <GroupBox Padding="10">
+    <GroupBox Padding="10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
         <GroupBox.Header>
             <Grid>
                 <!-- Assuming Horizontal alignment of controls -->
@@ -38,10 +38,37 @@
                 <TextBlock Text="{Binding Title}" Grid.Column="0" VerticalAlignment="Center" Margin="25 0 0 0"/>
             </Grid>
         </GroupBox.Header>
-        <StackPanel Orientation="Vertical" Grid.Row="1">
-            <ContentControl Grid.Row="0" HorizontalAlignment="Stretch" Content="{Binding CustomControl}" Visibility="{Binding UCVisibility}" />
-            <Separator HorizontalAlignment="Stretch"  Height="10" BorderBrush="White"/>
-            <TextBlock FontSize="9" Margin="0 0 0 5" Padding="0" VerticalAlignment="Center" HorizontalAlignment="Center">
+
+        <Grid VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <!-- Custom control gets all available space -->
+                <RowDefinition Height="Auto"/>
+                <!-- Separator takes minimal space -->
+                <RowDefinition Height="Auto"/>
+                <!-- Text takes minimal space -->
+            </Grid.RowDefinitions>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                          HorizontalScrollBarVisibility="Disabled">
+                <ContentControl 
+                        HorizontalAlignment="Stretch" 
+                        VerticalAlignment="Stretch"
+                        Content="{Binding CustomControl}" 
+                        Visibility="{Binding UCVisibility}" />
+            </ScrollViewer>
+
+            <Separator Grid.Row="1" 
+                     HorizontalAlignment="Stretch" 
+                     Height="10" 
+                     BorderBrush="White"/>
+
+            <TextBlock Grid.Row="2" 
+                     FontSize="9" 
+                     Margin="0 0 0 5" 
+                     Padding="0" 
+                     VerticalAlignment="Center" 
+                     HorizontalAlignment="Center">
                 <TextBlock.Text>
                     <MultiBinding StringFormat="{}{0}: {1}">
                         <Binding Path="SelectedProviderName"/>
@@ -49,7 +76,6 @@
                     </MultiBinding>
                 </TextBlock.Text>
             </TextBlock>
-        </StackPanel>
+        </Grid>
     </GroupBox>
-
 </UserControl>
