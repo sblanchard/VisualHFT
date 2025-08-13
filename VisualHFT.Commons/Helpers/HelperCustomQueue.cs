@@ -14,6 +14,7 @@ public class HelperCustomQueue<T> : IDisposable
     private Task _taskConsumer;
     private bool _isPaused;
     private bool _isRunning;
+    private bool _disposed;
 
     public HelperCustomQueue(string queueName, Action<T> actionOnRead, Action<Exception> onError = null)
     {
@@ -37,25 +38,41 @@ public class HelperCustomQueue<T> : IDisposable
 
     public void Add(T item)
     {
-        if (!_queue.IsAddingCompleted)
-        {
-            _queue.Add(item);
-            _resetEvent.Set();
-        }
+        if (_disposed || _queue.IsAddingCompleted)
+            return;
+        if (item == null)
+            return;
+        _queue.Add(item);
+        _resetEvent.Set();
     }
 
     public void PauseConsumer() => _isPaused = true;
 
     public void ResumeConsumer()
     {
+        if (_disposed)
+            return;
+
         _isPaused = false;
         _resetEvent.Set();
     }
 
     public void Stop()
     {
+        if (_disposed)
+            return;
+
         _isRunning = false;
-        _cts.Cancel();
+
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CancellationTokenSource already disposed, ignore
+        }
+
         _queue.CompleteAdding();
         _resetEvent.Set();
 
@@ -71,6 +88,9 @@ public class HelperCustomQueue<T> : IDisposable
 
     public void Clear()
     {
+        if (_disposed)
+            return;
+
         while (_queue.TryTake(out _)) { }
     }
 
@@ -86,31 +106,47 @@ public class HelperCustomQueue<T> : IDisposable
 
         try
         {
-            while (_isRunning)
+            while (_isRunning && !_disposed)
             {
                 _resetEvent.Wait(); // no token — no per-wait allocation
                 _resetEvent.Reset();
 
-                if (_isPaused)
+                if (_isPaused || _disposed)
                     continue;
 
                 while (_queue.TryTake(out var item))
                 {
-                    sw.Restart();
-                    _actionOnRead(item);
-                    sw.Stop();
-                    // keep your performance metrics logic here...
+                    if (_disposed)
+                        break;
+
+                    try
+                    {
+                        sw.Restart();
+                        _actionOnRead(item);
+                        sw.Stop();
+                        // keep your performance metrics logic here...
+                    }
+                    catch (Exception ex)
+                    {
+                        _onError?.Invoke(ex);
+                        // Continue processing other items even if one fails
+                    }
                 }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // This should only catch exceptions from the consumer loop itself, not from item processing
             _onError?.Invoke(ex);
         }
     }
 
     public void Dispose()
     {
+        if (_disposed)
+            return;
+
+        _disposed = true;
         Stop();
         _tokenRegistration.Dispose();
         _resetEvent.Dispose();
