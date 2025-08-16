@@ -1,8 +1,9 @@
 ﻿using VisualHFT.Commons.Model;
 using VisualHFT.Commons.Helpers;
+using VisualHFT.Commons.Pools;
 namespace VisualHFT.Model
 {
-    public partial class BookItem : IEquatable<BookItem>, IEqualityComparer<BookItem>, IResettable, ICopiable<BookItem>, IDisposable
+    public partial class BookItem : IEquatable<BookItem>, IEqualityComparer<BookItem>, IResettable, ICopiable<BookItem>, IDisposable, IBasicBookItem
     {
 
         private string _Symbol;

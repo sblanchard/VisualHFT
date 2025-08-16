@@ -3,8 +3,6 @@ using VisualHFT.Commons.Pools;
 using VisualHFT.Helpers;
 using VisualHFT.Studies;
 using VisualHFT.Enums;
-using VisualHFT.Model;
-using System.Linq;
 
 namespace VisualHFT.Model
 {
@@ -16,9 +14,6 @@ namespace VisualHFT.Model
         protected OrderBookData _data;
         protected static readonly log4net.ILog log =
             log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
-        protected CustomObjectPool<BookItem> _poolBookItems
-            = new CustomObjectPool<BookItem>(2000);
 
         // Add counters for level changes
         private long _addedLevels = 0;
@@ -123,7 +118,7 @@ namespace VisualHFT.Model
                 {
                     if (_data.Bids == null)
                         return null;
-                    if (MaxDepth >0 && FilterBidAskByMaxDepth)
+                    if (MaxDepth > 0 && FilterBidAskByMaxDepth)
                         return _data.Bids.Take(MaxDepth);
                     else
                         return _data.Bids;
@@ -346,36 +341,46 @@ namespace VisualHFT.Model
         {
             lock (_data.Lock)
             {
-                // Clear existing data and return items to pool to avoid allocation
+                // Clear existing data and return items to shared pool to avoid allocation
                 if (_data.Asks.Count() > 0)
                 {
-                    _poolBookItems.Return(_data.Asks);
+                    // FIXED: Return to shared pool instead of instance pool
+                    foreach (var item in _data.Asks)
+                    {
+                        BookItemPool.Return(item);
+                    }
                     _data.Asks.Clear();
                 }
 
                 if (_data.Bids.Count() > 0)
                 {
-                    _poolBookItems.Return(_data.Bids);
+                    // FIXED: Return to shared pool instead of instance pool
+                    foreach (var item in _data.Bids)
+                    {
+                        BookItemPool.Return(item);
+                    }
                     _data.Bids.Clear();
                 }
 
-                // Copy asks using pooled objects
+                // Copy asks using shared pooled objects
                 if (asks != null)
                 {
                     foreach (var askItem in asks.Where(x => x != null && x.Price.HasValue && x.Size.HasValue))
                     {
-                        var pooledItem = _poolBookItems.Get();
+                        // FIXED: Get from shared pool instead of instance pool
+                        var pooledItem = BookItemPool.Get();
                         pooledItem.CopyFrom(askItem);
                         _data.Asks.Add(pooledItem);
                     }
                 }
 
-                // Copy bids using pooled objects
+                // Copy bids using shared pooled objects
                 if (bids != null)
                 {
                     foreach (var bidItem in bids.Where(x => x != null && x.Price.HasValue && x.Size.HasValue))
                     {
-                        var pooledItem = _poolBookItems.Get();
+                        // FIXED: Get from shared pool instead of instance pool
+                        var pooledItem = BookItemPool.Get();
                         pooledItem.CopyFrom(bidItem);
                         _data.Bids.Add(pooledItem);
                     }
@@ -388,6 +393,7 @@ namespace VisualHFT.Model
             // Calculate metrics outside the lock for better performance
             CalculateMetrics();
         }
+
         public void Clear()
         {
             lock (_data.Lock)
@@ -396,6 +402,7 @@ namespace VisualHFT.Model
                 _data.Clear();
             }
         }
+
         public void Reset()
         {
             lock (_data.Lock)
@@ -403,10 +410,7 @@ namespace VisualHFT.Model
                 InternalClear();
                 _data?.Reset();
             }
-
         }
-
-
 
         public virtual void AddOrUpdateLevel(DeltaBookItem item)
         {
@@ -428,8 +432,8 @@ namespace VisualHFT.Model
                 UpdateLevel(item);
             else
                 AddLevel(item);
-
         }
+
         public virtual void AddLevel(DeltaBookItem item)
         {
             if (!item.IsBid.HasValue)
@@ -442,7 +446,6 @@ namespace VisualHFT.Model
                 // If the item is within the acceptable depth, truncate the LOB to ensure it adheres to the MaxDepth limit.
                 bool willNewItemFallOut = false;
 
-                
                 var list = item.IsBid.Value ? _data.Bids : _data.Asks;
                 var listCount = list.Count();
                 if (item.IsBid.Value)
@@ -456,7 +459,8 @@ namespace VisualHFT.Model
 
                 if (!willNewItemFallOut)
                 {
-                    var _level = _poolBookItems.Get();
+                    // FIXED: Get from shared pool instead of instance pool
+                    var _level = BookItemPool.Get();
                     _level.EntryID = item.EntryID;
                     _level.Price = item.Price;
                     _level.IsBid = item.IsBid.Value;
@@ -473,13 +477,17 @@ namespace VisualHFT.Model
                     //truncate last item if we exceeded the MaxDepth
                     if (listCount > this.MaxDepth)
                     {
-                        _poolBookItems.Return(list.TakeLast(listCount - this.MaxDepth));
-                        list.TruncateItemsAfterPosition(MaxDepth-1);
+                        // FIXED: Return to shared pool instead of instance pool
+                        foreach (var itemToReturn in list.TakeLast(listCount - this.MaxDepth))
+                        {
+                            BookItemPool.Return(itemToReturn);
+                        }
+                        list.TruncateItemsAfterPosition(MaxDepth - 1);
                     }
                 }
-
             }
         }
+
         public virtual void UpdateLevel(DeltaBookItem item)
         {
             lock (_data.Lock)
@@ -498,8 +506,8 @@ namespace VisualHFT.Model
                         existingItem.ServerTimeStamp = item.ServerTimeStamp;
                     });
             }
-
         }
+
         public virtual void DeleteLevel(DeltaBookItem item)
         {
             if (string.IsNullOrEmpty(item.EntryID) && (!item.Price.HasValue || item.Price.Value == 0))
@@ -507,7 +515,6 @@ namespace VisualHFT.Model
             lock (_data.Lock)
             {
                 BookItem _itemToDelete = null;
-
 
                 if (!string.IsNullOrEmpty(item.EntryID))
                 {
@@ -520,15 +527,16 @@ namespace VisualHFT.Model
                         .FirstOrDefault(x => x.Price == item.Price);
                 }
 
-
                 if (_itemToDelete != null)
                 {
                     (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Remove(_itemToDelete);
-                    _poolBookItems.Return(_itemToDelete);
+                    // FIXED: Return to shared pool instead of instance pool
+                    BookItemPool.Return(_itemToDelete);
                     Interlocked.Increment(ref _deletedLevels);
                 }
             }
         }
+
         public (long added, long deleted, long updated) GetAndResetChangeCounts()
         {
             var result = (_addedLevels, _deletedLevels, _updatedLevels);
@@ -549,6 +557,7 @@ namespace VisualHFT.Model
                 _disposed = true;
             }
         }
+
         public void Dispose()
         {
             Dispose(true);
