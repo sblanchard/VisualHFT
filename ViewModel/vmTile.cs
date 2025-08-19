@@ -1,10 +1,10 @@
 ﻿using Prism.Mvvm;
 using System;
+using System.Linq;
 using System.Windows.Input;
 using System.Windows;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
-using VisualHFT.UserSettings;
 using VisualHFT.ViewModels;
 using System.Windows.Media;
 using VisualHFT.Commons.Studies;
@@ -24,7 +24,7 @@ namespace VisualHFT.ViewModel
         private bool _isUserControl;
         private bool _DATA_AVAILABLE = false;
         private UIUpdater uiUpdater;
-        private const int UI_UPDATE_TIME_MS = 300;
+        private const int UI_UPDATE_TIME_MS = 500;
 
         private System.Windows.Visibility _settingButtonVisibility;
         private System.Windows.Visibility _chartButtonVisibility;
@@ -39,8 +39,6 @@ namespace VisualHFT.ViewModel
         //*********************************************************
         //*********************************************************
 
-        private TileSettings _settings;
-        private string _valueColorString = "White";
         private string _value;
         private string _valueTooltip;
         private SolidColorBrush _valueColor = Brushes.White;
@@ -314,20 +312,82 @@ namespace VisualHFT.ViewModel
             {
                 if (disposing)
                 {
-                    if (_study != null)
+                    try
                     {
-                        _study.StopAsync();
-                        _study.OnCalculated -= _study_OnCalculated;
-                        _study.Dispose();
-                    }
-                    if (_multiStudy != null)
-                    {
-                        foreach (var s in _multiStudy.Studies)
+                        // Stop and dispose study plugins
+                        if (_study != null)
                         {
-                            s.Dispose();
+                            _study.OnCalculated -= _study_OnCalculated;
+                            _study.StopAsync();
+                            _study.Dispose();
+                            _study = null;
                         }
+
+                        // Dispose multi-study and all child tiles
+                        if (_multiStudy != null)
+                        {
+                            // Dispose child tiles first
+                            if (ChildTiles != null)
+                            {
+                                foreach (var childTile in ChildTiles.ToList())
+                                {
+                                    try
+                                    {
+                                        childTile?.Dispose();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // Log but continue disposing other children
+                                        System.Diagnostics.Debug.WriteLine($"Error disposing child tile: {ex.Message}");
+                                    }
+                                }
+                                ChildTiles.Clear();
+                                ChildTiles = null;
+                            }
+
+                            // Dispose the multi-study itself
+                            foreach (var study in _multiStudy.Studies)
+                            {
+                                try
+                                {
+                                    study.StopAsync();
+                                    study.Dispose();
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Error disposing study: {ex.Message}");
+                                }
+                            }
+                            _multiStudy.Dispose();
+                            _multiStudy = null;
+                        }
+
+                        // Dispose plugin
+                        if (_plugin != null)
+                        {
+                            // Note: Plugin disposal handled by PluginManager
+                            _plugin = null;
+                        }
+
+                        // Dispose UI updater
+                        if (uiUpdater != null)
+                        {
+                            uiUpdater.Dispose();
+                            uiUpdater = null;
+                        }
+
+                        // Clear UI references
+                        _customControl = null;
+                        _localModel = null;
+
+                        // Clear command references
+                        OpenSettingsCommand = null;
+                        OpenChartCommand = null;
                     }
-                    uiUpdater?.Dispose();
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error during vmTile disposal: {ex.Message}");
+                    }
                 }
                 _disposed = true;
             }

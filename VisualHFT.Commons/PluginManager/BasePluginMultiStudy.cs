@@ -72,16 +72,32 @@ namespace VisualHFT.Commons.PluginManager
 
         protected virtual void Dispose(bool disposing)
         {
-            if (disposing)
+            if (!_disposed)
             {
-
-                if (Studies != null)
+                _disposed = true;
+                if (disposing)
                 {
-                    foreach (var s in Studies)
-                        s.Dispose();
-                    Studies.Clear();
+                    // First stop all studies
+                    if (Studies != null)
+                    {
+                        foreach (var study in Studies)
+                        {
+                            try
+                            {
+                                // Stop the study first, then dispose
+                                Task.Run(() => study.StopAsync()).GetAwaiter().GetResult();
+                                study.Dispose();
+                            }
+                            catch (Exception ex)
+                            {
+                                log.Warn($"Error disposing study in {Name}: {ex.Message}");
+                                // Continue disposing other studies
+                            }
+                        }
+                        Studies.Clear();
+                        Studies = null;
+                    }
                 }
-
             }
         }
 
