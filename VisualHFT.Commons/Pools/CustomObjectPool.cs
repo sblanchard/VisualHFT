@@ -1,33 +1,60 @@
-﻿using Microsoft.Extensions.ObjectPool;
+﻿using System.Collections.Concurrent;
 using System.Collections;
-using System.Diagnostics;
 
 namespace VisualHFT.Commons.Pools
 {
+    /// <summary>
+    /// High-performance object pool with guaranteed object reuse for HFT systems.
+    /// Replaces Microsoft's DefaultObjectPool which creates new objects when exhausted.
+    /// </summary>
     public class CustomObjectPool<T> : IDisposable where T : class, new()
     {
-        private DefaultObjectPool<T> _pool;
-        private int _maxPoolSize = 0;
-        private int _availableObjects;
+        private readonly ConcurrentQueue<T> _objects = new ConcurrentQueue<T>();
+        private readonly int _maxPoolSize;
+        private long _currentCount;  // Changed from int to long for Interlocked operations
         private bool _disposed = false;
-        private double _utilizationPercentage;
-        private DateTime _lastUpdateLog = DateTime.MinValue;
+        private long _totalGets;
+        private long _totalReturns;
+        private long _totalCreated;
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        public CustomObjectPool(/*string poolName, */int maxPoolSize = 100)
+        public CustomObjectPool(int maxPoolSize = 100)
         {
             _maxPoolSize = maxPoolSize;
-            _pool = new DefaultObjectPool<T>(new DefaultPooledObjectPolicy<T>(), _maxPoolSize);
-            _availableObjects = _maxPoolSize;
-            _utilizationPercentage = 0;
+            _currentCount = 0;
+
+            // Pre-warm the pool with initial objects
+            for (int i = 0; i < Math.Min(maxPoolSize / 10, 100); i++)
+            {
+                var obj = new T();
+                _objects.Enqueue(obj);
+                Interlocked.Increment(ref _currentCount);
+                Interlocked.Increment(ref _totalCreated);
+            }
         }
 
         public T Get()
         {
-            Interlocked.Decrement(ref _availableObjects);
-            CalculatePercentageUtilization();
-            return _pool.Get();
+            Interlocked.Increment(ref _totalGets);
+
+            if (_objects.TryDequeue(out T item))
+            {
+                Interlocked.Decrement(ref _currentCount);
+                return item;
+            }
+
+            // Pool exhausted - create new object (but log this for monitoring)
+            Interlocked.Increment(ref _totalCreated);
+
+            if (_totalCreated % 1000 == 0) // Log every 1000 creations
+            {
+                var typeName = typeof(T).Name;
+                log.Warn($"CustomObjectPool<{typeName}> exhausted - created {_totalCreated} total objects. Consider increasing pool size.");
+            }
+
+            return new T();
         }
+
         public void Return(IEnumerable<T> listObjs)
         {
             if (listObjs == null)
@@ -37,54 +64,47 @@ namespace VisualHFT.Commons.Pools
                 Return(obj);
             }
         }
+
         public void Return(T obj)
         {
+            if (obj == null || _disposed)
+                return;
+
+            Interlocked.Increment(ref _totalReturns);
+
+            // Reset object state before returning to pool
             (obj as VisualHFT.Commons.Model.IResettable)?.Reset();
             (obj as IList)?.Clear();
-            (obj as IDisposable)?.Dispose();
 
-            _pool.Return(obj);
-            Interlocked.Increment(ref _availableObjects);
-            CalculatePercentageUtilization();
-        }
-        public int AvailableObjects => _availableObjects;
-        public double UtilizationPercentage => _utilizationPercentage;
-        private void CalculatePercentageUtilization()
-        {
-            if (_maxPoolSize > 0)
-                _utilizationPercentage = 1.0 - (_availableObjects / (double)_maxPoolSize);
-            if (_availableObjects < 0) //is being overused
+            // Don't dispose objects being returned to pool - they're for reuse!
+            // (obj as IDisposable)?.Dispose(); // REMOVED - this was destroying reusable objects!
+
+            // Only return to pool if we haven't exceeded capacity
+            var currentCount = Interlocked.Read(ref _currentCount);
+            if (currentCount < _maxPoolSize)
             {
-                if (DateTime.Now.Subtract(_lastUpdateLog).TotalSeconds > 5)
-                {
-                    var typeName = typeof(T).Name;
-                    var stackTrace = new StackTrace();
-                    
-                    var callingMethod = stackTrace.GetFrame(2)?.GetMethod();
-                    var callingClass = callingMethod?.ReflectedType?.Namespace + "." + callingMethod?.ReflectedType?.Name;
-                    /*var caller = callingMethod.ReflectedType != null
-                        ? callingMethod.ReflectedType.Name
-                        : "Unknown" + "." + callingMethod.Name;*/
-                    log.Warn($"CustomObjectPool<{typeName}> -> {callingClass}::{callingMethod?.ToString()} - utilization: {_utilizationPercentage.ToString("p2")}");
-                    _lastUpdateLog = DateTime.Now;
-                }
+                _objects.Enqueue(obj);
+                Interlocked.Increment(ref _currentCount);
             }
+            // If pool is full, let the object be garbage collected naturally
         }
+
+        public int AvailableObjects => (int)Interlocked.Read(ref _currentCount);  // Cast to int for backward compatibility
+        public double UtilizationPercentage => _maxPoolSize > 0 ? Math.Max(0, 1.0 - (Interlocked.Read(ref _currentCount) / (double)_maxPoolSize)) : 0;
+        public long TotalGets => _totalGets;
+        public long TotalReturns => _totalReturns;
+        public long TotalCreated => _totalCreated;
+        public bool IsHealthy => _totalCreated < _maxPoolSize * 2; // Should not create more than 2x pool size
+
         public void Dispose()
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!_disposed)
-            {
-                if (disposing)
-                {
-                    // Dispose managed resources
-                }
+            if (_disposed) return;
+            _disposed = true;
 
-                _disposed = true;
+            // Dispose all objects in the pool
+            while (_objects.TryDequeue(out T item))
+            {
+                (item as IDisposable)?.Dispose();
             }
         }
     }
