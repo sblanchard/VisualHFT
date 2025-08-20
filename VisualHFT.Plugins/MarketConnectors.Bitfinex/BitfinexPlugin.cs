@@ -515,9 +515,9 @@ namespace MarketConnectors.Bitfinex
             {
                 lob.AddOrUpdateLevel(new DeltaBookItem()
                 {
-                    IsBid = false,
+                    IsBid = false, 
                     Price = (double)x.Price,
-                    Size = (double)x.Quantity,
+                    Size = (double)Math.Abs(x.Quantity), 
                     LocalTimeStamp = DateTime.Now,
                     ServerTimeStamp = DateTime.Now,
                     Symbol = symbol,
@@ -528,9 +528,9 @@ namespace MarketConnectors.Bitfinex
             {
                 lob.AddOrUpdateLevel(new DeltaBookItem()
                 {
-                    IsBid = true,
+                    IsBid = true, 
                     Price = (double)x.Price,
-                    Size = (double)x.Quantity,
+                    Size = (double)Math.Abs(x.Quantity), 
                     LocalTimeStamp = DateTime.Now,
                     ServerTimeStamp = DateTime.Now,
                     Symbol = symbol,
@@ -714,8 +714,8 @@ namespace MarketConnectors.Bitfinex
         public void InjectSnapshot(VisualHFT.Model.OrderBook snapshotModel, long sequence)
         {
             var localModel = new BitfinexOrderBook();
-            localModel.Asks = snapshotModel.Asks.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToArray();
-            localModel.Bids = snapshotModel.Bids.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToArray();
+            localModel.Asks = snapshotModel.Asks.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToArray(); // Positive for asks
+            localModel.Bids = snapshotModel.Bids.Select(x => new BitfinexOrderBookEntry() { Price = (decimal)x.Price, Quantity = (decimal)x.Size }).ToArray(); // Positive for bids
             _settings.DepthLevels = snapshotModel.MaxDepth; //force depth received
             var symbol = snapshotModel.Symbol;
 
@@ -772,10 +772,11 @@ namespace MarketConnectors.Bitfinex
                     _qty = x.Size.ToDecimal();
                 else if (!x.Size.HasValue && x.MDUpdateAction == eMDUpdateAction.Delete)
                     _qty = 1;
+
                 UpdateOrderBook(new BitfinexOrderBookEntry()
                 {
                     Price = x.Price.ToDecimal(),
-                    Quantity = _qty,
+                    Quantity = _qty, // Positive for bids
                     Count = x.MDUpdateAction == eMDUpdateAction.Delete ? 0 : 1
                 }, symbol, ts);
             });
@@ -786,10 +787,11 @@ namespace MarketConnectors.Bitfinex
                     _qty = x.Size.ToDecimal();
                 else if (!x.Size.HasValue && x.MDUpdateAction == eMDUpdateAction.Delete)
                     _qty = 1;
+
                 UpdateOrderBook(new BitfinexOrderBookEntry()
                 {
                     Price = x.Price.ToDecimal(),
-                    Quantity = -_qty,
+                    Quantity = -_qty, // Negative for asks  
                     Count = x.MDUpdateAction == eMDUpdateAction.Delete ? 0 : 1
                 }, symbol, ts);
             });
