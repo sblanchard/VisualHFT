@@ -1,4 +1,4 @@
-﻿using VisualHFT.Model;
+using VisualHFT.Model;
 using System.Runtime.CompilerServices;
 
 namespace VisualHFT.Commons.Pools
@@ -252,7 +252,7 @@ namespace VisualHFT.Commons.Pools
         public long Outstanding { get; init; }
         public int PoolSize { get; init; }
 
-        public bool IsHealthy => CurrentUtilization < 0.9 && Outstanding >= 0;
+        public bool IsHealthy => CurrentUtilization < 0.9999 && Outstanding >= 0;
         public bool IsCritical => CurrentUtilization > 0.9;
         public bool HasLeaks => Outstanding > PoolSize * 1.5;
 
