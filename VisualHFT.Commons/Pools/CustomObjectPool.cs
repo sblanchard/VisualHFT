@@ -76,8 +76,6 @@ namespace VisualHFT.Commons.Pools
             (obj as VisualHFT.Commons.Model.IResettable)?.Reset();
             (obj as IList)?.Clear();
 
-            // Don't dispose objects being returned to pool - they're for reuse!
-            // (obj as IDisposable)?.Dispose(); // REMOVED - this was destroying reusable objects!
 
             // Only return to pool if we haven't exceeded capacity
             var currentCount = Interlocked.Read(ref _currentCount);
@@ -87,6 +85,15 @@ namespace VisualHFT.Commons.Pools
                 Interlocked.Increment(ref _currentCount);
             }
             // If pool is full, let the object be garbage collected naturally
+        }
+        public void Reset()
+        {
+            foreach (var item in _objects)
+            {
+                (item as VisualHFT.Commons.Model.IResettable)?.Reset();
+                (item as IList)?.Clear();
+            }
+            Interlocked.Exchange(ref _currentCount, 0);
         }
 
         public int AvailableObjects => (int)Interlocked.Read(ref _currentCount);  // Cast to int for backward compatibility
