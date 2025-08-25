@@ -24,7 +24,7 @@ namespace VisualHFT.Commons.Pools
             _currentCount = 0;
 
             // Pre-warm the pool with initial objects
-            for (int i = 0; i < Math.Min(maxPoolSize / 10, 100); i++)
+            for (int i = 0; i < maxPoolSize; i++)
             {
                 var obj = new T();
                 _objects.Enqueue(obj);
@@ -76,17 +76,43 @@ namespace VisualHFT.Commons.Pools
             (obj as VisualHFT.Commons.Model.IResettable)?.Reset();
             (obj as IList)?.Clear();
 
-            // Don't dispose objects being returned to pool - they're for reuse!
-            // (obj as IDisposable)?.Dispose(); // REMOVED - this was destroying reusable objects!
+            // Thread-safe check and increment to prevent race conditions
+            long currentCount;
+            do
+            {
+                currentCount = Interlocked.Read(ref _currentCount);
+                if (currentCount >= _maxPoolSize)
+                {
+                    // Pool is full, let object be garbage collected
+                    return;
+                }
+            } while (Interlocked.CompareExchange(ref _currentCount, currentCount + 1, currentCount) != currentCount);
 
-            // Only return to pool if we haven't exceeded capacity
-            var currentCount = Interlocked.Read(ref _currentCount);
-            if (currentCount < _maxPoolSize)
+            // Successfully incremented count, now enqueue the object
+            _objects.Enqueue(obj);
+        }
+
+        public void Reset()
+        {
+            // Thread-safe reset by draining and refilling the queue
+            var resetObjects = new List<T>();
+            
+            // Drain the queue
+            while (_objects.TryDequeue(out T item))
+            {
+                (item as VisualHFT.Commons.Model.IResettable)?.Reset();
+                (item as IList)?.Clear();
+                resetObjects.Add(item);
+            }
+            
+            // Refill the queue with reset objects
+            foreach (var obj in resetObjects)
             {
                 _objects.Enqueue(obj);
-                Interlocked.Increment(ref _currentCount);
             }
-            // If pool is full, let the object be garbage collected naturally
+            
+            // Update count to match actual queue size
+            Interlocked.Exchange(ref _currentCount, resetObjects.Count);
         }
 
         public int AvailableObjects => (int)Interlocked.Read(ref _currentCount);  // Cast to int for backward compatibility
