@@ -234,7 +234,7 @@ namespace VisualHFT.ViewModel
                 (x => x.LastUpdated), 
                 _AGGREGATED_LOB_OnAggregating);
             _AGGREGATED_LOB.OnRemoved += _AGGREGATED_LOB_OnRemoved;
-
+            _AGGREGATED_LOB.OnRemoving += _AGGREGATED_LOB_OnRemoving;
             HelperSymbol.Instance.OnCollectionChanged += ALLSYMBOLS_CollectionChanged;
             HelperProvider.Instance.OnDataReceived += PROVIDERS_OnDataReceived;
             HelperProvider.Instance.OnStatusChanged += PROVIDERS_OnStatusChanged;
@@ -255,6 +255,7 @@ namespace VisualHFT.ViewModel
 
 
         }
+
 
         ~vmOrderBook()
         {
@@ -573,10 +574,15 @@ namespace VisualHFT.ViewModel
                 lock (RealTimeSpreadModel.SyncRoot)
                     RealTimeSpreadModel.InvalidatePlot(true);
 
+
                 lock (CummulativeBidsChartModel.SyncRoot)
-                    CummulativeBidsChartModel.InvalidatePlot(true);
-                lock (CummulativeAsksChartModel.SyncRoot)
-                    CummulativeAsksChartModel.InvalidatePlot(true);
+                {
+                    lock (CummulativeAsksChartModel.SyncRoot)
+                    {
+                        CummulativeBidsChartModel.InvalidatePlot(true);
+                        CummulativeAsksChartModel.InvalidatePlot(true);
+                    }
+                }
 
                 _MARKETDATA_AVAILABLE = false; //to avoid ui update when no new data is coming in
             }
@@ -624,12 +630,15 @@ namespace VisualHFT.ViewModel
             // Enqueue for processing.
             _QUEUE.Add(snapshot);
         }
+        private void _AGGREGATED_LOB_OnRemoving(object? sender, OrderBookSnapshot e)
+        {
+            //we use this just to remove the object from the pool
+            OrderBookSnapshotPool.Instance.Return(e);
+        }
         private void _AGGREGATED_LOB_OnRemoved(object? sender, int index)
         {
             //for current snapshot, make sure to return to the pool 
-            if (index > -1)
-                OrderBookSnapshotPool.Instance.Return(_AGGREGATED_LOB[index]);
-            else
+            if (index == -1)
                 OrderBookSnapshotPool.Instance.Reset(); //reset the entire pool
 
             //remove last points on the chart
@@ -655,13 +664,17 @@ namespace VisualHFT.ViewModel
         /// <param name="lastItemAggregationCount">Counter indicating how many times the last item has been aggregated.</param>
         private void _AGGREGATED_LOB_OnAggregating(List<OrderBookSnapshot> dataCollection, OrderBookSnapshot newItem, int lastItemAggregationCount)
         {
-            var lastItem_TimeStamp = dataCollection[^1].LastUpdated;    //we should not lose the last item's TS
-            newItem.LastUpdated = lastItem_TimeStamp;                   //set the new item's TS to the last one
+            ////DON'T SO NOTHING
         }
 
         private void QUEUE_onReadAction(OrderBookSnapshot ob)
         {
-            if (_AGGREGATED_LOB.Add(ob))
+
+            bool addedOK = false;
+            lock (RealTimePricePlotModel.SyncRoot)
+                addedOK = _AGGREGATED_LOB.Add(ob);
+
+            if (addedOK)
             {
                 var lobItemToDisplay = ob;
                 double sharedTS = lobItemToDisplay.LastUpdated.ToOADate();
@@ -999,11 +1012,13 @@ namespace VisualHFT.ViewModel
                 if (_AGGREGATED_LOB != null)
                 {
                     _AGGREGATED_LOB.OnRemoved -= _AGGREGATED_LOB_OnRemoved;
+                    _AGGREGATED_LOB.OnRemoving -= _AGGREGATED_LOB_OnRemoving;
                     _AGGREGATED_LOB.Dispose();
                 }
                 _AGGREGATED_LOB = new AggregatedCollection<OrderBookSnapshot>(_aggregationLevelSelection, _MAX_CHART_POINTS,
                     x => x.LastUpdated, _AGGREGATED_LOB_OnAggregating);
                 _AGGREGATED_LOB.OnRemoved += _AGGREGATED_LOB_OnRemoved;
+                _AGGREGATED_LOB.OnRemoving += _AGGREGATED_LOB_OnRemoving;
             }
 
             Dispatcher.CurrentDispatcher.BeginInvoke(() =>
@@ -1205,6 +1220,7 @@ namespace VisualHFT.ViewModel
                     if (_AGGREGATED_LOB != null)
                     {
                         _AGGREGATED_LOB.OnRemoved -= _AGGREGATED_LOB_OnRemoved;
+                        _AGGREGATED_LOB.OnRemoving -= _AGGREGATED_LOB_OnRemoving;
                     }
                     _AGGREGATED_LOB?.Dispose();
                 }
