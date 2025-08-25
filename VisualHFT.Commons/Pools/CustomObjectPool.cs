@@ -76,24 +76,43 @@ namespace VisualHFT.Commons.Pools
             (obj as VisualHFT.Commons.Model.IResettable)?.Reset();
             (obj as IList)?.Clear();
 
-
-            // Only return to pool if we haven't exceeded capacity
-            var currentCount = Interlocked.Read(ref _currentCount);
-            if (currentCount < _maxPoolSize)
+            // Thread-safe check and increment to prevent race conditions
+            long currentCount;
+            do
             {
-                _objects.Enqueue(obj);
-                Interlocked.Increment(ref _currentCount);
-            }
-            // If pool is full, let the object be garbage collected naturally
+                currentCount = Interlocked.Read(ref _currentCount);
+                if (currentCount >= _maxPoolSize)
+                {
+                    // Pool is full, let object be garbage collected
+                    return;
+                }
+            } while (Interlocked.CompareExchange(ref _currentCount, currentCount + 1, currentCount) != currentCount);
+
+            // Successfully incremented count, now enqueue the object
+            _objects.Enqueue(obj);
         }
+
         public void Reset()
         {
-            foreach (var item in _objects)
+            // Thread-safe reset by draining and refilling the queue
+            var resetObjects = new List<T>();
+            
+            // Drain the queue
+            while (_objects.TryDequeue(out T item))
             {
                 (item as VisualHFT.Commons.Model.IResettable)?.Reset();
                 (item as IList)?.Clear();
+                resetObjects.Add(item);
             }
-            Interlocked.Exchange(ref _currentCount, 0);
+            
+            // Refill the queue with reset objects
+            foreach (var obj in resetObjects)
+            {
+                _objects.Enqueue(obj);
+            }
+            
+            // Update count to match actual queue size
+            Interlocked.Exchange(ref _currentCount, resetObjects.Count);
         }
 
         public int AvailableObjects => (int)Interlocked.Read(ref _currentCount);  // Cast to int for backward compatibility
