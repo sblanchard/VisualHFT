@@ -804,33 +804,71 @@ namespace VisualHFT.ViewModel
                 _spreadSeries.Points.Add(spreadPoint);
             }
         }
-        private double AddPointsToCumulativeAskVolumeChart(IEnumerable<DataPoint> cumulativeAskPoints)
+        private double AddPointsToCumulativeAskVolumeChart(IEnumerable<DataPoint> cumulativePoints)
         {
+            double retMaxValue = 0;
             //get series
             var _cumSeriesAsks = CummulativeAsksChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
-            //clear current values
-            _cumSeriesAsks?.Points.Clear();
-
-            //ADD POINTS
-            foreach (var item in cumulativeAskPoints)
+            if (_cumSeriesAsks == null)
+                return 0;
+            //RESET
+            for (int i = 0; i < _cumSeriesAsks.Points.Count; i++)
             {
-                _cumSeriesAsks?.Points.Add(item);
+                var point = _cumSeriesAsks.Points[i];
+                point.X = 0;
+                point.Y = 0;
             }
-            return cumulativeAskPoints?.LastOrDefault().Y ?? 0;
+            //UPDATE / ADD POINTS
+            for (int i = 0; i < cumulativePoints.Count(); i++)
+            {
+                retMaxValue = Math.Max(retMaxValue, cumulativePoints.ElementAt(i).Y);
+                if (i >= _cumSeriesAsks.Points.Count)
+                {
+                    var newPoint = new DataPoint(cumulativePoints.ElementAt(i).X, cumulativePoints.ElementAt(i).Y);
+                    _cumSeriesAsks.Points.Add(newPoint);
+                    continue;
+                }
+                var point = _cumSeriesAsks.Points[i];
+                point.X = cumulativePoints.ElementAt(i).X;
+                point.Y = cumulativePoints.ElementAt(i).Y;
+            }
+            //remove extra zeroed points
+            _cumSeriesAsks.Points.RemoveAll(p => p.X == 0 && p.Y == 0);
+
+            return retMaxValue;
         }
-        private double AddPointsToCumulativeBidVolumeChart(IEnumerable<DataPoint> cumulativeBidPoints)
+        private double AddPointsToCumulativeBidVolumeChart(IEnumerable<DataPoint> cumulativePoints)
         {
+            double retMaxValue = 0;
             //get series
             var _cumSeriesBids = CummulativeBidsChartModel.Series[0] as OxyPlot.Series.TwoColorAreaSeries;
-            //clear current values
-            _cumSeriesBids?.Points.Clear();
-
-            //ADD POINTS
-            foreach (var item in cumulativeBidPoints)
+            if (_cumSeriesBids == null)
+                return 0;
+            //RESET
+            for (int i = 0; i < _cumSeriesBids.Points.Count; i++)
             {
-                _cumSeriesBids?.Points.Add(item);
+                var point = _cumSeriesBids.Points[i];
+                point.X = 0;
+                point.Y = 0;
             }
-            return cumulativeBidPoints?.LastOrDefault().Y ?? 0;
+            //UPDATE / ADD POINTS
+            for (int i = 0; i < cumulativePoints.Count(); i++)
+            {
+                retMaxValue = Math.Max(retMaxValue, cumulativePoints.ElementAt(i).Y);
+                if (i >= _cumSeriesBids.Points.Count)
+                {
+                    var newPoint = new DataPoint(cumulativePoints.ElementAt(i).X, cumulativePoints.ElementAt(i).Y);
+                    _cumSeriesBids.Points.Add(newPoint);
+                    continue;
+                }
+                var point = _cumSeriesBids.Points[i];
+                point.X = cumulativePoints.ElementAt(i).X;
+                point.Y = cumulativePoints.ElementAt(i).Y;
+            }
+            //remove extra zeroed points
+            _cumSeriesBids.Points.RemoveAll(p => p.X == 0 && p.Y == 0);
+
+            return retMaxValue;
         }
         private void SetMaximumsToCumulativeBidVolumeCharts(double maxCumulativeVol)
         {
@@ -968,6 +1006,11 @@ namespace VisualHFT.ViewModel
 
         private void Clear()
         {
+            HelperTrade.Instance.Unsubscribe(TRADES_OnDataReceived);
+            HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
+
+
+
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 lock (MTX_TRADES)
@@ -979,8 +1022,6 @@ namespace VisualHFT.ViewModel
             });
 
             _QUEUE.Clear(); //make this outside the LOCK, otherwise we could run into a deadlock situation when calling back 
-            OrderBookSnapshotPool.Instance.Reset(); //reset the entire pool
-            ScatterPointsPool.Instance.Reset();
             //clean series
             lock (MTX_SNAPSHOTS)
             { 
@@ -1016,6 +1057,9 @@ namespace VisualHFT.ViewModel
                 _AGGREGATED_LOB.OnRemoving += _AGGREGATED_LOB_OnRemoving;
             }
 
+            OrderBookSnapshotPool.Instance.Reset(); //reset the entire pool
+            ScatterPointsPool.Instance.Reset();
+
             Dispatcher.CurrentDispatcher.BeginInvoke(() =>
             {
                 uiUpdaterAction(); //update ui before the Timer starts again.
@@ -1031,6 +1075,10 @@ namespace VisualHFT.ViewModel
                 uiUpdater = new UIUpdater(uiUpdaterAction, _aggregationForUI.TotalMilliseconds);
                 uiUpdater.Start();
             });
+
+            HelperTrade.Instance.Subscribe(TRADES_OnDataReceived);
+            HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
+
 
         }
 
