@@ -24,7 +24,7 @@ namespace VisualHFT.Commons.Pools
             _currentCount = 0;
 
             // Pre-warm the pool with initial objects
-            for (int i = 0; i < Math.Min(maxPoolSize / 10, 100); i++)
+            for (int i = 0; i < maxPoolSize; i++)
             {
                 var obj = new T();
                 _objects.Enqueue(obj);
