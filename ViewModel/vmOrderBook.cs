@@ -131,10 +131,6 @@ using VisualHFT.Commons.Model;
 
 namespace VisualHFT.ViewModel
 {
-    public static class ListPool<T>
-    {
-        public static readonly CustomObjectPool<List<T>> Instance = new CustomObjectPool<List<T>>(maxPoolSize: 1000);
-    }
     public class vmOrderBook : BindableBase, IDisposable
     {
         private static readonly int _MAX_CHART_POINTS = 5000;
@@ -144,10 +140,14 @@ namespace VisualHFT.ViewModel
         
         private static class OrderBookSnapshotPool
         {
-            // Create a pool for OrderBookSnapshot objects.
-            public static readonly CustomObjectPool<OrderBookSnapshot> Instance = new CustomObjectPool<OrderBookSnapshot>(maxPoolSize: _MAX_CHART_POINTS + (int)(_MAX_CHART_POINTS*1.1));
+            public static readonly CustomObjectPool<OrderBookSnapshot> Instance = new 
+                CustomObjectPool<OrderBookSnapshot>(maxPoolSize: _MAX_CHART_POINTS + (int)(_MAX_CHART_POINTS*1.1));
         }
-
+        private static class ScatterPointsPool
+        {
+            public static readonly CustomObjectPool<OxyPlot.Series.ScatterPoint> Instance = 
+                new(maxPoolSize: _MAX_CHART_POINTS * 50 * 2);
+        }
 
         private bool _disposed = false; // to track whether the object has been disposed
         private readonly object MTX_TRADES = new object();
@@ -181,7 +181,6 @@ namespace VisualHFT.ViewModel
         private UIUpdater uiUpdater;
 
         private readonly Stack<VisualHFT.Model.Trade> _realTimeTrades;
-        private VisualHFT.Commons.Pools.CustomObjectPool<OxyPlot.Series.ScatterPoint> _objectPool_ScatterPoint;
         private HelperCustomQueue<OrderBookSnapshot> _QUEUE;
         private AggregatedCollection<OrderBookSnapshot> _AGGREGATED_LOB;
 
@@ -201,8 +200,6 @@ namespace VisualHFT.ViewModel
             RealTimeSpreadModel = new PlotModel();
             CummulativeBidsChartModel = new PlotModel();
             CummulativeAsksChartModel = new PlotModel();
-
-            _objectPool_ScatterPoint = new CustomObjectPool<OxyPlot.Series.ScatterPoint>(_MAX_CHART_POINTS * 1000);
 
             _QUEUE = new HelperCustomQueue<OrderBookSnapshot>($"<OrderBookSnapshot>_vmOrderBook", QUEUE_onReadAction, QUEUE_onErrorAction);
 
@@ -776,7 +773,7 @@ namespace VisualHFT.ViewModel
 
                 if (lob.Price > 0 && lob.Size != 0)
                 {
-                    var newScatter = _objectPool_ScatterPoint.Get();
+                    var newScatter = ScatterPointsPool.Instance.Get();
                     newScatter.X = sharedTS;
                     newScatter.Y = lob.Price.Value;
                     newScatter.Size = visualSize;
@@ -951,19 +948,17 @@ namespace VisualHFT.ViewModel
                 {
                     if (serie.Title == "ScatterAsks")
                     {
-                        var pointsToRemove = _scatter.Points.Where(p => p.X <= tsToRemove);
-                        _objectPool_ScatterPoint.Return(pointsToRemove);
                         while (_scatter.Points.Count > 0 && _scatter.Points[0].X <= tsToRemove)
                         {
+                            ScatterPointsPool.Instance.Return(_scatter.Points[0]);
                             _scatter.Points.RemoveAt(0);
                         }
                     }
                     else if (serie.Title == "ScatterBids")
                     {
-                        var pointsToRemove = _scatter.Points.Where(p => p.X <= tsToRemove);
-                        _objectPool_ScatterPoint.Return(pointsToRemove);
                         while (_scatter.Points.Count > 0 && _scatter.Points[0].X <= tsToRemove)
                         {
+                            ScatterPointsPool.Instance.Return(_scatter.Points[0]);
                             _scatter.Points.RemoveAt(0);
                         }
                     }
@@ -985,6 +980,7 @@ namespace VisualHFT.ViewModel
 
             _QUEUE.Clear(); //make this outside the LOCK, otherwise we could run into a deadlock situation when calling back 
             OrderBookSnapshotPool.Instance.Reset(); //reset the entire pool
+            ScatterPointsPool.Instance.Reset();
             //clean series
             lock (MTX_SNAPSHOTS)
             { 
@@ -1007,8 +1003,7 @@ namespace VisualHFT.ViewModel
 
                 _AskTOB_SPLIT.Clear();
                 _BidTOB_SPLIT.Clear();
-                
-                _objectPool_ScatterPoint = new CustomObjectPool<OxyPlot.Series.ScatterPoint>(_MAX_CHART_POINTS * 1000);
+
                 if (_AGGREGATED_LOB != null)
                 {
                     _AGGREGATED_LOB.OnRemoved -= _AGGREGATED_LOB_OnRemoved;
@@ -1213,7 +1208,7 @@ namespace VisualHFT.ViewModel
                     _bidsGrid?.Clear();
                     _asksGrid?.Clear();
                     _providers?.Clear();
-                    _objectPool_ScatterPoint?.Dispose();
+                    ScatterPointsPool.Instance.Dispose();
                     OrderBookSnapshotPool.Instance.Dispose();
                     _QUEUE?.Dispose();
 
