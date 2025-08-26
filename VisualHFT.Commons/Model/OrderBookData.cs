@@ -136,8 +136,7 @@ namespace VisualHFT.Model
 
         public void Reset()
         {
-            _Bids?.Clear();
-            _Asks?.Clear();
+            Clear();
             Symbol = "";
             PriceDecimalPlaces = 0;
             SizeDecimalPlaces = 0;
@@ -147,8 +146,25 @@ namespace VisualHFT.Model
         }
         public void Clear()
         {
-            Bids?.Clear();
-            Asks?.Clear();
+            if (_Asks.Count() > 0)
+            {
+                // FIXED: Return to shared pool instead of instance pool
+                foreach (var item in _Asks)
+                {
+                    BookItemPool.Return(item);
+                }
+                _Asks.Clear();
+            }
+
+            if (_Bids.Count() > 0)
+            {
+                // FIXED: Return to shared pool instead of instance pool
+                foreach (var item in _Bids)
+                {
+                    BookItemPool.Return(item);
+                }
+                _Bids.Clear();
+            }
         }
 
         protected virtual void Dispose(bool disposing)
