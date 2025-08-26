@@ -1,5 +1,6 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Collections;
+using System.Diagnostics;
 
 namespace VisualHFT.Commons.Pools
 {
@@ -11,6 +12,7 @@ namespace VisualHFT.Commons.Pools
     {
         private readonly ConcurrentQueue<T> _objects = new ConcurrentQueue<T>();
         private readonly int _maxPoolSize;
+        private readonly string _instantiator; // Track who created this pool
         private long _currentCount;  // Changed from int to long for Interlocked operations
         private bool _disposed = false;
         private long _totalGets;
@@ -22,6 +24,9 @@ namespace VisualHFT.Commons.Pools
         {
             _maxPoolSize = maxPoolSize;
             _currentCount = 0;
+            
+            // Capture the instantiator information from the stack trace
+            _instantiator = GetInstantiator();
 
             // Pre-warm the pool with initial objects
             for (int i = 0; i < maxPoolSize; i++)
@@ -30,6 +35,33 @@ namespace VisualHFT.Commons.Pools
                 _objects.Enqueue(obj);
                 Interlocked.Increment(ref _currentCount);
                 Interlocked.Increment(ref _totalCreated);
+            }
+        }
+
+        private string GetInstantiator()
+        {
+            try
+            {
+                var stackTrace = new StackTrace();
+                var frames = stackTrace.GetFrames();
+                
+                // Skip the first frame (this method) and the constructor frame
+                // Look for the first frame that's not in this class
+                for (int i = 2; i < frames.Length; i++)
+                {
+                    var method = frames[i].GetMethod();
+                    if (method?.DeclaringType != null && method.DeclaringType != typeof(CustomObjectPool<T>))
+                    {
+                        var declaringType = method.DeclaringType;
+                        return $"{declaringType.Namespace}.{declaringType.Name}";
+                    }
+                }
+                
+                return "Unknown";
+            }
+            catch
+            {
+                return "Unknown";
             }
         }
 
@@ -46,10 +78,10 @@ namespace VisualHFT.Commons.Pools
             // Pool exhausted - create new object (but log this for monitoring)
             Interlocked.Increment(ref _totalCreated);
 
-            if (_totalCreated % 1000 == 0) // Log every 1000 creations
+            if (_totalCreated % 3000 == 0) // Log every 3000 creations
             {
                 var typeName = typeof(T).Name;
-                log.Warn($"CustomObjectPool<{typeName}> exhausted - created {_totalCreated} total objects. Consider increasing pool size.");
+                log.Warn($"CustomObjectPool<{typeName}> exhausted - created {_totalCreated} total objects. Consider increasing pool size. Instantiated by: {_instantiator}");
             }
 
             return new T();
