@@ -4,9 +4,8 @@ using VisualHFT.Model;
 
 namespace VisualHFT.Commons.Model
 {
-    public class OrderBookSnapshot : IDisposable, IResettable
+    public class OrderBookSnapshot : IResettable
     {
-        // REMOVED: private CustomObjectPool<BookItem> _bookItemPool - now using shared pool
         private List<BookItem> _asks;
         private List<BookItem> _bids;
         private string _symbol;
@@ -17,7 +16,6 @@ namespace VisualHFT.Commons.Model
         private int _maxDepth;
         private double _imbalanceValue;
         private DateTime _lastUpdated;
-        private bool _disposed = false;
 
         public List<BookItem> Asks
         {
@@ -94,9 +92,6 @@ namespace VisualHFT.Commons.Model
             if (master == null)
                 throw new ArgumentNullException(nameof(master));
 
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(OrderBookSnapshot));
-
             this.Symbol = master.Symbol;
             this.ProviderID = master.ProviderID;
             this.ProviderName = master.ProviderName;
@@ -114,7 +109,6 @@ namespace VisualHFT.Commons.Model
         {
             if (from == null)
             {
-                ClearBookItems(to); // still clear if source is null
                 return;
             }
 
@@ -131,10 +125,38 @@ namespace VisualHFT.Commons.Model
             }
         }
 
+        // Reset the snapshot to a clean state - properly implements IResettable
+        public void Reset()
+        {
+            ClearBookItems(_asks);
+            ClearBookItems(_bids);
+
+            // Reset all properties to default values
+            _symbol = null;
+            _priceDecimalPlaces = 0;
+            _sizeDecimalPlaces = 0;
+            _providerId = 0;
+            _providerName = null;
+            _maxDepth = 0;
+            _imbalanceValue = 0;
+            _lastUpdated = DateTime.MinValue;
+        }
+        private void ClearBookItems(List<BookItem> list)
+        {
+            if (list == null) return;
+
+            // CHANGED: Return all valid items to the shared pool before clearing
+            foreach (var item in list)
+            {
+                BookItemPool.Return(item);
+            }
+
+            list.Clear();
+        }
+
+
         public BookItem GetTOB(bool isBid)
         {
-            if (_disposed) return null;
-
             if (isBid)
             {
                 return _bids?.Count > 0 ? _bids[0] : null;
@@ -149,8 +171,6 @@ namespace VisualHFT.Commons.Model
         {
             get
             {
-                if (_disposed) return 0;
-
                 var _bidTOP = GetTOB(true);
                 var _askTOP = GetTOB(false);
                 if (_bidTOP?.Price.HasValue == true && _askTOP?.Price.HasValue == true)
@@ -165,8 +185,6 @@ namespace VisualHFT.Commons.Model
         {
             get
             {
-                if (_disposed) return 0;
-
                 var _bidTOP = GetTOB(true);
                 var _askTOP = GetTOB(false);
                 if (_bidTOP?.Price.HasValue == true && _askTOP?.Price.HasValue == true)
@@ -179,9 +197,6 @@ namespace VisualHFT.Commons.Model
 
         public Tuple<double, double> GetMinMaxSizes()
         {
-            if (_disposed)
-                return new Tuple<double, double>(0, 0);
-
             if (Asks == null || Bids == null || Asks.Count == 0 || Bids.Count == 0)
                 return new Tuple<double, double>(0, 0);
 
@@ -212,68 +227,5 @@ namespace VisualHFT.Commons.Model
             return hasValidValue ? Tuple.Create(minVal, maxVal) : new Tuple<double, double>(0, 0);
         }
 
-        private void ClearBookItems(List<BookItem> list)
-        {
-            if (list == null) return;
-
-            // CHANGED: Return all valid items to the shared pool before clearing
-            foreach (var item in list)
-            {
-                if (item != null)
-                {
-                    BookItemPool.Return(item);
-                }
-            }
-
-            list.Clear();
-        }
-
-        // Reset the snapshot to a clean state - properly implements IResettable
-        public void Reset()
-        {
-            if (_disposed) return;
-
-            ClearBookItems(_asks);
-            ClearBookItems(_bids);
-
-            // Reset all properties to default values
-            _symbol = null;
-            _priceDecimalPlaces = 0;
-            _sizeDecimalPlaces = 0;
-            _providerId = 0;
-            _providerName = null;
-            _maxDepth = 0;
-            _imbalanceValue = 0;
-            _lastUpdated = DateTime.MinValue;
-        }
-
-        // FIXED: Proper disposal pattern for pooled objects
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_disposed) return;
-
-            if (disposing)
-            {
-                // Clear the snapshot data and return BookItems to pool
-                Reset();
-
-                // NOTE: We don't set _disposed = true here because this object
-                // will be reused from the pool. The disposal here just cleans up resources.
-                // The _disposed flag is only used to prevent usage during active disposal.
-            }
-
-            // Don't set _disposed = true for pooled objects that will be reused
-        }
-
-        ~OrderBookSnapshot()
-        {
-            Dispose(false);
-        }
     }
 }

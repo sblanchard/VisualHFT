@@ -342,25 +342,8 @@ namespace VisualHFT.Model
             lock (_data.Lock)
             {
                 // Clear existing data and return items to shared pool to avoid allocation
-                if (_data.Asks.Count() > 0)
-                {
-                    // FIXED: Return to shared pool instead of instance pool
-                    foreach (var item in _data.Asks)
-                    {
-                        BookItemPool.Return(item);
-                    }
-                    _data.Asks.Clear();
-                }
+                _data.Clear();
 
-                if (_data.Bids.Count() > 0)
-                {
-                    // FIXED: Return to shared pool instead of instance pool
-                    foreach (var item in _data.Bids)
-                    {
-                        BookItemPool.Return(item);
-                    }
-                    _data.Bids.Clear();
-                }
 
                 // Copy asks using shared pooled objects
                 if (asks != null)

@@ -1,4 +1,4 @@
-﻿using VisualHFT.Model;
+using VisualHFT.Model;
 using System.Runtime.CompilerServices;
 
 namespace VisualHFT.Commons.Pools
@@ -34,7 +34,7 @@ namespace VisualHFT.Commons.Pools
     /// 
     /// PERFORMANCE CHARACTERISTICS:
     /// ----------------------------
-    /// • Capacity: 800,000 objects
+    /// • Capacity: POOL_SIZE objects
     /// • Reset time: ~1µs per object (field clearing)
     /// • Throughput: >6M operations/second (was 4.3M with reflection)
     /// • Latency: <170ns per operation (was 228ns with reflection)
@@ -84,13 +84,17 @@ namespace VisualHFT.Commons.Pools
     /// </summary>
     public static class BookItemL2Pool
     {
+        // Pool size configuration
+        private const int POOL_SIZE = 5_000_000;
+
         // Thread-safe: CustomObjectPool<T> uses Interlocked operations internally
-        private static readonly CustomObjectPool<BookItem> _instance = new CustomObjectPool<BookItem>(maxPoolSize: 800_000);
+        private static readonly CustomObjectPool<BookItem> _instance =
+            new CustomObjectPool<BookItem>(maxPoolSize: POOL_SIZE);
 
         // Thread-safe statistics using long fields (accessed via Interlocked)
         private static long _totalGets = 0;
         private static long _totalReturns = 0;
-        private static long _peakUtilization = 0; // Stored as integer (0-800_000) for atomic operations
+        private static long _peakUtilization = 0; // Stored as integer (0-POOL_SIZE) for atomic operations
 
         /// <summary>
         /// Thread-safe: Gets a BookItem from the pool.
@@ -103,7 +107,7 @@ namespace VisualHFT.Commons.Pools
             var item = _instance.Get();
 
             // Track peak utilization atomically
-            var currentUtilization = (long)(_instance.UtilizationPercentage * 800_000); // Store as integer (0-800_000)
+            var currentUtilization = (long)(_instance.UtilizationPercentage * POOL_SIZE); // Store as integer (0-POOL_SIZE)
             var currentPeak = Interlocked.Read(ref _peakUtilization);
             if (currentUtilization > currentPeak)
             {
@@ -194,7 +198,7 @@ namespace VisualHFT.Commons.Pools
         /// <summary>
         /// Thread-safe: Gets the peak utilization percentage reached (0.0 to 1.0).
         /// </summary>
-        public static double PeakUtilization => Interlocked.Read(ref _peakUtilization) / 800_000.0;
+        public static double PeakUtilization => Interlocked.Read(ref _peakUtilization) / (double)POOL_SIZE;
 
         /// <summary>
         /// Thread-safe: Gets information about current pool status for monitoring/debugging.
@@ -234,7 +238,7 @@ namespace VisualHFT.Commons.Pools
                 TotalGets = TotalGets,
                 TotalReturns = TotalReturns,
                 Outstanding = TotalGets - TotalReturns,
-                PoolSize = 800_000
+                PoolSize = POOL_SIZE
             };
         }
     }
@@ -252,7 +256,7 @@ namespace VisualHFT.Commons.Pools
         public long Outstanding { get; init; }
         public int PoolSize { get; init; }
 
-        public bool IsHealthy => CurrentUtilization < 0.9 && Outstanding >= 0;
+        public bool IsHealthy => CurrentUtilization < 0.9999 && Outstanding >= 0;
         public bool IsCritical => CurrentUtilization > 0.9;
         public bool HasLeaks => Outstanding > PoolSize * 1.5;
 

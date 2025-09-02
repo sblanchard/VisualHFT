@@ -17,7 +17,7 @@ using Legend = OxyPlot.Legends.Legend;
 using LinearAxis = OxyPlot.Axes.LinearAxis;
 using LineSeries = OxyPlot.Series.LineSeries;
 using VisualHFT.Commons.Helpers;
-using VisualHFT.Commons.Model;
+using VisualHFT.Commons.Pools; // Add for CustomObjectPool
 
 
 namespace VisualHFT.ViewModels
@@ -28,8 +28,6 @@ namespace VisualHFT.ViewModels
         private List<IStudy> _studies = new List<IStudy>();
         private ISetting _settings;
         private PluginManager.IPlugin _plugin;
-        private string _selectedSymbol;
-        private VisualHFT.ViewModel.Model.Provider _selectedProvider;
 
         HelperCustomQueue<BaseStudyModel> _QUEUE;
         private Dictionary<string, AggregatedCollection<PlotInfo>> _dataByStudy;
@@ -41,11 +39,15 @@ namespace VisualHFT.ViewModels
         private LinearAxis yAxe = null;
         private double _lastMarketMidPrice = 0;
 
-        private int _MAX_ITEMS = 1300;
+        private int _MAX_ITEMS = 1500;
         private UIUpdater uiUpdater;
         private readonly object _LOCK = new object();
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
+        // PERFORMANCE FIX: Object pools to eliminate allocation pressure from high-frequency callbacks
+        // Pool sizes based on chart capacity (1500) with reasonable safety margins
+        private static readonly CustomObjectPool<BaseStudyModel> _baseStudyModelPool = new CustomObjectPool<BaseStudyModel>(15000); // 15K - high turnover from callbacks
+        private static readonly CustomObjectPool<PlotInfo> _plotInfoPool = new CustomObjectPool<PlotInfo>(30000); // 30K - retained in AggregatedCollections + processing overhead
 
         public vmChartStudy(IStudy study)
         {
@@ -55,11 +57,11 @@ namespace VisualHFT.ViewModels
             _plugin = (PluginManager.IPlugin)study;
             StudyAxisTitle = study.TileTitle;
 
-            RaisePropertyChanged(nameof(StudyAxisTitle));
             OpenSettingsCommand = new RelayCommand<vmTile>(OpenSettings);
             CreatePlotModel();
             InitializeData();
             uiUpdater = new UIUpdater(uiUpdaterAction);
+            RaisePropertyChanged(nameof(StudyAxisTitle));
         }
         public vmChartStudy(IMultiStudy multiStudy)
         {
@@ -72,11 +74,11 @@ namespace VisualHFT.ViewModels
             _plugin = (PluginManager.IPlugin)multiStudy;
             StudyAxisTitle = multiStudy.TileTitle;
 
-            RaisePropertyChanged(nameof(StudyAxisTitle));
             OpenSettingsCommand = new RelayCommand<vmTile>(OpenSettings);
             CreatePlotModel();
             InitializeData();
             uiUpdater = new UIUpdater(uiUpdaterAction);
+            RaisePropertyChanged(nameof(StudyAxisTitle));
         }
 
         ~vmChartStudy()
@@ -99,12 +101,13 @@ namespace VisualHFT.ViewModels
                * IDEALLY, USE QUEUES TO DECOUPLE
              * ***************************************************************************************************
              */
-            var newModel = new BaseStudyModel();
+
+            // Use object pool instead of new allocation
+            var newModel = _baseStudyModelPool.Get();
             newModel.copyFrom(e);
             newModel.Tag = ((IStudy)sender).TileTitle;
             _QUEUE.Add(newModel);
         }
-
 
         private void QUEUE_onReadAction(BaseStudyModel item)
         {
@@ -123,8 +126,11 @@ namespace VisualHFT.ViewModels
                     if (item.MarketMidPrice > 0)
                         _lastMarketMidPrice = (double)item.MarketMidPrice;
 
-                    //ADD CURRENT STUDY/SERIE
-                    var pointToAdd = new PlotInfo() { Date = item.Timestamp, Value = (double)item.Value };
+                    // Use object pool for PlotInfo
+                    var pointToAdd = _plotInfoPool.Get();
+                    pointToAdd.Date = item.Timestamp;
+                    pointToAdd.Value = (double)item.Value;
+
                     isAddSuccess = _dataByStudy[keyTitle].Add(pointToAdd);
                     //if is successfully added (according to its aggregation level), proceed with adding it into the series, and then all the other studies/series (to keep the same peace)
                     if (isAddSuccess)
@@ -169,7 +175,11 @@ namespace VisualHFT.ViewModels
                 HelperNotificationManager.Instance.AddNotification(this.StudyTitle, _error, HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.CORE);
                 Clear();
             }
-
+            finally
+            {
+                // Return the BaseStudyModel to pool after processing
+                _baseStudyModelPool.Return(item);
+            }
         }
         private void QUEUE_onErrorAction(Exception ex)
         {
@@ -181,8 +191,17 @@ namespace VisualHFT.ViewModels
         {
             if (!_IS_DATA_AVAILABLE)
                 return;
+
+            // Check if disposed or disposing
+            if (_disposed)
+                return;
+
             lock (_LOCK)
             {
+                // Double-check collections aren't disposed
+                if (MyPlotModel == null || _dataByStudy == null)
+                    return;
+
                 RaisePropertyChanged(nameof(MyPlotModel));
                 MyPlotModel?.InvalidatePlot(true);
             }
@@ -215,9 +234,6 @@ namespace VisualHFT.ViewModels
                          _settings.Provider?.ProviderName + " " +
                          "[" + _settings.AggregationLevel.ToString() + "]";
             RaisePropertyChanged(nameof(StudyTitle));
-
-            _selectedSymbol = _settings.Symbol;
-            _selectedProvider = new ViewModel.Model.Provider(_settings.Provider);
         }
         private void CreatePlotModel()
         {
@@ -342,11 +358,19 @@ namespace VisualHFT.ViewModels
         }
         private void Clear()
         {
+            // Clear queue and wait for processing to finish
             _QUEUE.Clear(); //make this outside the LOCK, otherwise we could run into a deadlock situation when calling back 
 
+            // Now safe to dispose collections
             lock (_LOCK)
             {
+                // Stop UIUpdater before disposing collections to prevent race conditions
                 uiUpdater?.Stop();
+
+                // Give UI thread a moment to finish any pending timer events
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // Now safe to dispose UIUpdater
                 uiUpdater?.Dispose();
 
                 if (MyPlotModel.Series != null)
@@ -379,8 +403,9 @@ namespace VisualHFT.ViewModels
 
             uiUpdater = new UIUpdater(uiUpdaterAction, _settings.AggregationLevel.ToTimeSpan().TotalMilliseconds);
             RefreshSettingsUI();
+            // Force cleanup of old objects after settings change
+            GC.Collect(0, GCCollectionMode.Optimized);
         }
-
 
         /// <summary>
         /// This method defines how the internal AggregatedCollection should aggregate incoming items.
@@ -432,12 +457,38 @@ namespace VisualHFT.ViewModels
             {
                 if (disposing)
                 {
+                    // Stop new data first - unsubscribe from events
+                    lock (_LOCK)
+                    {
+                        if (_studies != null)
+                        {
+                            foreach (var s in _studies)
+                            {
+                                s.OnCalculated -= _study_OnCalculated;
+                            }
+                            _studies.Clear();
+                        }
+                    }
+
+                    // Stop and dispose UIUpdater before disposing collections
+                    uiUpdater?.Stop();
+
+                    // Ensure UI thread processes any pending timer events
+                    try
+                    {
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    }
+                    catch
+                    {
+                        // Ignore dispatcher errors during shutdown
+                    }
+
+                    uiUpdater?.Dispose();
+
+                    // Dispose queue and data collections
                     _QUEUE?.Dispose();
-                    uiUpdater.Stop();
-                    uiUpdater.Dispose();
 
-
-                    if (MyPlotModel.Series != null)
+                    if (MyPlotModel?.Series != null)
                     {
                         foreach (var s in MyPlotModel.Series)
                         {
@@ -461,14 +512,6 @@ namespace VisualHFT.ViewModels
                             s.Value.Points.Clear();
                         }
                         _seriesByStudy.Clear();
-                    }
-                    if (_studies != null)
-                    {
-                        foreach (var s in _studies)
-                        {
-                            s.OnCalculated -= _study_OnCalculated;
-                        }
-                        _studies.Clear();
                     }
                     _seriesMarket?.Points.Clear();
                     MyPlotModel = null;
