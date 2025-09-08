@@ -250,8 +250,9 @@ namespace VisualHFT.Commons.Pools
         public long TotalGets => Interlocked.Read(ref _totalGets);
         public long TotalReturns => Interlocked.Read(ref _totalReturns);
         public long TotalCreated => Interlocked.Read(ref _totalCreated);
-        public bool IsHealthy => _totalCreated < _maxPoolSize * 2; // Should not create more than 2x pool size
-
+        public bool IsHealthy => _totalCreated < _maxPoolSize * 2   // Should not create more than 2x pool size
+                                 && UtilizationPercentage < 0.95    // Should not be more than 95% utilized
+            ;
         public void Dispose()
         {
             if (_disposed) return;
