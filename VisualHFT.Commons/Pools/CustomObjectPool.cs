@@ -57,27 +57,43 @@ namespace VisualHFT.Commons.Pools
 
         private static int GetNextPowerOfTwo(int value)
         {
+            // Handle edge cases
             if (value <= 1) return 1;
-            if (value <= 2) return 2;
-            if (value <= 4) return 4;
-            if (value <= 8) return 8;
-            if (value <= 16) return 16;
-            if (value <= 32) return 32;
-            if (value <= 64) return 64;
-            if (value <= 128) return 128;
-            if (value <= 256) return 256;
-            if (value <= 512) return 512;
-            if (value <= 1024) return 1024;
-            if (value <= 2048) return 2048;
-            if (value <= 4096) return 4096;
-            if (value <= 8192) return 8192;
-            if (value <= 16384) return 16384;
-            if (value <= 32768) return 32768;
-            if (value <= 65536) return 65536;
-            if (value <= 131072) return 131072;
-            if (value <= 262144) return 262144;
-            if (value <= 524288) return 524288;
-            return 1048576; // 1M max
+
+            // For small values, use the fast path
+            if (value <= 1024)
+            {
+                if (value <= 2) return 2;
+                if (value <= 4) return 4;
+                if (value <= 8) return 8;
+                if (value <= 16) return 16;
+                if (value <= 32) return 32;
+                if (value <= 64) return 64;
+                if (value <= 128) return 128;
+                if (value <= 256) return 256;
+                if (value <= 512) return 512;
+                return 1024;
+            }
+
+            // For larger values, use bit manipulation for dynamic calculation
+            // This approach can handle up to 1,073,741,824 (1 billion) objects
+            value--;
+            value |= value >> 1;
+            value |= value >> 2;
+            value |= value >> 4;
+            value |= value >> 8;
+            value |= value >> 16;
+            value++;
+
+            // Ensure we don't overflow int (max power of 2 for int is 1,073,741,824)
+            if (value <= 0 || value > 1073741824)
+            {
+                throw new ArgumentException(
+                    $"Pool size {value:N0} is too large. Maximum supported size is 1,073,741,824 (1 billion) objects. " +
+                    $"Consider using multiple smaller pools or redesigning your architecture for sizes above 1 billion.");
+            }
+
+            return value;
         }
 
         private string GetInstantiator()
@@ -157,10 +173,11 @@ namespace VisualHFT.Commons.Pools
 
         public void Return(IEnumerable<T> listObjs)
         {
-            var count = listObjs?.Count() ?? 0;
-            for (int i = 0; i < count; i++)
+            if (listObjs == null) return;
+
+            foreach (var obj in listObjs)
             {
-                Return(listObjs.ElementAt(i));
+                Return(obj);  // This will now correctly track each individual return
             }
         }
 
@@ -169,8 +186,6 @@ namespace VisualHFT.Commons.Pools
         {
             if (obj == null || _disposed)
                 return;
-
-            Interlocked.Increment(ref _totalReturns);
 
             // Reset object state before returning to pool
             (obj as VisualHFT.Commons.Model.IResettable)?.Reset();
@@ -188,6 +203,7 @@ namespace VisualHFT.Commons.Pools
                 if (currentSize >= _maxPoolSize)
                 {
                     // Pool is full: let GC collect this instance
+                    // Note: _totalReturns is NOT incremented because object was not actually returned to pool
                     return;
                 }
 
@@ -198,6 +214,9 @@ namespace VisualHFT.Commons.Pools
             // Store object in array using fast modulo (bitwise AND with mask)
             var index = (int)(currentTail & _mask);
             _objects[index] = obj;
+
+            // Only increment counter AFTER successful return to pool
+            Interlocked.Increment(ref _totalReturns);
         }
 
         public void Reset()
@@ -242,17 +261,46 @@ namespace VisualHFT.Commons.Pools
             get
             {
                 if (_maxPoolSize == 0) return 0;
-                var available = AvailableObjects;
-                return Math.Max(0, 1.0 - (available / (double)_maxPoolSize));
+
+                var totalGets = Interlocked.Read(ref _totalGets);
+                var totalReturns = Interlocked.Read(ref _totalReturns);
+                var outstanding = Math.Max(0, totalGets - totalReturns);
+
+                // True utilization: objects currently in use / total pool capacity
+                return Math.Max(0.0, Math.Min(1.0, outstanding / (double)_maxPoolSize));
             }
         }
 
+        /// <summary>
+        /// Gets the pool efficiency ratio (objects from pool vs total objects created).
+        /// Values closer to 1.0 indicate better pool efficiency.
+        /// </summary>
+        public double PoolEfficiency
+        {
+            get
+            {
+                var totalGets = Interlocked.Read(ref _totalGets);
+                var totalCreated = Interlocked.Read(ref _totalCreated);
+
+                if (totalGets == 0) return 1.0; // No gets yet, consider efficient
+
+                var objectsFromPool = totalGets - totalCreated;
+                return Math.Max(0, Math.Min(1.0, objectsFromPool / (double)totalGets));
+            }
+        }
+
+        /// <summary>
+        /// Gets the outstanding objects count (gets - returns).
+        /// Positive values may indicate memory leaks or high concurrent usage.
+        /// </summary>
+        public long Outstanding => Math.Max(0, Interlocked.Read(ref _totalGets) - Interlocked.Read(ref _totalReturns));
         public long TotalGets => Interlocked.Read(ref _totalGets);
         public long TotalReturns => Interlocked.Read(ref _totalReturns);
         public long TotalCreated => Interlocked.Read(ref _totalCreated);
-        public bool IsHealthy => _totalCreated < _maxPoolSize * 2   // Should not create more than 2x pool size
-                                 && UtilizationPercentage < 0.95    // Should not be more than 95% utilized
-            ;
+        public int MaxPoolSize => _maxPoolSize;
+        public bool IsHealthy => _totalCreated < _maxPoolSize * 2   // Creation pressure check
+                         && UtilizationPercentage < 0.90   // Outstanding utilization check (more reasonable threshold)
+                         && !_disposed;                    // Not disposed
         public void Dispose()
         {
             if (_disposed) return;
