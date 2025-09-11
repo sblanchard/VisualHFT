@@ -53,9 +53,9 @@ namespace MarketConnectors.Gemini
 
         public GeminiPlugin()
         {
-           
+
             _parser = new JsonParser();
-          
+
             GeminiSubscription geminiSubscription = new GeminiSubscription();
             geminiSubscription.subscriptions = new List<Subscription>();
 
@@ -102,7 +102,7 @@ namespace MarketConnectors.Gemini
         }
 
         public async Task ClearAsync()
-        { 
+        {
             _heartbeatTimer?.Dispose();
             //CLEAR LOB
             if (_localOrderBooks != null)
@@ -132,7 +132,7 @@ namespace MarketConnectors.Gemini
         private void eventBuffers_onReadAction(MarketUpdate eventData)
         {
             var symbol = GetNormalizedSymbol(eventData.Symbol);
-            UpdateOrderBook(eventData, symbol,DateTime.Now);
+            UpdateOrderBook(eventData, symbol, DateTime.Now);
 
         }
         private void eventBuffers_onErrorAction(Exception ex)
@@ -150,7 +150,7 @@ namespace MarketConnectors.Gemini
             {
                 geminiSubscription.subscriptions = new List<Subscription>();
                 geminiSubscription.subscriptions.Add(new Subscription()
-                { 
+                {
                     symbols = GetAllNonNormalizedSymbols()
                 });
 
@@ -183,17 +183,17 @@ namespace MarketConnectors.Gemini
                     Status = ePluginStatus.STOPPED;
                     if (isReconnecting)
                         return;
-                    if ( disconnected.CloseStatus == WebSocketCloseStatus.NormalClosure)
+                    if (disconnected.CloseStatus == WebSocketCloseStatus.NormalClosure)
                     {
                         RaiseOnDataReceived(new List<VisualHFT.Model.OrderBook>());
                         RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
-                        
+
                     }
                     else
                     {
                         var _error = $"Will reconnect. Unhandled error while receiving delta market data.";
                         log.Error(_error, disconnected.Exception);
-                        if (isReconnecting)
+                        if (!isReconnecting)
                         {
                             isReconnecting = true;
                             HandleConnectionLost(disconnected.CloseStatusDescription, disconnected.Exception);
@@ -215,7 +215,7 @@ namespace MarketConnectors.Gemini
 
                         var _error = $"Will reconnect. Unhandled error while receiving delta market data.";
                         log.Error(_error, ex);
-                        if (isReconnecting)
+                        if (!isReconnecting)
                         {
                             isReconnecting = true;
                             await HandleConnectionLost(_error, ex);
@@ -236,7 +236,7 @@ namespace MarketConnectors.Gemini
                 {
                     var _error = ex.Message;
                     log.Error(_error, ex);
-                    if (isReconnecting)
+                    if (!isReconnecting)
                     {
                         isReconnecting = true;
                         await HandleConnectionLost(_error, ex);
@@ -248,7 +248,7 @@ namespace MarketConnectors.Gemini
             {
                 var _error = ex.Message;
                 log.Error(_error, ex);
-                if (isReconnecting)
+                if (!isReconnecting)
                 {
                     isReconnecting = true;
                     await HandleConnectionLost(_error, ex);
@@ -311,7 +311,7 @@ namespace MarketConnectors.Gemini
                         }
                         else if (info.Type == ReconnectionType.Initial)
                         {
-                             
+
                         }
 
                     });
@@ -330,7 +330,7 @@ namespace MarketConnectors.Gemini
                         {
                             var _error = $"Will reconnect. Unhandled error while receiving delta market data.";
                             log.Error(_error, disconnected.Exception);
-                            if (isReconnecting)
+                            if (!isReconnecting)
                             {
                                 isReconnecting = true;
                                 HandleConnectionLost(disconnected.CloseStatusDescription, disconnected.Exception);
@@ -398,7 +398,7 @@ namespace MarketConnectors.Gemini
             RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
             await base.StopAsync();
         }
-        
+
 
         private VisualHFT.Model.OrderBook ToOrderBookModel(InitialResponse data, string symbol)
         {
@@ -409,7 +409,7 @@ namespace MarketConnectors.Gemini
             lob.ProviderName = _settings.Provider.ProviderName;
             lob.SizeDecimalPlaces = RecognizeDecimalPlacesAutomatically(data.asks.Select(x => x.amount));
             lob.FilterBidAskByMaxDepth = true;
-            
+
 
             /*
                 Initialize the Limit Order Book "only" in this method.
@@ -629,7 +629,7 @@ namespace MarketConnectors.Gemini
         }
 
 
-        private void UpdateOrderBook(MarketUpdate lob_update,string symbol, DateTime serverTime)
+        private void UpdateOrderBook(MarketUpdate lob_update, string symbol, DateTime serverTime)
         {
 
             if (!_localOrderBooks.ContainsKey(symbol))
@@ -651,7 +651,7 @@ namespace MarketConnectors.Gemini
                 {
                     if (_qty == 0)
                     {
-                        local_lob.DeleteLevel(new DeltaBookItem() { Symbol = symbol, Price = _price, IsBid = true, LocalTimeStamp = DateTime.Now, ServerTimeStamp = DateTime.Now, MDUpdateAction = eMDUpdateAction.Delete});
+                        local_lob.DeleteLevel(new DeltaBookItem() { Symbol = symbol, Price = _price, IsBid = true, LocalTimeStamp = DateTime.Now, ServerTimeStamp = DateTime.Now, MDUpdateAction = eMDUpdateAction.Delete });
                     }
                     else
                     {
@@ -765,7 +765,7 @@ namespace MarketConnectors.Gemini
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
             }
             else
-            { 
+            {
                 //throw new Exception("The socket seems to be disconnected.");
                 RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED));
             }
@@ -806,7 +806,7 @@ namespace MarketConnectors.Gemini
             return view;
         }
         protected override void InitializeDefaultSettings()
-        {   
+        {
             _settings = new PlugInSettings()
             {
                 ApiKey = "",
@@ -949,7 +949,7 @@ namespace MarketConnectors.Gemini
             var jsonArray = JArray.Parse(jsonString);
             foreach (var jsonObject in jsonArray)
             {
-                JArray innerArray =JArray.Parse(jsonObject.ToString());
+                JArray innerArray = JArray.Parse(jsonObject.ToString());
 
                 string dataJsonString = innerArray[0].ToString();
 
@@ -966,7 +966,7 @@ namespace MarketConnectors.Gemini
             if (!modelList.Any())
                 throw new Exception("No data was found in the json file.");
             foreach (var item in modelList)
-            { 
+            {
                 UpdateUserOrderBook(item);
             }
             //END UPDATE VISUALHFT CORE
@@ -975,7 +975,7 @@ namespace MarketConnectors.Gemini
             //CREATE MODEL TO RETURN (First, identify the order that was sent, then use that one with the updated values)
             var dicOrders = new Dictionary<long, VisualHFT.Model.Order>(); //we need to use dictionary to identify orders (because exchanges orderId is string) 
 
-             
+
 
             foreach (var item in modelList)
             {
@@ -1080,7 +1080,7 @@ namespace MarketConnectors.Gemini
                 }
                 else if (item.type.ToLower().Equals("closed"))
                 {
-                     
+
                 }
                 if (!string.IsNullOrEmpty(item.behavior))
                 {
