@@ -404,7 +404,21 @@ namespace VisualHFT.Model
             lock (_data.Lock)
             {
                 var _list = (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks);
-                var itemFound = _list.FirstOrDefault(x => x.Price == item.Price);
+                BookItem? itemFound = null;
+                var targetPrice = item.Price.Value;  // Cache the value
+                var count = _list.Count();
+
+                for (int i = 0; i < count; i++)
+                {
+                    if (_list[i].Price == targetPrice)  // Use cached value
+                    {
+                        itemFound = _list[i];
+                        break;
+                    }
+                }
+
+
+
                 if (itemFound == null)
                     eAction = eMDUpdateAction.New;
                 else
@@ -458,13 +472,19 @@ namespace VisualHFT.Model
                     listCount++;
                     Interlocked.Increment(ref _addedLevels);
                     //truncate last item if we exceeded the MaxDepth
-                    if (listCount > this.MaxDepth)
+                    if (listCount > MaxDepth)
                     {
-                        // FIXED: Return to shared pool instead of instance pool
-                        foreach (var itemToReturn in list.TakeLast(listCount - this.MaxDepth))
+                        // ALLOCATION-FREE: Direct index access
+                        int startIndex = MaxDepth; // First item to remove
+
+                        // Process excess items in reverse order (LIFO)
+                        for (int i = listCount - 1; i >= startIndex; i--)
                         {
+                            var itemToReturn = list[i];
                             BookItemPool.Return(itemToReturn);
                         }
+
+                        // Truncate in one operation
                         list.TruncateItemsAfterPosition(MaxDepth - 1);
                     }
                 }
