@@ -217,7 +217,8 @@ public class HelperCustomQueue<T> : IDisposable
         var avgProcessingTime = AverageProcessingTimeMicroseconds;
 
         // Ultra-compact performance report
-        log.WarnFormat("[{0}] Add: {1:F0}/s | Process: {2:F0}/s | Queue: {3:N0} | Avg: {4:F1}μs", _queueName, addRate, processRate, queueDepth, avgProcessingTime);
+        if (queueDepth > 1000)
+            log.WarnFormat("[{0}] Add: {1:F0}/s | Process: {2:F0}/s | Queue: {3:N0} | Avg: {4:F1}μs", _queueName, addRate, processRate, queueDepth, avgProcessingTime);
 
         // Update for next interval
         _lastReportAdded = currentAdded;
