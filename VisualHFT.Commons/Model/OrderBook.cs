@@ -14,6 +14,8 @@ namespace VisualHFT.Model
         protected OrderBookData _data;
         protected static readonly log4net.ILog log =
             log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        protected static readonly CustomObjectPool<DeltaBookItem> DeltaBookItemPool =
+            new CustomObjectPool<DeltaBookItem>(1_000);
 
         // Add counters for level changes
         private long _addedLevels = 0;
@@ -308,31 +310,34 @@ namespace VisualHFT.Model
 
         private void InternalClear()
         {
-            for (int i = 0; i < _data.Asks.Count();)
+            int asksCount = _data.Asks.Count();
+            for (int i = asksCount - 1; i >= 0; i--)
             {
-                var ask = _data.Asks[i];
-                if (ask.Price != 0)
+                var item = _data.Asks[i];
+                if (item.Price != 0)
                 {
-                    DeleteLevel(new DeltaBookItem() { IsBid = false, Price = ask.Price });
-                }
-                else
-                {
-                    i++;
+                    var itemToDelete = DeltaBookItemPool.Get();
+                    itemToDelete.IsBid = false;
+                    itemToDelete.Price = item.Price;
+                    DeleteLevel(itemToDelete);
+                    DeltaBookItemPool.Return(itemToDelete);
                 }
             }
 
-            for (int i = 0; i < _data.Bids.Count();)
+            int bidsCount = _data.Bids.Count();
+            for (int i = bidsCount - 1; i >= 0; i--)
             {
-                var bid = _data.Bids[i];
-                if (bid.Price != 0)
+                var item = _data.Bids[i];
+                if (item.Price != 0)
                 {
-                    DeleteLevel(new DeltaBookItem() { IsBid = true, Price = bid.Price });
-                }
-                else
-                {
-                    i++;
+                    var itemToDelete = DeltaBookItemPool.Get();
+                    itemToDelete.IsBid = true;
+                    itemToDelete.Price = item.Price;
+                    DeleteLevel(itemToDelete);
+                    DeltaBookItemPool.Return(itemToDelete);
                 }
             }
+
 
             GetAndResetChangeCounts();
         }
