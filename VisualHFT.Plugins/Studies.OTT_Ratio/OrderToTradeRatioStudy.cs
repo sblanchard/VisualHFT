@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Threading.Tasks;
-using System.Linq;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
@@ -11,7 +10,6 @@ using VisualHFT.Studies.MarketRatios.UserControls;
 using VisualHFT.Studies.MarketRatios.ViewModel;
 using VisualHFT.UserSettings;
 using System.Collections.Generic;
-using VisualHFT.Commons.Helpers;
 
 namespace VisualHFT.Studies
 {
@@ -36,20 +34,20 @@ namespace VisualHFT.Studies
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
 
-        public override string Name { get; set; } = "L2 Order To Trade Ratio Study Plugin";
+        public override string Name { get; set; } = " Order To Trade Ratio Study Plugin";
         public override string Version { get; set; } = "1.0.0";
-        public override string Description { get; set; } = "L2 Order To Trade Ratio.";
+        public override string Description { get; set; } = " Order To Trade Ratio.";
         public override string Author { get; set; } = "VisualHFT";
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }
-        public override string TileTitle { get; set; } = "L2-OTT";
-        public override string TileToolTip { get; set; } = "The <b>L2 OTT</b> (Level 2 Order-to-Trade Ratio) is a metric used to analyze order book activity and its relationship to executed trades. <br/> It's calculated using <i>aggregated Level 2 market data</i>, which provides snapshots of the total order volume at each price level, rather than individual order actions.  Because of this, the L2 OTT represents the <b>net change in order book depth</b> relative to the number of trades.<br/><br/>" +
-                                                           "<b>Calculation:</b> <i>L2 OTT Ratio = (Sum of Absolute Changes in Order Book Size at All Price Levels) / (Number of Executed Trades)</i><br/><br/>" +
+        public override string TileTitle { get; set; } = "OTT";
+        public override string TileToolTip { get; set; } = "The <b> OTT</b> ( Order-to-Trade Ratio) is a metric used to analyze order book activity and its relationship to executed trades. <br/> It's calculated using <i>aggregated  market data</i>, which provides snapshots of the total order volume at each price level, rather than individual order actions.  Because of this, the  OTT represents the <b>net change in order book depth</b> relative to the number of trades.<br/><br/>" +
+                                                           "<b>Calculation:</b> <i> OTT Ratio = (Sum of Absolute Changes in Order Book Size at All Price Levels) / (Number of Executed Trades)</i><br/><br/>" +
                                                            "<b>Interpretation and Limitations:</b><br/>" +
                                                            "<ul>" +
-                                                           "<li>A high L2 OTT *may* indicate low liquidity, high-frequency trading activity, or potential order book manipulation (e.g., spoofing). However, because it's based on aggregated data, it cannot definitively distinguish between these scenarios.</li>" +
-                                                           "<li>A single large order that is partially filled multiple times will increase the L2 OTT, as each partial fill registers as a size change.</li>" +
-                                                           "<li>The L2 OTT is a *proxy* for order activity and should be used in conjunction with other market microstructure metrics (spread, volume, order book imbalance) for a complete analysis.</li>" +
+                                                           "<li>A high  OTT *may* indicate low liquidity, high-frequency trading activity, or potential order book manipulation (e.g., spoofing). However, because it's based on aggregated data, it cannot definitively distinguish between these scenarios.</li>" +
+                                                           "<li>A single large order that is partially filled multiple times will increase the  OTT, as each partial fill registers as a size change.</li>" +
+                                                           "<li>The  OTT is a *proxy* for order activity and should be used in conjunction with other market microstructure metrics (spread, volume, order book imbalance) for a complete analysis.</li>" +
                                                            "<li>This metric is *related to* but *distinct from* the traditional Order-to-Trade Ratio (OTTR) calculated with full order book data.</li>" +
                                                            "</ul>" +
                                                            "Regulatory bodies often monitor similar metrics to identify potentially manipulative or disruptive trading activities, although they typically have access to more granular data.<br/>";
