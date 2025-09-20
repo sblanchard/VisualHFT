@@ -39,7 +39,7 @@ namespace VisualHFT.Studies
 
         public override string Name { get; set; } = "Market Resilience Study";
         public override string Version { get; set; } = "1.0.0";
-        public override string Description { get; set; } = "Market Resilience";
+        public override string Description { get; set; } = "Measures market recovery speed after large trades using time, spread, and depth recovery metrics. Provides real-time resilience scoring (0-1) to assess market stability and sentiment for trading decisions.";
         public override string Author { get; set; } = "VisualHFT";
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }
@@ -143,7 +143,7 @@ namespace VisualHFT.Studies
             Task.Run(() => HandleRestart(_error, ex));
         }
 
-        
+
         /// <summary>
         /// This method defines how the internal AggregatedCollection should aggregate incoming items.
         /// It is invoked whenever a new item is added to the collection and aggregation is required.
@@ -209,11 +209,11 @@ namespace VisualHFT.Studies
             {
                 InitializeDefaultSettings();
             }
-            
-            
+
+
             //To prevent back compability with older setting formats
             bool needToSaveToMaintainCompatibility = false;
-            if (_settings.Provider == null) 
+            if (_settings.Provider == null)
             {
                 _settings.Provider = new Provider();
                 needToSaveToMaintainCompatibility = true;

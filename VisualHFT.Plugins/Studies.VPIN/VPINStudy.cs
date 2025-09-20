@@ -46,7 +46,7 @@ namespace VisualHFT.Studies
 
         public override string Name { get; set; } = "VPIN Study Plugin";
         public override string Version { get; set; } = "1.0.0";
-        public override string Description { get; set; } = "Calculates VPIN.";
+        public override string Description { get; set; } = "Volume-Synchronized Probability of Informed Trading (VPIN) measures buy/sell volume imbalance in fixed buckets. Provides real-time risk assessment (0-1 scale) for market instability detection.";
         public override string Author { get; set; } = "VisualHFT";
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }

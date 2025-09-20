@@ -35,7 +35,7 @@ namespace VisualHFT.Studies
 
         public override string Name { get; set; } = "Market Resilience Bias";
         public override string Version { get; set; } = "1.0.0";
-        public override string Description { get; set; } = "Market Resilience Bias.";
+        public override string Description { get; set; } = "Analyzes directional market sentiment after large trades by monitoring volume addition rates on bid/ask sides. Provides real-time bias scoring (+1 bullish, -1 bearish, 0 neutral) for sentiment analysis.";
         public override string Author { get; set; } = "VisualHFT";
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }
@@ -61,7 +61,7 @@ namespace VisualHFT.Studies
         public override async Task StartAsync()
         {
             await base.StartAsync();//call the base first
-            
+
             _mrBiasCalc = new MarketResilienceWithBias(_settings);
             _QUEUE.Clear();
             HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
@@ -160,14 +160,14 @@ namespace VisualHFT.Studies
             eMarketBias _valueBias = _mrBiasCalc.CurrentMarketBias;
             string _valueFormatted = "-"; //unknown
             string _valueColor = "White";
-            
+
 
             _valueFormatted = _valueBias == eMarketBias.Bullish ? "↑" : (_valueBias == eMarketBias.Bearish ? "↓" : "-");
             _valueColor = _valueBias == eMarketBias.Bullish ? "Green" : (_valueBias == eMarketBias.Bearish ? "Red" : "White");
 
             var newItem = new BaseStudyModel
             {
-                Value = _valueBias == eMarketBias.Bullish? 1: (_valueBias == eMarketBias.Bearish? -1: 0),
+                Value = _valueBias == eMarketBias.Bullish ? 1 : (_valueBias == eMarketBias.Bearish ? -1 : 0),
                 ValueFormatted = _valueFormatted,
                 ValueColor = _valueColor,
                 MarketMidPrice = (decimal)_mrBiasCalc.MidMarketPrice,
