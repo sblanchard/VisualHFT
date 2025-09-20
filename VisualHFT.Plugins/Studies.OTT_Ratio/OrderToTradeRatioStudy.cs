@@ -34,14 +34,14 @@ namespace VisualHFT.Studies
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
 
-        public override string Name { get; set; } = " Order To Trade Ratio Study Plugin";
+        public override string Name { get; set; } = "Order To Trade Ratio Study Plugin";
         public override string Version { get; set; } = "1.0.0";
-        public override string Description { get; set; } = " Order To Trade Ratio.";
+        public override string Description { get; set; } = "Order-to-Trade Ratio measures order book activity vs executed trades. Regulatory metric for detecting potential market manipulation.";
         public override string Author { get; set; } = "VisualHFT";
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }
         public override string TileTitle { get; set; } = "OTT";
-        public override string TileToolTip { get; set; } = "The <b> OTT</b> ( Order-to-Trade Ratio) is a metric used to analyze order book activity and its relationship to executed trades. <br/> It's calculated using <i>aggregated  market data</i>, which provides snapshots of the total order volume at each price level, rather than individual order actions.  Because of this, the  OTT represents the <b>net change in order book depth</b> relative to the number of trades.<br/><br/>" +
+        public override string TileToolTip { get; set; } = "The <b> OTT</b> (Order-to-Trade Ratio) is a metric used to analyze order book activity and its relationship to executed trades. <br/> It's calculated using <i>aggregated  market data</i>, which provides snapshots of the total order volume at each price level, rather than individual order actions.  Because of this, the  OTT represents the <b>net change in order book depth</b> relative to the number of trades.<br/><br/>" +
                                                            "<b>Calculation:</b> <i> OTT Ratio = (Sum of Absolute Changes in Order Book Size at All Price Levels) / (Number of Executed Trades)</i><br/><br/>" +
                                                            "<b>Interpretation and Limitations:</b><br/>" +
                                                            "<ul>" +
