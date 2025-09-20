@@ -1,8 +1,8 @@
 ﻿using VisualHFT.Commons.Model;
 using VisualHFT.Commons.Pools;
+using VisualHFT.Enums;
 using VisualHFT.Helpers;
 using VisualHFT.Studies;
-using VisualHFT.Enums;
 
 namespace VisualHFT.Model
 {
@@ -404,6 +404,13 @@ namespace VisualHFT.Model
         {
             if (!item.IsBid.HasValue)
                 return;
+
+
+            if (item.Size.HasValue && IsZeroAtDp(item.Size.Value, this.SizeDecimalPlaces))
+            {
+                DeleteLevel(item);     // explicit remove, not an update to zero
+                return;
+            }
             eMDUpdateAction eAction = eMDUpdateAction.None;
 
             lock (_data.Lock)
@@ -440,6 +447,13 @@ namespace VisualHFT.Model
         {
             if (!item.IsBid.HasValue)
                 return;
+            if (item.Size.HasValue && IsZeroAtDp(item.Size.Value, this.SizeDecimalPlaces))
+            {
+                DeleteLevel(item);
+                return;
+            }
+            // quantize what we store so internals never carry float dust
+            item.Size = QuantizeToDp(item.Size.Value, this.SizeDecimalPlaces);
 
             lock (_data.Lock)
             {
@@ -498,6 +512,14 @@ namespace VisualHFT.Model
 
         public virtual void UpdateLevel(DeltaBookItem item)
         {
+            if (item.Size.HasValue && IsZeroAtDp(item.Size.Value, this.SizeDecimalPlaces))
+            {
+                DeleteLevel(item);
+                return;
+            }
+            // quantize what we store so internals never carry float dust
+            item.Size = QuantizeToDp(item.Size.Value, this.SizeDecimalPlaces);
+
             lock (_data.Lock)
             {
                 (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Update(x => x.Price == item.Price,
@@ -553,6 +575,154 @@ namespace VisualHFT.Model
             _updatedLevels = 0;
             return result;
         }
+
+
+
+
+
+
+
+        /// <summary>
+        /// Computes the delta needed to transform THIS order book into <paramref name="other"/>,
+        /// emitting one <see cref="DeltaBookItem"/> per changed price level (absolute size; 0 = delete).
+        /// Performance: O(N+M) per side; allocation-free (uses pooled DeltaBookItem).
+        /// IMPORTANT: <paramref name="onDelta"/> MUST consume the item synchronously and copy its data.
+        /// This method RETURNS the pooled item immediately after invoking the callback.
+        /// </summary>
+        /// <param name="other">The newer snapshot for the same venue/symbol.</param>
+        /// <param name="onDelta">
+        /// Callback that receives one pooled DeltaBookItem per change. Do not retain the reference.
+        /// Typical usage: obLocal.AddOrUpdateLevel(delta);  // which copies fields synchronously
+        /// </param>
+        public void ComputeDeltaAgainst(OrderBook other, Action<DeltaBookItem> onDelta)
+        {
+            if (other == null) throw new ArgumentNullException(nameof(other));
+            if (onDelta == null) throw new ArgumentNullException(nameof(onDelta));
+
+            // Lock both books in a deterministic order to avoid deadlocks when called from multiple modules.
+            var lockA = _data.Lock;
+            var lockB = other._data.Lock;
+            int ha = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(lockA);
+            int hb = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(lockB);
+
+            if (ha <= hb)
+            {
+                lock (lockA) lock (lockB) { DiffBothSides_NoAlloc_(this, other, onDelta); }
+            }
+            else
+            {
+                lock (lockB) lock (lockA) { DiffBothSides_NoAlloc_(this, other, onDelta); }
+            }
+        }
+
+
+        private static void DiffBothSides_NoAlloc_(OrderBook oldBook, OrderBook newBook, Action<DeltaBookItem> emit)
+        {
+            // Access underlying storage directly to avoid MaxDepth filtering and extra wrappers.
+            var oldBids = oldBook._data.Bids;
+            var newBids = newBook._data.Bids;
+            var oldAsks = oldBook._data.Asks;
+            var newAsks = newBook._data.Asks;
+
+            DiffSide_NoAlloc_(oldBids, newBids, /*isBid*/ true, emit);
+            DiffSide_NoAlloc_(oldAsks, newAsks, /*isBid*/ false, emit);
+        }
+
+        private static void DiffSide_NoAlloc_(
+            CachedCollection<BookItem> oldSide,
+            CachedCollection<BookItem> newSide,
+            bool isBid,
+            Action<DeltaBookItem> emit)
+        {
+            int i = 0, j = 0;
+            int oldCount = oldSide == null ? 0 : oldSide.Count();
+            int newCount = newSide == null ? 0 : newSide.Count();
+
+            // Local function to emit a pooled delta and immediately return it to the pool.
+            static void Emit(bool isBidL, double price, double size, Action<DeltaBookItem> sink)
+            {
+                var d = DeltaBookItemPool.Get();
+                d.IsBid = isBidL;
+                d.Price = price;
+                d.Size = size;
+                d.LocalTimeStamp = DateTime.UtcNow; // caller may overwrite if needed
+                d.ServerTimeStamp = d.LocalTimeStamp;
+                sink(d);
+                DeltaBookItemPool.Return(d); // safe because consumer must copy synchronously
+            }
+
+            // Merge walk
+            while (i < oldCount && j < newCount)
+            {
+                var o = oldSide[i];
+                var n = newSide[j];
+
+                // Assuming exact price equality as elsewhere in the codebase (AddOrUpdateLevel uses ==).
+                double op = o.Price.GetValueOrDefault();
+                double np = n.Price.GetValueOrDefault();
+
+                if (op == np)
+                {
+                    // Same price level: update only if size changed
+                    double os = o.Size.GetValueOrDefault();
+                    double ns = n.Size.GetValueOrDefault();
+                    if (os != ns)
+                        Emit(isBid, np, ns, emit);
+
+                    i++; j++;
+                }
+                else
+                {
+                    // Determine ordering based on side sort (bids: desc, asks: asc)
+                    bool oldComesFirst = isBid ? (op > np) : (op < np);
+
+                    if (oldComesFirst)
+                    {
+                        // Level present in old but not (at this position) in new => removed (size -> 0)
+                        Emit(isBid, op, 0.0, emit);
+                        i++;
+                    }
+                    else
+                    {
+                        // Level present in new but not in old => added (size -> ns)
+                        Emit(isBid, np, n.Size.GetValueOrDefault(), emit);
+                        j++;
+                    }
+                }
+            }
+
+            // Any remaining old levels are deletions
+            while (i < oldCount)
+            {
+                var o = oldSide[i++];
+                double op = o.Price.GetValueOrDefault();
+                if (op != 0.0) Emit(isBid, op, 0.0, emit);
+            }
+
+            // Any remaining new levels are additions
+            while (j < newCount)
+            {
+                var n = newSide[j++];
+                double np = n.Price.GetValueOrDefault();
+                if (np != 0.0) Emit(isBid, np, n.Size.GetValueOrDefault(), emit);
+            }
+        }
+
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static double QuantizeToDp(double size, int dp)
+        {
+            return Math.Round(size, dp, MidpointRounding.ToZero);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static bool IsZeroAtDp(double size, int dp)
+        {
+            // Anything that quantizes to 0 at this precision is treated as zero.
+            return QuantizeToDp(size, dp) == 0.0;
+        }
+
+
 
         protected virtual void Dispose(bool disposing)
         {
