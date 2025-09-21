@@ -557,6 +557,7 @@ namespace MarketConnectors.Coinbase
                     });
                 }
             }
+            local_lob.LastUpdated = ts;
             RaiseOnDataReceived(local_lob);
         }
 

@@ -272,6 +272,8 @@ namespace MarketConnectors.Gemini
                     {
                         local_lob = new OrderBook();
                     }
+
+                    serverTime = DateTimeOffset.FromUnixTimeMilliseconds(type.data.microtimestamp / 1000).LocalDateTime;
                     foreach (var item in type.data.bids)
                     {
                         var _price = double.Parse(item[0]);
@@ -332,6 +334,7 @@ namespace MarketConnectors.Gemini
                             });
                         }
                     }
+                    local_lob.LastUpdated = serverTime;
                     RaiseOnDataReceived(local_lob);
 
                     //if (dataReceived.trades != null && dataReceived.trades.Count > 0)
@@ -372,6 +375,8 @@ namespace MarketConnectors.Gemini
                 if (type != null && type.data != null)
                 {
                     string symbol = string.Empty;
+                    serverTime = DateTimeOffset.FromUnixTimeMilliseconds(type.data.microtimestamp / 1000).LocalDateTime;
+
                     if (type.channel.Split('_').Length > 3)
                     {
                         symbol = GetNormalizedSymbol(type.channel.Split('_')[3]);
@@ -381,7 +386,7 @@ namespace MarketConnectors.Gemini
                         symbol = GetNormalizedSymbol(type.channel.Split('_')[2]);
                     }
                     Trade trade = new Trade();
-                    trade.Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(type.data.timestamp).DateTime;
+                    trade.Timestamp = serverTime;
                     trade.Price = type.data.price;
                     trade.Size = type.data.amount;
                     trade.Symbol = symbol;

@@ -307,6 +307,7 @@ namespace VisualHFT.Model
             set => _data.ImbalanceValue = value;
         }
         public long Sequence { get; set; }
+        public DateTime? LastUpdated { get; set; }
 
         private void InternalClear()
         {

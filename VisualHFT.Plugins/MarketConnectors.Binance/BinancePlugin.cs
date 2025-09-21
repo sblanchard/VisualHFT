@@ -792,11 +792,10 @@ namespace MarketConnectors.Binance
                     });
             }
             local_lob.Sequence = lob_update.LastUpdateId; //update the sequence
-
+            local_lob.LastUpdated = ts;
             RaiseOnDataReceived(local_lob);
         } 
-        
-         
+
         private async Task DoPingAsync()
         {
             try

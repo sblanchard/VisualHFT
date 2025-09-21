@@ -706,7 +706,7 @@ namespace MarketConnectors.Kraken
                 {
                     return;
                 }*/
-
+                local_lob.LastUpdated = ts;
                 RaiseOnDataReceived(local_lob);
             }
         }

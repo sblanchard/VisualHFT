@@ -688,6 +688,8 @@ namespace MarketConnectors.Gemini
                     }
                 }
             }
+            local_lob.LastUpdated = null; //Set to null since Gemini does not provide timstamp of their messages
+
             RaiseOnDataReceived(local_lob);
 
             if (lob_update.Trades != null)

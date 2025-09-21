@@ -672,6 +672,7 @@ namespace MarketConnectors.KuCoin
                     }
                 }
                 local_lob.Sequence = lob_update.SequenceEnd;
+                local_lob.LastUpdated = ts;
                 RaiseOnDataReceived(local_lob);
             }
         }

@@ -25,7 +25,7 @@ namespace BitStamp.Net.Models
         public decimal price { get; set; }
         public string price_str { get; set; }
         public int type { get; set; }
-        public string microtimestamp { get; set; }
+        public long microtimestamp { get; set; }
         public long buy_order_id { get; set; }
         public long sell_order_id { get; set; }
     }
@@ -38,15 +38,15 @@ namespace BitStamp.Net.Models
     }
     public class InitialResponse
     {
-        public string timestamp { get; set; }
-        public string microtimestamp { get; set; }
+        public long timestamp { get; set; }
+        public long microtimestamp { get; set; }
         public List<List<string>> bids { get; set; }
         public List<List<string>> asks { get; set; }
     }
     public class BitStampOrderBookData
     {
-        public string timestamp { get; set; }
-        public string microtimestamp { get; set; }
+        public long timestamp { get; set; }
+        public long microtimestamp { get; set; }
         public List<List<string>> bids { get; set; }
         public List<List<string>> asks { get; set; }
     }

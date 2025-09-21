@@ -603,8 +603,9 @@ namespace MarketConnectors.Bitfinex
                     };
                     local_lob.AddOrUpdateLevel(delta);
                 }
+                local_lob.LastUpdated = ts;
+                RaiseOnDataReceived(local_lob);
             }
-            RaiseOnDataReceived(local_lob);
         }
 
 
