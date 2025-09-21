@@ -1,7 +1,7 @@
-﻿using System.Windows.Controls;
+﻿using System.Text.RegularExpressions;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Xml;
-
 namespace VisualHFT.UserControls
 {
     /// <summary>
@@ -24,6 +24,8 @@ namespace VisualHFT.UserControls
         }
         public TextBlock ConvertHtmlToTextBlock(string htmlText, TextBlock textBlock)
         {
+            htmlText = XmlEscapeAmpersands(htmlText);
+
             textBlock.TextWrapping = System.Windows.TextWrapping.Wrap;
             textBlock.Width = 500;
 
@@ -57,7 +59,12 @@ namespace VisualHFT.UserControls
 
             return textBlock;
         }
-
+        private static string XmlEscapeAmpersands(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            // Replace & not starting a valid entity with &amp;
+            return Regex.Replace(s, "&(?!(?:#\\d+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]*);)", "&amp;");
+        }
 
     }
 }
