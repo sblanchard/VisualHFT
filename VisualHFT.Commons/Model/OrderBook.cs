@@ -18,14 +18,13 @@ namespace VisualHFT.Model
             new CustomObjectPool<DeltaBookItem>(1_000);
 
         // Add counters for level changes
+        // _addedLevels: New price levels + size increases at existing levels
+        // _deletedLevels: Removed price levels + size decreases at existing levels
+        // _updatedLevels: Currently unused (reserved for future use)
         private long _addedLevels = 0;
         private long _deletedLevels = 0;
         private long _updatedLevels = 0;
         // Properties to expose counters
-        public long AddedLevels => _addedLevels;
-        public long DeletedLevels => _deletedLevels;
-        public long UpdatedLevels => _updatedLevels;
-
         public OrderBook()
         {
             _data = new OrderBookData();
@@ -526,10 +525,10 @@ namespace VisualHFT.Model
                 (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Update(x => x.Price == item.Price,
                     existingItem =>
                     {
-                        if (existingItem.Size > item.Size) //added
-                            Interlocked.Increment(ref _addedLevels);
-                        else if (existingItem.Size < item.Size) //deleted
+                        if (existingItem.Size > item.Size)      //deleted
                             Interlocked.Increment(ref _deletedLevels);
+                        else if (existingItem.Size < item.Size) //added
+                            Interlocked.Increment(ref _addedLevels);
 
                         existingItem.Price = item.Price;
                         existingItem.Size = item.Size;
@@ -570,11 +569,10 @@ namespace VisualHFT.Model
 
         public (long added, long deleted, long updated) GetAndResetChangeCounts()
         {
-            var result = (_addedLevels, _deletedLevels, _updatedLevels);
-            _addedLevels = 0;
-            _deletedLevels = 0;
-            _updatedLevels = 0;
-            return result;
+            long added = Interlocked.Exchange(ref _addedLevels, 0);
+            long deleted = Interlocked.Exchange(ref _deletedLevels, 0);
+            long updated = Interlocked.Exchange(ref _updatedLevels, 0);
+            return (added, deleted, updated);
         }
 
 
