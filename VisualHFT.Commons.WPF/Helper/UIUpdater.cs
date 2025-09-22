@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Windows;
 using System.Windows.Threading;
 
 namespace VisualHFT.Helpers
@@ -13,6 +14,12 @@ namespace VisualHFT.Helpers
 
         public UIUpdater(Action updateAction, double debounceTimeInMilliseconds = 30)
         {
+            // Simple UI thread check - throw exception if not on UI thread
+            if (Application.Current == null || !Application.Current.Dispatcher.CheckAccess())
+            {
+                throw new InvalidOperationException("UIUpdater must be created on the UI thread");
+            }
+
             debounceTimeInMilliseconds = Math.Max(debounceTimeInMilliseconds, 1); // Ensure debounce time is at least 1 ms
             _updateAction = updateAction;
             _debounceTimer = new DispatcherTimer();

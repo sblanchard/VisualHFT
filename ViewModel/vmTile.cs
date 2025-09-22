@@ -318,9 +318,8 @@ namespace VisualHFT.ViewModel
                         if (_study != null)
                         {
                             _study.OnCalculated -= _study_OnCalculated;
-                            _study.StopAsync();
-                            _study.Dispose();
-                            _study = null;
+                            //_study.StopAsync();// IMPORTANT: Stopping is handled by PluginManager
+                            //_study.Dispose(); // IMPORTANT: Do not dispose study, as it is managed by PluginManager
                         }
 
                         // Dispose multi-study and all child tiles
@@ -342,31 +341,7 @@ namespace VisualHFT.ViewModel
                                     }
                                 }
                                 ChildTiles.Clear();
-                                ChildTiles = null;
                             }
-
-                            // Dispose the multi-study itself
-                            foreach (var study in _multiStudy.Studies)
-                            {
-                                try
-                                {
-                                    study.StopAsync();
-                                    study.Dispose();
-                                }
-                                catch (Exception ex)
-                                {
-                                    System.Diagnostics.Debug.WriteLine($"Error disposing study: {ex.Message}");
-                                }
-                            }
-                            _multiStudy.Dispose();
-                            _multiStudy = null;
-                        }
-
-                        // Dispose plugin
-                        if (_plugin != null)
-                        {
-                            // Note: Plugin disposal handled by PluginManager
-                            _plugin = null;
                         }
 
                         // Dispose UI updater
