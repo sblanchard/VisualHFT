@@ -86,12 +86,11 @@ namespace MarketConnectors.Binance
             catch (Exception ex)
             {
                 var _error = ex.Message;
-                log.Error(_error, ex);
+                LogException(ex, null, _error.IndexOf("[CantConnectError]") > -1);
+
                 if (_error.IndexOf("[CantConnectError]") > -1)
                 {
                     Status = ePluginStatus.STOPPED_FAILED;
-                    HelperNotificationManager.Instance.AddNotification(this.Name, _error, HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.PLUGINS);
-
                     await ClearAsync();
                     RaiseOnDataReceived(new List<VisualHFT.Model.OrderBook>());
                     RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.DISCONNECTED_FAILED));
@@ -211,7 +210,7 @@ namespace MarketConnectors.Binance
                                 _normalizedSymbol = GetNormalizedSymbol(trade.Data.Symbol);
 
                             var _error = $"Will reconnect. Unhandled error while receiving trading data for {_normalizedSymbol}.";
-                            log.Error(_error, ex);
+                            LogException(ex, _error);
                             Task.Run(async () => await HandleConnectionLost(_error, ex));
                         }
                     }
@@ -260,7 +259,7 @@ namespace MarketConnectors.Binance
 
 
                             var _error = $"Will reconnect. Unhandled error while receiving delta market data for {_normalizedSymbol}.";
-                            log.Error(_error, ex);
+                            LogException(ex, _error);
                             Task.Run(async () => await HandleConnectionLost(_error, ex));
                         }
                     }
@@ -328,8 +327,7 @@ namespace MarketConnectors.Binance
             }
             catch (Exception ex)
             {
-
-
+                LogException(ex, "Error trying to refresh Listen Key.");
             } 
         }
         private async Task InitializeUserPrivateOrders()
@@ -630,7 +628,7 @@ namespace MarketConnectors.Binance
         {
             var _error = $"Will reconnect. Unhandled error in the Market Data Queue: {ex.Message}";
 
-            log.Error(_error, ex);
+            LogException(ex, _error);
             Task.Run(async () => await HandleConnectionLost(_error, ex));
         }
 
@@ -655,8 +653,7 @@ namespace MarketConnectors.Binance
         private void tradesBuffers_onErrorAction(Exception ex)
         {
             var _error = $"Will reconnect. Unhandled error in the Trades Queue: {ex.Message}";
-
-            log.Error(_error, ex);
+            LogException(ex, _error);
             Task.Run(async () => await HandleConnectionLost(_error, ex));
         }
 
@@ -707,8 +704,7 @@ namespace MarketConnectors.Binance
         private void deltaSubscription_Exception(Exception obj)
         {
             string _error = $"Websocket error: {obj.Message}";
-            log.Error(_error, obj);
-            HelperNotificationManager.Instance.AddNotification(this.Name, _error, HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.PLUGINS);
+            LogException(obj, _error, true);
 
             Task.Run(StopAsync);
 
@@ -834,8 +830,7 @@ namespace MarketConnectors.Binance
                 if (++pingFailedAttempts >= 5) //5 attempts
                 {
                     var _error = $"Will reconnect. Unhandled error in DoPingAsync. Initiating reconnection. {ex.Message}";
-
-                    log.Error(_error, ex);
+                    LogException(ex, _error);
 
                     Task.Run(async () => await HandleConnectionLost(_error, ex));
                 }

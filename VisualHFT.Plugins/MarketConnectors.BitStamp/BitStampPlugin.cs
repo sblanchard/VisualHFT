@@ -115,9 +115,16 @@ namespace MarketConnectors.Gemini
 
                         _ws.MessageReceived.Subscribe(async msg =>
                         {
-                            string data = msg.ToString(); 
-                            HandleMessage(data, DateTime.Now);
-                            RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
+                            try
+                            {
+                                string data = msg.ToString();
+                                HandleMessage(data, DateTime.Now);
+                                RaiseOnDataReceived(GetProviderModel(eSESSIONSTATUS.CONNECTED));
+                            }
+                            catch (Exception ex)
+                            {
+                                LogException(ex, "HandleMessage");
+                            }
                         });
                         try
                         {
@@ -138,7 +145,7 @@ namespace MarketConnectors.Gemini
                         catch (Exception ex)
                         {
                             var _error = ex.Message;
-                            log.Error(_error, ex);
+                            LogException(ex, _error);
                             await HandleConnectionLost(_error, ex);
                         }
                         exitEvent.WaitOne();
@@ -148,7 +155,7 @@ namespace MarketConnectors.Gemini
             catch (Exception ex)
             {
                 var _error = ex.Message;
-                log.Error(_error, ex);
+                LogException(ex, _error);
                 await HandleConnectionLost(_error, ex);
             }
             CancellationTokenSource source = new CancellationTokenSource();

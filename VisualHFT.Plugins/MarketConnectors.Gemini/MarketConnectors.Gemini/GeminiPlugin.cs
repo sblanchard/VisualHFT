@@ -80,7 +80,7 @@ namespace MarketConnectors.Gemini
             catch (Exception ex)
             {
                 var _error = ex.Message;
-                log.Error(_error, ex);
+                LogException(ex, _error);
                 if (_error.IndexOf("[CantConnectError]") > -1)
                 {
                     Status = ePluginStatus.STOPPED_FAILED;
@@ -138,8 +138,7 @@ namespace MarketConnectors.Gemini
         private void eventBuffers_onErrorAction(Exception ex)
         {
             var _error = $"Will reconnect. Unhandled error in the Market Data Queue: {ex.Message}";
-
-            log.Error(_error, ex);
+            LogException(ex, _error);
             Task.Run(async () => await HandleConnectionLost(_error, ex));
         }
 
@@ -192,7 +191,7 @@ namespace MarketConnectors.Gemini
                     else
                     {
                         var _error = $"Will reconnect. Unhandled error while receiving delta market data.";
-                        log.Error(_error, disconnected.Exception);
+                        LogException(disconnected?.Exception, _error);
                         if (!isReconnecting)
                         {
                             isReconnecting = true;
@@ -214,7 +213,7 @@ namespace MarketConnectors.Gemini
                     {
 
                         var _error = $"Will reconnect. Unhandled error while receiving delta market data.";
-                        log.Error(_error, ex);
+                        LogException(ex, _error);
                         if (!isReconnecting)
                         {
                             isReconnecting = true;
@@ -235,7 +234,7 @@ namespace MarketConnectors.Gemini
                 catch (Exception ex)
                 {
                     var _error = ex.Message;
-                    log.Error(_error, ex);
+                    LogException(ex, _error);
                     if (!isReconnecting)
                     {
                         isReconnecting = true;
@@ -247,7 +246,7 @@ namespace MarketConnectors.Gemini
             catch (Exception ex)
             {
                 var _error = ex.Message;
-                log.Error(_error, ex);
+                LogException(ex, _error);
                 if (!isReconnecting)
                 {
                     isReconnecting = true;
@@ -329,7 +328,7 @@ namespace MarketConnectors.Gemini
                         else
                         {
                             var _error = $"Will reconnect. Unhandled error while receiving delta market data.";
-                            log.Error(_error, disconnected.Exception);
+                            LogException(disconnected?.Exception, _error);
                             if (!isReconnecting)
                             {
                                 isReconnecting = true;
@@ -352,15 +351,12 @@ namespace MarketConnectors.Gemini
                     }
                     catch (Exception ex)
                     {
-                        var _error = ex.Message;
-                        log.Error(_error, ex);
+                        LogException(ex, "userOrderEvents.MessageReceived");
                     }
                 }
-
                 catch (Exception ex)
                 {
-                    var _error = ex.Message;
-
+                    LogException(ex, "socketClient.MessageReceived");
                 }
                 CancellationTokenSource source = new CancellationTokenSource();
             }

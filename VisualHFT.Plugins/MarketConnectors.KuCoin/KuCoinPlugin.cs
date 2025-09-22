@@ -132,7 +132,7 @@ namespace MarketConnectors.KuCoin
             catch (Exception ex)
             {
                 var _error = ex.Message;
-                log.Error(_error, ex);
+                LogException(ex, _error);
                 await HandleConnectionLost(_error, ex);
             }
         }
@@ -250,7 +250,7 @@ namespace MarketConnectors.KuCoin
 
                                 var _error =
                                     $"Will reconnect. Unhandled error while receiving trading data for {_normalizedSymbol}.";
-                                log.Error(_error, ex);
+                                LogException(ex, _error);
                                 Task.Run(async () => await HandleConnectionLost(_error, ex));
                             }
                         }
@@ -416,7 +416,7 @@ namespace MarketConnectors.KuCoin
 
                                 var _error =
                                     $"Will reconnect. Unhandled error while receiving delta market data for {_normalizedSymbol}.";
-                                log.Error(_error, ex);
+                                LogException(ex, _error);
                                 Task.Run(async () => await HandleConnectionLost(_error, ex));
                             }
                         }
@@ -472,7 +472,7 @@ namespace MarketConnectors.KuCoin
             }
             catch (Exception ex)
             {
-
+                LogException(ex, "Error getting snapshots.");
             }
         }
 
@@ -496,7 +496,7 @@ namespace MarketConnectors.KuCoin
         {
             var _error = $"Will reconnect. Unhandled error in the Market Data Queue: {ex.Message}";
 
-            log.Error(_error, ex);
+            LogException(ex, _error);
             Task.Run(async () => await HandleConnectionLost(_error, ex));
         }
 
@@ -520,7 +520,7 @@ namespace MarketConnectors.KuCoin
         {
             var _error = $"Will reconnect. Unhandled error in the Trades Queue: {ex.Message}";
 
-            log.Error(_error, ex);
+            LogException(ex, _error);
             Task.Run(async () => await HandleConnectionLost(_error, ex));
         }
 
@@ -584,9 +584,7 @@ namespace MarketConnectors.KuCoin
         private void deltaSubscription_Exception(Exception obj)
         {
             string _error = $"Websocket error: {obj.Message}";
-            log.Error(_error, obj);
-            HelperNotificationManager.Instance.AddNotification(this.Name, _error, HelprNorificationManagerTypes.ERROR,
-                HelprNorificationManagerCategories.PLUGINS);
+            LogException(obj, _error, true);
 
             Task.Run(StopAsync);
 
@@ -718,7 +716,7 @@ namespace MarketConnectors.KuCoin
                     var _error =
                         $"Will reconnect. Unhandled error in DoPingAsync. Initiating reconnection. {ex.Message}";
 
-                    log.Error(_error, ex);
+                    LogException(ex, _error);
 
                     Task.Run(async () => await HandleConnectionLost(_error, ex));
                 }

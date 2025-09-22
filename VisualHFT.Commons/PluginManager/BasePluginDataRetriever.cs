@@ -8,6 +8,7 @@ using VisualHFT.Helpers;
 using VisualHFT.Model;
 using VisualHFT.PluginManager;
 using VisualHFT.UserSettings;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 using IPlugin = VisualHFT.PluginManager.IPlugin;
 
 namespace VisualHFT.Commons.PluginManager
@@ -233,7 +234,8 @@ namespace VisualHFT.Commons.PluginManager
             }
 
             // Log and notify the error or reason
-            LogAndNotify(reason, exception);
+            var _msg = $"Trying to reconnect. Reason: {reason}";
+            LogAndNotify(_msg, exception);
 
             if (Interlocked.Increment(ref _pendingReconnectionRequests) > MaxReconnectionPendingRequests)
             {
@@ -308,10 +310,8 @@ namespace VisualHFT.Commons.PluginManager
                 }
                 else
                 {
-                    var msgErr = $"{this.Name} Reconnection failed. Attempt {_reconnectionAttempt} of {maxReconnectionAttempts}";
-                    log.Error(msgErr, ex);
-                    LogAndNotify(msgErr, ex);
-
+                    var msgErr = $"Reconnection failed. Attempt {_reconnectionAttempt} of {maxReconnectionAttempts}";
+                    LogException(ex, msgErr, true);
                     _reconnectionSemaphore.Release();
                     await HandleConnectionLost(ex.Message, ex);
                 }
@@ -325,18 +325,30 @@ namespace VisualHFT.Commons.PluginManager
 
         }
 
-        private void LogAndNotify(string reason, Exception exception)
+        public void LogException(Exception? ex, string? context = null, bool NotifyToUI = false)
+        {
+            if (ex == null)
+                return;
+            var msg = $"{this.Name} Exception";
+            if (!string.IsNullOrEmpty(context))
+                msg += $" Context: {context}";
+            log.Error(msg, ex);
+            
+            if (NotifyToUI)
+            {
+                LogAndNotify(msg, ex);
+            }
+        }
+        private void LogAndNotify(string reason, Exception? exception = null)
         {
             if (!string.IsNullOrEmpty(reason) && exception == null)
             {
-                var _msg = $"Trying to reconnect. Reason: {reason}";
-                HelperNotificationManager.Instance.AddNotification(this.Name, _msg,
+                HelperNotificationManager.Instance.AddNotification(this.Name, reason,
                     HelprNorificationManagerTypes.WARNING, HelprNorificationManagerCategories.PLUGINS);
             }
             else if (!string.IsNullOrEmpty(reason) && exception != null)
             {
-                var _msg = $"Trying to reconnect. Reason: {reason}.";
-                HelperNotificationManager.Instance.AddNotification(this.Name, _msg,
+                HelperNotificationManager.Instance.AddNotification(this.Name, reason,
                     HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.PLUGINS, exception);
             }
         }
