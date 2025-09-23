@@ -1,4 +1,5 @@
-﻿using VisualHFT.Commons.Model;
+﻿using log4net.Core;
+using VisualHFT.Commons.Model;
 using VisualHFT.Commons.Pools;
 using VisualHFT.Enums;
 using VisualHFT.Helpers;
@@ -24,6 +25,9 @@ namespace VisualHFT.Model
         private long _addedLevels = 0;
         private long _deletedLevels = 0;
         private long _updatedLevels = 0;
+        private ulong _addedVolume = 0;
+        private ulong _deletedVolume = 0;
+        private ulong _updatedVolume = 0;
         // Properties to expose counters
         public OrderBook()
         {
@@ -490,6 +494,8 @@ namespace VisualHFT.Model
                     list.Add(_level);
                     listCount++;
                     Interlocked.Increment(ref _addedLevels);
+                    Interlocked.Add(ref _addedVolume, (ulong)(_level.Size.HasValue ? _level.Size.Value : 0));
+
                     //truncate last item if we exceeded the MaxDepth
                     if (listCount > MaxDepth)
                     {
@@ -526,9 +532,15 @@ namespace VisualHFT.Model
                     existingItem =>
                     {
                         if (existingItem.Size > item.Size)      //deleted
+                        {
                             Interlocked.Increment(ref _deletedLevels);
+                            Interlocked.Add(ref _deletedVolume, (ulong)(existingItem.Size.HasValue ? existingItem.Size.Value : 0));
+                        }
                         else if (existingItem.Size < item.Size) //added
+                        {
                             Interlocked.Increment(ref _addedLevels);
+                            Interlocked.Add(ref _addedVolume, (ulong)(existingItem.Size.HasValue ? existingItem.Size.Value : 0));
+                        }
 
                         existingItem.Price = item.Price;
                         existingItem.Size = item.Size;
@@ -563,6 +575,7 @@ namespace VisualHFT.Model
                     // FIXED: Return to shared pool instead of instance pool
                     BookItemPool.Return(_itemToDelete);
                     Interlocked.Increment(ref _deletedLevels);
+                    Interlocked.Add(ref _deletedVolume, (ulong)(_itemToDelete.Size.HasValue ? _itemToDelete.Size.Value : 0));
                 }
             }
         }
@@ -574,11 +587,22 @@ namespace VisualHFT.Model
             long updated = Interlocked.Read(ref _updatedLevels);
             return (added, deleted, updated);
         }
+        public (ulong addedVol, ulong deletedVol, ulong updatedVol) GetCountersVolume()
+        {
+            ulong added = Interlocked.Read(ref _addedVolume);
+            ulong deleted = Interlocked.Read(ref _deletedVolume);
+            ulong updated = Interlocked.Read(ref _updatedVolume);
+            return (added, deleted, updated);
+        }
         private void ResetCounters()
         {
             Interlocked.Exchange(ref _addedLevels, 0);
             Interlocked.Exchange(ref _deletedLevels, 0);
             Interlocked.Exchange(ref _updatedLevels, 0);
+
+            Interlocked.Exchange(ref _addedVolume, 0);
+            Interlocked.Exchange(ref _deletedVolume, 0);
+            Interlocked.Exchange(ref _updatedVolume, 0);
         }
 
 
