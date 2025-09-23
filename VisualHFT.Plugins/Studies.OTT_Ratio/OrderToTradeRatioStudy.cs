@@ -36,6 +36,7 @@ namespace VisualHFT.Studies
         private long _prevDeleted = 0;
         private long _prevUpdated = 0;
         private long _floorNum = 1; // Default floor; configurable if needed
+        private bool _isFirstL2Call = true;
 
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
@@ -94,6 +95,15 @@ namespace VisualHFT.Studies
                 return;
 
             var counters = e.GetCounters();
+            if (_isFirstL2Call)
+            {
+                // Initialize previous counters on the first call
+                _prevAdded = counters.added;
+                _prevDeleted = counters.deleted;
+                _prevUpdated = counters.updated;
+                _isFirstL2Call = false;
+                return; // Skip calculation on the first call
+            }
             long addedDelta = counters.added - _prevAdded;
             long deletedDelta = counters.deleted - _prevDeleted;
             long updatedDelta = counters.updated - _prevUpdated;
