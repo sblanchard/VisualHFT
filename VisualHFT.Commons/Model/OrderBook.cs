@@ -339,7 +339,7 @@ namespace VisualHFT.Model
             }
 
 
-            GetAndResetChangeCounts();
+            ResetCounters();
         }
 
         public void UpdateSnapshot(IEnumerable<BookItem> asks, IEnumerable<BookItem> bids)
@@ -567,14 +567,19 @@ namespace VisualHFT.Model
             }
         }
 
-        public (long added, long deleted, long updated) GetAndResetChangeCounts()
+        public (long added, long deleted, long updated) GetCounters()
         {
-            long added = Interlocked.Exchange(ref _addedLevels, 0);
-            long deleted = Interlocked.Exchange(ref _deletedLevels, 0);
-            long updated = Interlocked.Exchange(ref _updatedLevels, 0);
+            long added = Interlocked.Read(ref _addedLevels);
+            long deleted = Interlocked.Read(ref _deletedLevels);
+            long updated = Interlocked.Read(ref _updatedLevels);
             return (added, deleted, updated);
         }
-
+        private void ResetCounters()
+        {
+            Interlocked.Exchange(ref _addedLevels, 0);
+            Interlocked.Exchange(ref _deletedLevels, 0);
+            Interlocked.Exchange(ref _updatedLevels, 0);
+        }
 
 
 

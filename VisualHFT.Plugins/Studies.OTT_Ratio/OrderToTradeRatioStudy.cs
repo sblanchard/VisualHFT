@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.Enums;
@@ -9,7 +11,6 @@ using VisualHFT.Studies.MarketRatios.Model;
 using VisualHFT.Studies.MarketRatios.UserControls;
 using VisualHFT.Studies.MarketRatios.ViewModel;
 using VisualHFT.UserSettings;
-using System.Collections.Generic;
 
 namespace VisualHFT.Studies
 {
@@ -31,24 +32,29 @@ namespace VisualHFT.Studies
         private object _lock = new object();
         private decimal _lastMarketMidPrice = 0; //keep track of market price
 
+        private long _prevAdded = 0;
+        private long _prevDeleted = 0;
+        private long _prevUpdated = 0;
+        private long _floorNum = 1; // Default floor; configurable if needed
+
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
 
         public override string Name { get; set; } = "Order To Trade Ratio Study Plugin";
         public override string Version { get; set; } = "1.0.0";
-        public override string Description { get; set; } = "Order-to-Trade Ratio measures order book activity vs executed trades. Regulatory metric for detecting potential market manipulation.";
+        public override string Description { get; set; } = "Order-to-Trade Ratio measures order book activity vs executed public trades. Regulatory metric for detecting potential market manipulation.";
         public override string Author { get; set; } = "VisualHFT";
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }
-        public override string TileTitle { get; set; } = "OTT";
-        public override string TileToolTip { get; set; } = "The <b> OTT</b> (Order-to-Trade Ratio) is a metric used to analyze order book activity and its relationship to executed trades. <br/> It's calculated using <i>aggregated  market data</i>, which provides snapshots of the total order volume at each price level, rather than individual order actions.  Because of this, the  OTT represents the <b>net change in order book depth</b> relative to the number of trades.<br/><br/>" +
-                                                           "<b>Calculation:</b> <i> OTT Ratio = (Sum of Absolute Changes in Order Book Size at All Price Levels) / (Number of Executed Trades)</i><br/><br/>" +
+        public override string TileTitle { get; set; } = "OTR";
+        public override string TileToolTip { get; set; } = "The <b> OTR</b> (Order-to-Trade Ratio) is a metric used to analyze order book activity and its relationship to executed trades. <br/> It's calculated using <i>aggregated  market data</i>, which provides snapshots of the total order volume at each price level, rather than individual order actions.  Because of this, the  OTR represents the <b>net change in order book depth</b> relative to the number of trades.<br/><br/>" +
+                                                           "<b>Calculation:</b> <i> OTR Ratio = (Sum of Absolute Changes in Order Book Size at All Price Levels) / (Number of Executed Trades)</i><br/><br/>" +
                                                            "<b>Interpretation and Limitations:</b><br/>" +
                                                            "<ul>" +
-                                                           "<li>A high  OTT *may* indicate low liquidity, high-frequency trading activity, or potential order book manipulation (e.g., spoofing). However, because it's based on aggregated data, it cannot definitively distinguish between these scenarios.</li>" +
-                                                           "<li>A single large order that is partially filled multiple times will increase the  OTT, as each partial fill registers as a size change.</li>" +
-                                                           "<li>The  OTT is a *proxy* for order activity and should be used in conjunction with other market microstructure metrics (spread, volume, order book imbalance) for a complete analysis.</li>" +
-                                                           "<li>This metric is *related to* but *distinct from* the traditional Order-to-Trade Ratio (OTTR) calculated with full order book data.</li>" +
+                                                           "<li>A high  OTR *may* indicate low liquidity, high-frequency trading activity, or potential order book manipulation (e.g., spoofing). However, because it's based on aggregated data, it cannot definitively distinguish between these scenarios.</li>" +
+                                                           "<li>A single large order that is partially filled multiple times will increase the  OTR, as each partial fill registers as a size change.</li>" +
+                                                           "<li>The  OTR is a *proxy* for order activity and should be used in conjunction with other market microstructure metrics (spread, volume, order book imbalance) for a complete analysis.</li>" +
+                                                           "<li>This metric is *related to* but *distinct from* the traditional Order-to-Trade Ratio (OTRR) calculated with full order book data.</li>" +
                                                            "</ul>" +
                                                            "Regulatory bodies often monitor similar metrics to identify potentially manipulative or disruptive trading activities, although they typically have access to more granular data.<br/>";
         public OrderToTradeRatioStudy()
@@ -87,11 +93,17 @@ namespace VisualHFT.Studies
             if (_settings.Provider.ProviderID != e.ProviderID || _settings.Symbol != e.Symbol)
                 return;
 
-            var lobUpdates = e.GetAndResetChangeCounts();
-            lock (_lock)
-            {
-                _orderEvents = lobUpdates.added + lobUpdates.deleted + lobUpdates.updated;
-            }
+            var counters = e.GetCounters();
+            long addedDelta = counters.added - _prevAdded;
+            long deletedDelta = counters.deleted - _prevDeleted;
+            long updatedDelta = counters.updated - _prevUpdated;
+
+            _prevAdded = counters.added;
+            _prevDeleted = counters.deleted;
+            _prevUpdated = counters.updated;
+
+            _lastMarketMidPrice = (decimal)e.MidPrice;
+            Interlocked.Add(ref _orderEvents, addedDelta + deletedDelta + 2 * updatedDelta); // Accumulate deltas, double-count updates
             DoCalculationAndSend();
 
         }
@@ -102,37 +114,25 @@ namespace VisualHFT.Studies
             if (!e.IsBuy.HasValue) //we do not know what it is
                 return;
 
-            lock (_lock)
-            {
-                _tradeCount++;
-            }
+            Interlocked.Increment(ref _tradeCount);
             DoCalculationAndSend();
 
         }
 
         private void ResetCalculations()
         {
-            lock (_lock)
-            {
-                _orderEvents = 0;
-                _tradeCount = 0;
-            }
+            Interlocked.Exchange(ref _orderEvents, 0);
+            Interlocked.Exchange(ref _tradeCount, 0);
         }
         protected void DoCalculationAndSend()
         {
             if (Status != VisualHFT.PluginManager.ePluginStatus.STARTED) return;
 
-            decimal orderToTradeRatio;
+            long orderEvents = Interlocked.Read(ref _orderEvents);
+            long tradeCount = Interlocked.Read(ref _tradeCount);
+            long denom = Math.Max(tradeCount, _floorNum);
+            decimal orderToTradeRatio = denom == 0 ? 0 : (decimal)orderEvents / denom - 1; // Standard formula with floor
 
-            lock (_lock)
-            {
-                if (_tradeCount == 0)
-                    orderToTradeRatio = 0;
-                else
-                    orderToTradeRatio = (decimal)_orderEvents / _tradeCount;
-            }
-
-            // Trigger any events or updates based on the new T2O ratio
             var newItem = new BaseStudyModel();
             newItem.Value = orderToTradeRatio;
             newItem.ValueFormatted = orderToTradeRatio.ToString("N1");
