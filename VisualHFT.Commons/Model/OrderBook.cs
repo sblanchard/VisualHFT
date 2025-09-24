@@ -1,4 +1,5 @@
 ﻿using log4net.Core;
+using System.Runtime.CompilerServices;
 using VisualHFT.Commons.Model;
 using VisualHFT.Commons.Pools;
 using VisualHFT.Enums;
@@ -25,13 +26,20 @@ namespace VisualHFT.Model
         private long _addedLevels = 0;
         private long _deletedLevels = 0;
         private long _updatedLevels = 0;
-        private ulong _addedVolume = 0;
-        private ulong _deletedVolume = 0;
-        private ulong _updatedVolume = 0;
+        private ulong _addedVolumeScaled = 0;
+        private ulong _deletedVolumeScaled = 0;
+        private ulong _updatedVolumeScaled = 0;
+
+        // Scale cache (10^SizeDecimalPlaces)
+        private readonly int _volumeScaleDp;
+        private readonly ulong _volumeScale;
+        
         // Properties to expose counters
         public OrderBook()
         {
             _data = new OrderBookData();
+            _volumeScaleDp = _data.SizeDecimalPlaces;
+            _volumeScale = ComputeScale(_volumeScaleDp);
             FilterBidAskByMaxDepth = true;
         }
 
@@ -40,6 +48,8 @@ namespace VisualHFT.Model
             if (maxDepth <= 0)
                 throw new ArgumentOutOfRangeException(nameof(maxDepth), "maxDepth must be greater than zero.");
             _data = new OrderBookData(symbol, priceDecimalPlaces, maxDepth);
+            _volumeScaleDp = _data.SizeDecimalPlaces;
+            _volumeScale = ComputeScale(_volumeScaleDp);
             FilterBidAskByMaxDepth = true;
         }
 
@@ -494,7 +504,12 @@ namespace VisualHFT.Model
                     list.Add(_level);
                     listCount++;
                     Interlocked.Increment(ref _addedLevels);
-                    Interlocked.Add(ref _addedVolume, (ulong)(_level.Size.HasValue ? _level.Size.Value : 0));
+                    if (_level.Size.HasValue && _level.Size.Value > 0)
+                    {
+                        var scaled = Scale(_level.Size.Value);
+                        if (scaled > 0)
+                            Interlocked.Add(ref _addedVolumeScaled, scaled);
+                    }
 
                     //truncate last item if we exceeded the MaxDepth
                     if (listCount > MaxDepth)
@@ -531,15 +546,27 @@ namespace VisualHFT.Model
                 (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Update(x => x.Price == item.Price,
                     existingItem =>
                     {
-                        if (existingItem.Size > item.Size)      //deleted
+                        double oldSize = existingItem.Size ?? 0.0;
+                        double newSize = item.Size ?? 0.0;
+
+                        if (oldSize > newSize)
                         {
+                            var delta = oldSize - newSize;
+                            var scaled = Scale(delta);
+                            if (scaled > 0) Interlocked.Add(ref _deletedVolumeScaled, scaled);
                             Interlocked.Increment(ref _deletedLevels);
-                            Interlocked.Add(ref _deletedVolume, (ulong)(existingItem.Size.HasValue ? existingItem.Size.Value : 0));
                         }
-                        else if (existingItem.Size < item.Size) //added
+                        else if (oldSize < newSize)
                         {
+                            var delta = newSize - oldSize;
+                            var scaled = Scale(delta);
+                            if (scaled > 0) Interlocked.Add(ref _addedVolumeScaled, scaled);
                             Interlocked.Increment(ref _addedLevels);
-                            Interlocked.Add(ref _addedVolume, (ulong)(existingItem.Size.HasValue ? existingItem.Size.Value : 0));
+                        }
+                        else
+                        {
+                            Interlocked.Increment(ref _updatedLevels);
+                            // (Keep _updatedVolumeScaled unused; hook here if needed.)
                         }
 
                         existingItem.Price = item.Price;
@@ -575,7 +602,13 @@ namespace VisualHFT.Model
                     // FIXED: Return to shared pool instead of instance pool
                     BookItemPool.Return(_itemToDelete);
                     Interlocked.Increment(ref _deletedLevels);
-                    Interlocked.Add(ref _deletedVolume, (ulong)(_itemToDelete.Size.HasValue ? _itemToDelete.Size.Value : 0));
+                    double sz = _itemToDelete.Size ?? 0.0;
+                    if (sz > 0)
+                    {
+                        var scaled = Scale(sz);
+                        if (scaled > 0)
+                            Interlocked.Add(ref _deletedVolumeScaled, scaled);
+                    }
                 }
             }
         }
@@ -587,22 +620,21 @@ namespace VisualHFT.Model
             long updated = Interlocked.Read(ref _updatedLevels);
             return (added, deleted, updated);
         }
-        public (ulong addedVol, ulong deletedVol, ulong updatedVol) GetCountersVolume()
+        public (double addedVol, double deletedVol, double updatedVol) GetCountersVolume()
         {
-            ulong added = Interlocked.Read(ref _addedVolume);
-            ulong deleted = Interlocked.Read(ref _deletedVolume);
-            ulong updated = Interlocked.Read(ref _updatedVolume);
-            return (added, deleted, updated);
+            var a = (ulong)Interlocked.Read(ref Unsafe.As<ulong, long>(ref _addedVolumeScaled));
+            var d = (ulong)Interlocked.Read(ref Unsafe.As<ulong, long>(ref _deletedVolumeScaled));
+            var u = (ulong)Interlocked.Read(ref Unsafe.As<ulong, long>(ref _updatedVolumeScaled));
+            return (Unscale(a), Unscale(d), Unscale(u));
         }
         private void ResetCounters()
         {
             Interlocked.Exchange(ref _addedLevels, 0);
             Interlocked.Exchange(ref _deletedLevels, 0);
             Interlocked.Exchange(ref _updatedLevels, 0);
-
-            Interlocked.Exchange(ref _addedVolume, 0);
-            Interlocked.Exchange(ref _deletedVolume, 0);
-            Interlocked.Exchange(ref _updatedVolume, 0);
+            Interlocked.Exchange(ref _addedVolumeScaled, 0);
+            Interlocked.Exchange(ref _deletedVolumeScaled, 0);
+            Interlocked.Exchange(ref _updatedVolumeScaled, 0);
         }
 
 
@@ -751,6 +783,32 @@ namespace VisualHFT.Model
         }
 
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static ulong ComputeScale(int dp) =>
+            dp switch
+            {
+                0 => 1UL,
+                1 => 10UL,
+                2 => 100UL,
+                3 => 1_000UL,
+                4 => 10_000UL,
+                5 => 100_000UL,
+                6 => 1_000_000UL,
+                7 => 10_000_000UL,
+                8 => 100_000_000UL,
+                9 => 1_000_000_000UL,
+                _ => (ulong)Math.Pow(10, dp)
+            };
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private ulong Scale(double v)
+        {
+            if (v <= 0) return 0;
+            return (ulong)Math.Round(v * _volumeScale, MidpointRounding.ToZero);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private double Unscale(ulong scaled) => scaled / (double)_volumeScale;
 
         protected virtual void Dispose(bool disposing)
         {
