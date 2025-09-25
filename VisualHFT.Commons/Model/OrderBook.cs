@@ -31,9 +31,9 @@ namespace VisualHFT.Model
         private ulong _updatedVolumeScaled = 0;
 
         // Scale cache (10^SizeDecimalPlaces)
-        private readonly int _volumeScaleDp;
-        private readonly ulong _volumeScale;
-        
+        private int _volumeScaleDp;
+        private ulong _volumeScale;
+
         // Properties to expose counters
         public OrderBook()
         {
@@ -79,7 +79,12 @@ namespace VisualHFT.Model
         public int SizeDecimalPlaces
         {
             get => _data.SizeDecimalPlaces;
-            set => _data.SizeDecimalPlaces = value;
+            set
+            {
+                _data.SizeDecimalPlaces = value;
+                _volumeScaleDp = _data.SizeDecimalPlaces;
+                _volumeScale = ComputeScale(_volumeScaleDp);
+            }
         }
 
         public double SymbolMultiplier => _data.SymbolMultiplier;
@@ -600,9 +605,9 @@ namespace VisualHFT.Model
                 {
                     (item.IsBid.HasValue && item.IsBid.Value ? _data.Bids : _data.Asks).Remove(_itemToDelete);
                     // FIXED: Return to shared pool instead of instance pool
-                    BookItemPool.Return(_itemToDelete);
                     Interlocked.Increment(ref _deletedLevels);
                     double sz = _itemToDelete.Size ?? 0.0;
+                    BookItemPool.Return(_itemToDelete);
                     if (sz > 0)
                     {
                         var scaled = Scale(sz);
