@@ -165,7 +165,7 @@ namespace VisualHFT.Studies.VPIN.ViewModel
         private bool CanExecuteOkCommand(object obj)
         {
             // This checks if any validation message exists for any of the properties
-            return /*string.IsNullOrWhiteSpace(this[nameof(BucketVolumeSize)]) &&*/
+            return string.IsNullOrWhiteSpace(this[nameof(BucketVolumeSize)]) &&
                    string.IsNullOrWhiteSpace(this[nameof(SelectedProvider)]) &&
                    string.IsNullOrWhiteSpace(this[nameof(SelectedSymbol)]);
 

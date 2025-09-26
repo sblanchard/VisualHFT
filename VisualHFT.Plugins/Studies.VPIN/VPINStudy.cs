@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using VisualHFT.Commons.PluginManager;
 using VisualHFT.Enums;
@@ -28,18 +29,11 @@ namespace VisualHFT.Studies
 
         //variables for calculation
         private decimal _bucketVolumeSize; // The volume size of each bucket
-        private decimal _currentBuyVolume = 0; // Current volume of buy trades in the bucket
-        private decimal _currentSellVolume = 0; // Current volume of sell trades in the bucket
+        private decimal _currentBucketVolume; // The volume size of each bucket
         private decimal _lastMarketMidPrice = 0; //keep track of market price
-        private object _locker = new object();
+        private decimal _currentBuyVolume = 0;
+        private decimal _currentSellVolume = 0;
 
-        private BookItem _tobBid = new BookItem();
-        private BookItem _tobAsk = new BookItem();
-
-        private const decimal VPIN_THRESHOLD = 0.7M; // ALERT Example threshold
-
-        private DateTime _currentBucketStartTime;
-        private DateTime _currentBucketEndTime;
 
         // Event declaration
         public override event EventHandler<decimal> OnAlertTriggered;
@@ -71,10 +65,11 @@ namespace VisualHFT.Studies
         public override async Task StartAsync()
         {
             await base.StartAsync();//call the base first
+            ResetBucket();
 
             HelperOrderBook.Instance.Subscribe(LIMITORDERBOOK_OnDataReceived);
             HelperTrade.Instance.Subscribe(TRADES_OnDataReceived);
-            DoCalculation(true); //initial value
+            DoCalculation(false); //initial value
 
             log.Info($"{this.Name} Plugin has successfully started.");
             Status = ePluginStatus.STARTED;
@@ -109,30 +104,41 @@ namespace VisualHFT.Studies
                 return;
             if (!e.IsBuy.HasValue) //we do not know what it is
                 return;
-            lock (_locker)
-            {
-                // Set the start time for the current bucket if it's a new bucket
-                if (_currentBuyVolume == 0 && _currentSellVolume == 0)
-                {
-                    _currentBucketStartTime = e.Timestamp;
-                }
+            if (_bucketVolumeSize == 0)
+                _bucketVolumeSize = (decimal)_settings.BucketVolSize;
 
+            decimal bucketOverflow = 0;
+
+
+            _currentBucketVolume += e.Size;
+            if (_currentBucketVolume > _bucketVolumeSize) //We have overflow
+            {
+                bucketOverflow = _currentBucketVolume - _bucketVolumeSize;
+                _currentBucketVolume = _bucketVolumeSize; //Cap it
+                if (e.IsBuy.Value)
+                    _currentBuyVolume += e.Size - bucketOverflow;
+                else
+                    _currentSellVolume += e.Size - bucketOverflow;
+            }
+            else //NO OVERFLOW
+            {
                 if (e.IsBuy.Value)
                     _currentBuyVolume += e.Size;
                 else
                     _currentSellVolume += e.Size;
-                // Check if the bucket is filled
-                if (_currentBuyVolume + _currentSellVolume >= _bucketVolumeSize)
-                {
-                    _currentBucketStartTime = e.Timestamp;
-                    _currentBucketEndTime = e.Timestamp; // Set the end time for the current bucket
-                    DoCalculation(true);
-                }
+            }
+
+            DoCalculation(bucketOverflow > 0); // will update vpin
+
+
+            //assign overfowed volume to its proper variable.
+            if (bucketOverflow > 0)
+            {
+                if (e.IsBuy.Value)
+                    _currentBuyVolume = bucketOverflow;
                 else
-                {
-                    _currentBucketEndTime = e.Timestamp; // Set the end time for the current bucket
-                    DoCalculation(false);
-                }
+                    _currentSellVolume = bucketOverflow;
+                _currentBucketVolume = bucketOverflow;
             }
         }
         private void LIMITORDERBOOK_OnDataReceived(OrderBook e)
@@ -151,42 +157,18 @@ namespace VisualHFT.Studies
             if (_settings.Provider.ProviderID != e.ProviderID || _settings.Symbol != e.Symbol)
                 return;
 
-            lock (_locker)
-            {
-                var incomingTobBid = e.GetTOB(true);
-                var incomingTobAsk = e.GetTOB(false);
-                if (incomingTobBid == null || incomingTobAsk == null
-                    || (incomingTobBid.Equals(_tobBid) && incomingTobAsk.Equals(_tobAsk)) //if the top of the book has not changed, no need to continue
-                    )
-                    return;
-
-                _tobBid.CopyFrom(incomingTobBid);
-                _tobAsk.CopyFrom(incomingTobAsk);
-
-                _lastMarketMidPrice = (decimal)e.MidPrice;
-                if (_lastMarketMidPrice != 0)
-                    DoCalculation(false);
-            }
+            _lastMarketMidPrice = (decimal)e.MidPrice;
+            DoCalculation(false); //Interim update -> Just to send update.
         }
         private void DoCalculation(bool isNewBucket)
         {
             if (Status != VisualHFT.PluginManager.ePluginStatus.STARTED) return;
-            string valueColor = "White";
-            if (_bucketVolumeSize == 0)
-                _bucketVolumeSize = (decimal)_settings.BucketVolSize;
+            string valueColor = isNewBucket ? "Green" : "White";
 
             decimal vpin = 0;
             if ((_currentBuyVolume + _currentSellVolume) > 0)
-                vpin = (decimal)Math.Abs(_currentBuyVolume - _currentSellVolume) / (_currentBuyVolume + _currentSellVolume);
+                vpin = Math.Abs(_currentBuyVolume - _currentSellVolume) / (_currentBuyVolume + _currentSellVolume);
 
-            if (isNewBucket)
-            {
-                valueColor = "Green";
-                // Check against threshold and trigger alert
-                if (vpin > VPIN_THRESHOLD)
-                    OnAlertTriggered?.Invoke(this, vpin);
-                ResetBucket();
-            }
             // Add to rolling window and remove oldest if size exceeded
             var newItem = new BaseStudyModel();
             newItem.Value = vpin;
@@ -194,14 +176,16 @@ namespace VisualHFT.Studies
             newItem.Timestamp = HelperTimeProvider.Now;
             newItem.MarketMidPrice = _lastMarketMidPrice;
             newItem.ValueColor = valueColor;
+            newItem.AddItemSkippingAggregation = isNewBucket;
             AddCalculation(newItem);
         }
         private void ResetBucket()
         {
-            _currentBuyVolume = 0;
+            _bucketVolumeSize = 0;
             _currentSellVolume = 0;
+            _currentBuyVolume = 0;
+            _currentBucketVolume = 0;
         }
-
         /// <summary>
         /// This method defines how the internal AggregatedCollection should aggregate incoming items.
         /// It is invoked whenever a new item is added to the collection and aggregation is required.
@@ -214,10 +198,10 @@ namespace VisualHFT.Studies
         /// <param name="lastItemAggregationCount">Counter indicating how many times the last item has been aggregated.</param>
         protected override void onDataAggregation(List<BaseStudyModel> dataCollection, BaseStudyModel newItem, int lastItemAggregationCount)
         {
-            //we want to average the aggregations
+            //Aggregation: last
             var existing = dataCollection[^1]; // Get the last item in the collection
-            existing.Value = ((existing.Value * (lastItemAggregationCount - 1)) + newItem.Value) / lastItemAggregationCount;
-            existing.ValueFormatted = existing.Value.ToString("N1");
+            existing.Value = newItem.Value;
+            existing.ValueFormatted = newItem.ValueFormatted;
             existing.MarketMidPrice = newItem.MarketMidPrice;
 
             base.onDataAggregation(dataCollection, newItem, lastItemAggregationCount);
@@ -233,8 +217,6 @@ namespace VisualHFT.Studies
                     // Dispose managed resources here
                     HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
                     HelperTrade.Instance.Unsubscribe(TRADES_OnDataReceived);
-                    _tobAsk?.Dispose();
-                    _tobBid?.Dispose();
                     base.Dispose();
                 }
 
@@ -252,6 +234,7 @@ namespace VisualHFT.Studies
             {
                 _settings.Provider = new Provider();
             }
+            _settings.AggregationLevel = AggregationLevel.S1; //force to 1 second
         }
 
         protected override void SaveSettings()
@@ -266,7 +249,7 @@ namespace VisualHFT.Studies
                 BucketVolSize = 1,
                 Symbol = "",
                 Provider = new ViewModel.Model.Provider(),
-                AggregationLevel = AggregationLevel.Ms100
+                AggregationLevel = AggregationLevel.S1
             };
             SaveToUserSettings(_settings);
         }

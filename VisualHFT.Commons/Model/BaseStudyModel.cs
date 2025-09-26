@@ -48,6 +48,7 @@ namespace VisualHFT.Model
         }
         public string Tooltip { get; set; }
         public string Tag { get; set; }
+        public bool AddItemSkippingAggregation { get; set; }
 
         public void copyFrom(BaseStudyModel e)
         {
@@ -58,6 +59,7 @@ namespace VisualHFT.Model
             _valueColor = e.ValueColor;
             _marketMidPrice = e.MarketMidPrice;
             Tooltip = e.Tooltip;
+            AddItemSkippingAggregation = false;
         }
 
         public void Reset()
@@ -69,6 +71,7 @@ namespace VisualHFT.Model
             _valueColor = "";
             _marketMidPrice = 0;
             Tooltip = "";
+            AddItemSkippingAggregation = false;
         }
     }
 }

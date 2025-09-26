@@ -60,7 +60,31 @@ namespace VisualHFT.Helpers
         }
 
 
-
+        public bool ForceAddSkippingAggregation(T item)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(AggregatedCollection<T>));
+            }
+            bool retValue = false;
+            lock (_lockObject)
+            {
+                _ItemsUpdatedCount = 0; //reset on add new
+                _aggregatedData.Add(item);
+                OnAdded?.Invoke(this, item);
+                if (_aggregatedData.Count() > _maxPoints)
+                {
+                    var itemToRemove = _aggregatedData[0];
+                    // Remove the item from the collection
+                    OnRemoving?.Invoke(this, itemToRemove);
+                    _aggregatedData.Remove(itemToRemove);
+                    // Trigger any remove events or perform additional logic as required
+                    OnRemoved?.Invoke(this, 0);
+                }
+                retValue = true;
+            }
+            return retValue;
+        }
         public bool Add(T item)
         {
             if (_disposed)

@@ -235,6 +235,7 @@ namespace MarketConnectors.KuCoin
                                 trade1.Price = trade.Data.Price;
                                 trade1.Timestamp = trade.Data.Timestamp;
                                 trade1.Quantity = trade.Data.Quantity;
+                                trade1.Side = trade.Data.Side;
                                 string _normalizedSymbol = "(null)";
                                 if (trade != null && trade.Data != null)
                                 {

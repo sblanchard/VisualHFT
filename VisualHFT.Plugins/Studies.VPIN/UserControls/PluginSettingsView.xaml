@@ -51,8 +51,9 @@
 
 
 
-            <Label Content="Aggregation" />
+            <Label Content="Aggregation"  Visibility="Hidden"/>
             <ComboBox ItemsSource="{Binding AggregationLevels}" Margin="0,5"
+                      Visibility="Hidden"
                   DisplayMemberPath="Item1" 
                   SelectedValuePath="Item2" 
                   SelectedValue="{Binding AggregationLevelSelection}" 

@@ -280,7 +280,12 @@ namespace VisualHFT.Commons.PluginManager
 
         private void QUEUE_onReadAction(BaseStudyModel item)
         {
-            if (_AGG_DATA.Add(item))
+            if (!item.AddItemSkippingAggregation && _AGG_DATA.Add(item))
+            {
+                OnCalculated?.Invoke(this, item);
+                onDataAdded();
+            }
+            else if (item.AddItemSkippingAggregation && _AGG_DATA.ForceAddSkippingAggregation(item))
             {
                 OnCalculated?.Invoke(this, item);
                 onDataAdded();
