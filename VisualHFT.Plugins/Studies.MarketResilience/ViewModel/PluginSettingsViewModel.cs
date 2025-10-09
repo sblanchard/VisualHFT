@@ -19,9 +19,7 @@ namespace VisualHFT.Studies.MarketResilience.ViewModel
         private int? _selectedProviderID;
         private string _selectedSymbol;
         private AggregationLevel _aggregationLevelSelection;
-        private int _minShockTimeDifference;
-        private int _spreadShockThresholdMultiplier;
-        private int _tradeSizeShockThresholdMultiplier;
+        private int _maxShockMsTimeout;
 
         private string _validationMessage;
         private string _successMessage;
@@ -102,20 +100,10 @@ namespace VisualHFT.Studies.MarketResilience.ViewModel
         }
         public ObservableCollection<Tuple<string, AggregationLevel>> AggregationLevels { get; set; }
 
-        public int MinShockTimeDifference
+        public int MaxShockMsTimeout
         {
-            get => _minShockTimeDifference;
-            set => _minShockTimeDifference = value;
-        }
-        public int SpreadShockThresholdMultiplier
-        {
-            get => _spreadShockThresholdMultiplier;
-            set => _spreadShockThresholdMultiplier = value;
-        }
-        public int TradeSizeShockThresholdMultiplier
-        {
-            get => _tradeSizeShockThresholdMultiplier;
-            set => _tradeSizeShockThresholdMultiplier = value;
+            get => _maxShockMsTimeout;
+            set => _maxShockMsTimeout = value;
         }
         public string ValidationMessage
         {
@@ -129,6 +117,7 @@ namespace VisualHFT.Studies.MarketResilience.ViewModel
             set { _successMessage = value; OnPropertyChanged(nameof(SuccessMessage)); }
         }
         public string Error => null;
+
 
         public string this[string columnName]
         {
@@ -144,17 +133,9 @@ namespace VisualHFT.Studies.MarketResilience.ViewModel
                         if (string.IsNullOrWhiteSpace(SelectedSymbol))
                             return "Select the Symbol.";
                         break;
-                    case nameof(MinShockTimeDifference):
-                        if (MinShockTimeDifference <= 0)
-                            return "Min Shock Time Difference must be greater than 0.";
-                        break;
-                    case nameof(SpreadShockThresholdMultiplier):
-                        if (SpreadShockThresholdMultiplier <= 0)
-                            return "Spread Shock Threshold Multiplier must be greater than 0.";
-                        break;
-                    case nameof(TradeSizeShockThresholdMultiplier):
-                        if (TradeSizeShockThresholdMultiplier <= 0)
-                            return "Trade Size Shock Threshold Multiplier must be greater than 0.";
+                    case nameof(MaxShockMsTimeout):
+                        if (MaxShockMsTimeout <= 0)
+                            return "Max Shock (MS) Timeout must be greater than 0.";
                         break;
                     default:
                         return null;

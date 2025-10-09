@@ -27,17 +27,9 @@
                   FontSize="18"/>
 
 
-            <Label Content="Min Shock Time Difference (ms)" 
-                   ToolTip="Minimum time difference in milliseconds to consider two shock events (trade and spread widening) as related."/>
-            <TextBox Text="{Binding MinShockTimeDifference}" FontSize="18" Margin="0,5" />
-
-            <Label Content="Spread Shock Threshold Multiplier" 
-                   ToolTip="Multiplier to identify significant spread widening events as shocks."/>
-            <TextBox Text="{Binding SpreadShockThresholdMultiplier}" FontSize="18" Margin="0,5" />
-
-            <Label Content="Trade Size Shock Threshold Multiplier" 
-                   ToolTip="Multiplier to identify significant trade size events as shocks."/>
-            <TextBox Text="{Binding TradeSizeShockThresholdMultiplier}" FontSize="18" Margin="0,5" />
+            <Label Content="Max Shock Timeout (millisecons)" 
+                ToolTip="Maximum time window (ms) to measure market resilience after detecting a shock event (large trade, spread spike, or liquidity drop). If recovery doesn't complete within this timeout, the event is abandoned and no score is calculated."/>
+            <TextBox Text="{Binding MaxShockMsTimeout}" FontSize="18" Margin="0,5" />
 
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10">

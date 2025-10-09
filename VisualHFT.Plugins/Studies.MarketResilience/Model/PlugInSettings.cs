@@ -9,8 +9,6 @@ namespace VisualHFT.Studies.MarketResilience.Model
         public string Symbol { get; set; }
         public Provider Provider { get; set; }
         public AggregationLevel AggregationLevel { get; set; }
-        public int? MinShockTimeDifference { get; set; }
-        public int? SpreadShockThresholdMultiplier { get; set; }
-        public int? TradeSizeShockThresholdMultiplier { get; set; }
+        public int? MaxShockMsTimeout { get; set; }
     }
 }

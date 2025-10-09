@@ -40,12 +40,30 @@ namespace VisualHFT.Studies
         public override ISetting Settings { get => _settings; set => _settings = (PlugInSettings)value; }
         public override Action CloseSettingWindow { get; set; }
         public override string TileTitle { get; set; } = "MRB";
-        public override string TileToolTip { get; set; } = "<b>Market Resilience Bias</b> (MRB) is a real-time metric that quantifies the directional tendency of the market following a large trade. <br/> It provides insights into the prevailing sentiment among market participants, enhancing traders' understanding of market dynamics.<br/><br/>" +
-                "The <b>MRB</b> score is derived from the behavior of the Limit Order Book (LOB) post-trade:<br/>" +
-                "1. <b>Volume Addition Rate:</b> Analyzes the rate at which volume is added to the bid and ask sides of the LOB after a trade.<br/>" +
-                "2. <b>Directional Inclination:</b> Determines whether the market is leaning towards a bullish or bearish stance based on the volume addition rate.<br/>" +
-                "<br/>" +
-                "The <b>MRB</b> score indicates the market's bias, with a value of 1 representing a bullish sentiment (sentiment up) and -1 representing a bearish sentiment (sentiment down). A zero (0) value represent unknown bias.";
+        public override string TileToolTip { get; set; } =
+            "<b>Market Resilience Bias</b> (MRB) quantifies directional market sentiment following significant market stress events.<br/><br/>" +
+
+            "<b>How It Works:</b><br/>" +
+            "1. <b>Detection:</b> Identifies large trades (≥2σ above average) that cause order book depth depletion<br/>" +
+            "2. <b>Recovery Tracking:</b> Monitors which side of the book (bid/ask) recovers first using immediacy-weighted depth<br/>" +
+            "3. <b>Bias Classification:</b> Determines market sentiment based on recovery patterns<br/><br/>" +
+
+            "<b>Signal Interpretation:</b><br/>" +
+            "• <b>↑ Bullish (+1):</b> Ask side depleted → Bid side recovered (buyers in control)<br/>" +
+            "• <b>↓ Bearish (-1):</b> Bid side depleted → Ask side recovered (sellers in control)<br/>" +
+            "• <b>— Neutral (0):</b> Same-side recovery or insufficient Market Resilience (MR > 0.30)<br/><br/>" +
+
+            "<b>Activation Requirements:</b><br/>" +
+            "• Large trade detected (≥2σ threshold)<br/>" +
+            "• Depth depletion confirmed (≥3σ drop in immediacy-weighted depth)<br/>" +
+            "• Market Resilience (MR) score ≤ 0.30 (poor resilience)<br/>" +
+            "• Recovery completes within timeout window (default: 5 seconds)<br/><br/>" +
+
+            "<b>Hysteresis Behavior:</b><br/>" +
+            "MRB activates when MR ≤ 0.30 and deactivates when MR ≥ 0.50, preventing signal oscillation during moderate resilience.<br/><br/>" +
+
+            "<b>Practical Use:</b><br/>" +
+            "Use MRB to identify which side (buyers/sellers) gains control after market shocks. Persistent directional bias may indicate institutional order flow or liquidity imbalances.";
 
         public MarketResilienceBiasStudy()
         {
@@ -170,7 +188,7 @@ namespace VisualHFT.Studies
                 Value = _valueBias == eMarketBias.Bullish ? 1 : (_valueBias == eMarketBias.Bearish ? -1 : 0),
                 ValueFormatted = _valueFormatted,
                 ValueColor = _valueColor,
-                MarketMidPrice = (decimal)_mrBiasCalc.MidMarketPrice,
+                MarketMidPrice = _mrBiasCalc.MidMarketPrice,
                 Timestamp = HelperTimeProvider.Now
             };
 
@@ -203,9 +221,15 @@ namespace VisualHFT.Studies
             {
                 InitializeDefaultSettings();
             }
-            if (_settings.Provider == null) //To prevent back compability with older setting formats
+
+            //To prevent back compability with older setting formats
+            if (_settings.Provider == null)
             {
                 _settings.Provider = new Provider();
+            }
+            if (_settings.MaxShockMsTimeout == null)//To prevent back compability with older setting formats
+            {
+                InitializeDefaultSettings();
             }
         }
         protected override void SaveSettings()
@@ -218,7 +242,8 @@ namespace VisualHFT.Studies
             {
                 Symbol = "",
                 Provider = new Provider(),
-                AggregationLevel = AggregationLevel.Ms500
+                AggregationLevel = AggregationLevel.S1,
+                MaxShockMsTimeout = 5000
             };
             SaveToUserSettings(_settings);
         }
@@ -229,12 +254,13 @@ namespace VisualHFT.Studies
             viewModel.SelectedSymbol = _settings.Symbol;
             viewModel.SelectedProviderID = _settings.Provider.ProviderID;
             viewModel.AggregationLevelSelection = _settings.AggregationLevel;
-
+            viewModel.MaxShockMsTimeout = _settings.MaxShockMsTimeout ?? 0;
             viewModel.UpdateSettingsFromUI = () =>
             {
                 _settings.Symbol = viewModel.SelectedSymbol;
                 _settings.Provider = viewModel.SelectedProvider;
                 _settings.AggregationLevel = viewModel.AggregationLevelSelection;
+                _settings.MaxShockMsTimeout = viewModel.MaxShockMsTimeout;
 
                 SaveSettings();
 

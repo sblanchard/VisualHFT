@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Linq;
-using VisualHFT.Model;
+using VisualHFT.Enums;
 using VisualHFT.Studies.MarketResilience.Model;
 
 namespace Studies.MarketResilience.Model
@@ -8,47 +7,40 @@ namespace Studies.MarketResilience.Model
 
     public class MarketResilienceWithBias : MarketResilienceCalculator
     {
+        private const double MRB_ON = 0.30;  // only speak when resilience clearly poor
+        private const double MRB_OFF = 0.50;  // stop speaking once resilience improves
+        private bool _mrbArmed = false;       // hysteresis latch
+
         public MarketResilienceWithBias(PlugInSettings settings): base(settings)
         {
 
         }
         protected override eMarketBias? CalculateMRBias()
         {
-            if (!InitialHitHappenedAtBid.HasValue || !_bidAtHit.HasValue || !_askAtHit.HasValue)
-                return null;
+            // Need depth stamps
+            if (ShockDepth == null || RecoveredDepth == null) return null;
+            if (ShockDepth.Value == eLOBSIDE.NONE || RecoveredDepth.Value == eLOBSIDE.NONE) return null;
 
-            if (!_lastBidPrice.HasValue || !_lastAskPrice.HasValue)
-                return null;
+            // Let MR drive MRB. If MR is unknown (timeout), do not emit bias.
+            double mr = (double)CurrentMRScore;
 
-            decimal lastBidVsHitDiff = Math.Abs(_lastBidPrice.Value - _bidAtHit.Value);
-            decimal lastAskVsHitDiff = Math.Abs(_lastAskPrice.Value - _askAtHit.Value);
+            // Hysteresis: arm when MR ≤ MRB_ON; disarm when MR ≥ MRB_OFF
+            if (!_mrbArmed && mr <= MRB_ON) _mrbArmed = true;
+            if (_mrbArmed && mr >= MRB_OFF) { _mrbArmed = false; return eMarketBias.Neutral; }
 
-            bool hasBidRecovered = lastBidVsHitDiff < lastAskVsHitDiff; //bid has partially or fully recovered
-            bool hasAskRecovered = lastAskVsHitDiff < lastBidVsHitDiff; //ask has partially or fully recovered
+            if (!_mrbArmed) return null; // don’t speak when resilience is middling/good
 
+            // Directional mapping: only control transfer yields bias
+            var shock = ShockDepth.Value;
+            var rec = RecoveredDepth.Value;
 
-            if (InitialHitHappenedAtBid.Value == false
-                && !hasAskRecovered
-                && _lastBidPrice > _bidAtHit.Value)
-                return eMarketBias.Bullish; // Ask hit, didn't recover, bid is higher than hit
-            else if (InitialHitHappenedAtBid.Value == true
-                     && hasBidRecovered
-                     && _lastBidPrice > _bidAtHit)
-                return eMarketBias.Bullish; // Bid hit, recovered, bid is higher than hit
-            else if (InitialHitHappenedAtBid.Value == true
-                && !hasBidRecovered
-                && _lastAskPrice < _askAtHit.Value)
-                return eMarketBias.Bearish; // Bid hit, didn't recover, ask is lower than hit
-            else if (InitialHitHappenedAtBid.Value == false
-                     && hasAskRecovered
-                     && _lastAskPrice < _askAtHit)
-                return eMarketBias.Bearish; // Ask hit, recovered, ask is lower than hit
-            else if (InitialHitHappenedAtBid.Value == false && hasAskRecovered)
-                return eMarketBias.Neutral;
-            else if (InitialHitHappenedAtBid.Value == true && hasBidRecovered)
-                return eMarketBias.Neutral;
-            else
-                return null;
+            if (shock == eLOBSIDE.BOTH && rec == eLOBSIDE.BID) return eMarketBias.Bullish;
+            if (shock == eLOBSIDE.BOTH && rec == eLOBSIDE.ASK) return eMarketBias.Bearish;
+            if ((shock & eLOBSIDE.BID) != 0 && (rec & eLOBSIDE.ASK) != 0) return eMarketBias.Bearish; // BID→ASK
+            if ((shock & eLOBSIDE.ASK) != 0 && (rec & eLOBSIDE.BID) != 0) return eMarketBias.Bullish; // ASK→BID
+
+            // Same-side recovery or BOTH→BOTH ⇒ resilience, thus neutral
+            return eMarketBias.Neutral;
         }
     }
 }

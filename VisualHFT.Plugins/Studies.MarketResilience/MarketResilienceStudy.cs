@@ -212,30 +212,14 @@ namespace VisualHFT.Studies
 
 
             //To prevent back compability with older setting formats
-            bool needToSaveToMaintainCompatibility = false;
             if (_settings.Provider == null)
             {
                 _settings.Provider = new Provider();
-                needToSaveToMaintainCompatibility = true;
             }
-            if (!_settings.MinShockTimeDifference.HasValue)
+            if (_settings.MaxShockMsTimeout == null)//To prevent back compability with older setting formats
             {
-                _settings.MinShockTimeDifference = 500;
-                needToSaveToMaintainCompatibility = true;
+                InitializeDefaultSettings();
             }
-            if (!_settings.SpreadShockThresholdMultiplier.HasValue)
-            {
-                _settings.SpreadShockThresholdMultiplier = 3;
-                needToSaveToMaintainCompatibility = true;
-            }
-            if (!_settings.TradeSizeShockThresholdMultiplier.HasValue)
-            {
-                _settings.TradeSizeShockThresholdMultiplier = 3;
-                needToSaveToMaintainCompatibility = true;
-            }
-
-            if (needToSaveToMaintainCompatibility)
-                SaveToUserSettings(_settings);
         }
         protected override void SaveSettings()
         {
@@ -248,9 +232,7 @@ namespace VisualHFT.Studies
                 Symbol = "",
                 Provider = new Provider(),
                 AggregationLevel = AggregationLevel.Ms500,
-                MinShockTimeDifference = 500,
-                TradeSizeShockThresholdMultiplier = 3,
-                SpreadShockThresholdMultiplier = 3
+                MaxShockMsTimeout = 800,
             };
             SaveToUserSettings(_settings);
         }
@@ -261,17 +243,13 @@ namespace VisualHFT.Studies
             viewModel.SelectedSymbol = _settings.Symbol;
             viewModel.SelectedProviderID = _settings.Provider.ProviderID;
             viewModel.AggregationLevelSelection = _settings.AggregationLevel;
-            viewModel.MinShockTimeDifference = _settings.MinShockTimeDifference ?? 0;
-            viewModel.SpreadShockThresholdMultiplier = _settings.SpreadShockThresholdMultiplier ?? 0;
-            viewModel.TradeSizeShockThresholdMultiplier = _settings.TradeSizeShockThresholdMultiplier ?? 0;
+            viewModel.MaxShockMsTimeout = _settings.MaxShockMsTimeout ?? 0;
             viewModel.UpdateSettingsFromUI = () =>
             {
                 _settings.Symbol = viewModel.SelectedSymbol;
                 _settings.Provider = viewModel.SelectedProvider;
                 _settings.AggregationLevel = viewModel.AggregationLevelSelection;
-                _settings.MinShockTimeDifference = viewModel.MinShockTimeDifference;
-                _settings.SpreadShockThresholdMultiplier = viewModel.SpreadShockThresholdMultiplier;
-                _settings.TradeSizeShockThresholdMultiplier = viewModel.TradeSizeShockThresholdMultiplier;
+                _settings.MaxShockMsTimeout = viewModel.MaxShockMsTimeout;
                 SaveSettings();
 
                 //run this because it will allow to restart with the new values
