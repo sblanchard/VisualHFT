@@ -23,11 +23,13 @@ namespace VisualHFT.Enums
         None
     };
 
-    public enum eLOBSIDE
+    [Flags]
+    public enum eLOBSIDE : byte
     {
-        BID,
-        ASK,
-        NONE
+        NONE = 0,
+        BID = 1 << 0,   // 1
+        ASK = 1 << 1,   // 2
+        BOTH = BID | ASK // 3
     }
 
     public enum eORDERSTATUS
