@@ -17,7 +17,6 @@ using Legend = OxyPlot.Legends.Legend;
 using LinearAxis = OxyPlot.Axes.LinearAxis;
 using LineSeries = OxyPlot.Series.LineSeries;
 using VisualHFT.Commons.Helpers;
-using VisualHFT.Commons.Pools; // Add for CustomObjectPool
 
 
 namespace VisualHFT.ViewModels
@@ -44,11 +43,6 @@ namespace VisualHFT.ViewModels
         private readonly object _LOCK = new object();
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        // PERFORMANCE FIX: Object pools to eliminate allocation pressure from high-frequency callbacks
-        // Pool sizes based on chart capacity (1500) with reasonable safety margins
-        private static readonly CustomObjectPool<BaseStudyModel> _baseStudyModelPool = new CustomObjectPool<BaseStudyModel>(15000); // 15K - high turnover from callbacks
-        private static readonly CustomObjectPool<PlotInfo> _plotInfoPool = new CustomObjectPool<PlotInfo>(30000); // 30K - retained in AggregatedCollections + processing overhead
-
         public vmChartStudy(IStudy study)
         {
             _QUEUE = new HelperCustomQueue<BaseStudyModel>($"<BaseStudyModel>_{study.TileTitle}", QUEUE_onReadAction, QUEUE_onErrorAction);
@@ -60,8 +54,18 @@ namespace VisualHFT.ViewModels
             OpenSettingsCommand = new RelayCommand<vmTile>(OpenSettings);
             CreatePlotModel();
             InitializeData();
-            uiUpdater = new UIUpdater(uiUpdaterAction);
             RaisePropertyChanged(nameof(StudyAxisTitle));
+            // Defer UIUpdater start to ensure OxyPlot has initialized
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                lock (_LOCK)
+                {
+                    if (!_disposed)
+                    {
+                        uiUpdater = new UIUpdater(uiUpdaterAction);
+                    }
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
         public vmChartStudy(IMultiStudy multiStudy)
         {
@@ -77,8 +81,18 @@ namespace VisualHFT.ViewModels
             OpenSettingsCommand = new RelayCommand<vmTile>(OpenSettings);
             CreatePlotModel();
             InitializeData();
-            uiUpdater = new UIUpdater(uiUpdaterAction);
             RaisePropertyChanged(nameof(StudyAxisTitle));
+            // Defer UIUpdater start to ensure OxyPlot has initialized
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                lock (_LOCK)
+                {
+                    if (!_disposed)
+                    {
+                        uiUpdater = new UIUpdater(uiUpdaterAction);
+                    }
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         ~vmChartStudy()
@@ -102,8 +116,7 @@ namespace VisualHFT.ViewModels
              * ***************************************************************************************************
              */
 
-            // Use object pool instead of new allocation
-            var newModel = _baseStudyModelPool.Get();
+            var newModel = new BaseStudyModel();
             newModel.copyFrom(e);
             newModel.Tag = ((IStudy)sender).TileTitle;
             _QUEUE.Add(newModel);
@@ -115,8 +128,11 @@ namespace VisualHFT.ViewModels
             {
                 lock (_LOCK)
                 {
+                    // Check if we're disposed or clearing
+                    if (_disposed || _seriesMarket == null || _dataByStudy == null || _seriesByStudy == null)
+                        return;
+
                     string keyTitle = item.Tag;
-                    bool isAddSuccess = false;
 
                     if (!_dataByStudy.ContainsKey(keyTitle))
                     {
@@ -126,43 +142,57 @@ namespace VisualHFT.ViewModels
                     if (item.MarketMidPrice > 0)
                         _lastMarketMidPrice = (double)item.MarketMidPrice;
 
-                    // Use object pool for PlotInfo
-                    var pointToAdd = _plotInfoPool.Get();
-                    pointToAdd.Date = item.Timestamp;
-                    pointToAdd.Value = (double)item.Value;
+                    // Reuse PlotInfo if possible (avoid allocation)
+                    var pointToAdd = new PlotInfo
+                    {
+                        Date = item.Timestamp,
+                        Value = (double)item.Value
+                    };
 
-                    isAddSuccess = _dataByStudy[keyTitle].Add(pointToAdd);
-                    //if is successfully added (according to its aggregation level), proceed with adding it into the series, and then all the other studies/series (to keep the same peace)
+                    bool isAddSuccess = _dataByStudy[keyTitle].Add(pointToAdd);
+
+                    // If successfully added, proceed with adding it into the series
                     if (isAddSuccess)
                     {
-                        foreach (var key in _dataByStudy.Keys)
+                        double oaDate = pointToAdd.Date.ToOADate();
+
+                        // Iterate directly over the dictionary to avoid allocation
+                        foreach (var kvp in _seriesByStudy)
                         {
-                            var series = _seriesByStudy[key];
-                            if (keyTitle == key) //if the incoming item is the same as current series, add it
+                            var key = kvp.Key;
+                            var series = kvp.Value;
+
+                            if (keyTitle == key)
                             {
-                                series.Points.Add(new DataPoint(pointToAdd.Date.ToOADate(), pointToAdd.Value));
+                                // If the incoming item is the same as current series, add it
+                                series.Points.Add(new DataPoint(oaDate, pointToAdd.Value));
                                 if (series.Points.Count > _MAX_ITEMS)
                                     series.Points.RemoveAt(0);
                             }
                             else
                             {
-                                //for all the other studies, add the existing last value again, so all series keep up
-                                var lastPoint = _dataByStudy[key].LastOrDefault();
-                                if (lastPoint != null)
+                                // For all the other studies, add the existing last value again
+                                var dataCollection = _dataByStudy[key];
+                                var colCount = dataCollection.Count();
+                                if (colCount > 0)
                                 {
-                                    _dataByStudy[key].Add(lastPoint);
-                                    series.Points.Add(new DataPoint(pointToAdd.Date.ToOADate(), lastPoint.Value));
+                                    // Use indexer instead of LastOrDefault() for O(1) access
+                                    var lastPoint = dataCollection[colCount - 1];
+                                    dataCollection.Add(lastPoint);
+                                    series.Points.Add(new DataPoint(oaDate, lastPoint.Value));
                                     if (series.Points.Count > _MAX_ITEMS)
                                         series.Points.RemoveAt(0);
                                 }
                             }
                         }
 
-                        //ADD MARKET PRICE if available
-                        _seriesMarket.Points.Add(new DataPoint(item.Timestamp.ToOADate(), _lastMarketMidPrice));
-                        if (_seriesMarket.Points.Count > _MAX_ITEMS)
-                            _seriesMarket.Points.RemoveAt(0);
-                        //END ADD MARKET PRICE
+                        // ADD MARKET PRICE if available
+                        if (_seriesMarket != null)
+                        {
+                            _seriesMarket.Points.Add(new DataPoint(oaDate, _lastMarketMidPrice));
+                            if (_seriesMarket.Points.Count > _MAX_ITEMS)
+                                _seriesMarket.Points.RemoveAt(0);
+                        }
 
                         _IS_DATA_AVAILABLE = true;
                     }
@@ -173,12 +203,7 @@ namespace VisualHFT.ViewModels
                 var _error = $"{this.StudyTitle} Unhandled error in the Chart queue: {ex.Message}";
                 log.Error(_error, ex);
                 HelperNotificationManager.Instance.AddNotification(this.StudyTitle, _error, HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.CORE);
-                Clear();
-            }
-            finally
-            {
-                // Return the BaseStudyModel to pool after processing
-                _baseStudyModelPool.Return(item);
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() => Clear()), System.Windows.Threading.DispatcherPriority.Normal);
             }
         }
         private void QUEUE_onErrorAction(Exception ex)
@@ -202,8 +227,11 @@ namespace VisualHFT.ViewModels
                 if (MyPlotModel == null || _dataByStudy == null)
                     return;
 
-                RaisePropertyChanged(nameof(MyPlotModel));
-                MyPlotModel?.InvalidatePlot(true);
+                lock (MyPlotModel.SyncRoot)
+                {
+                    RaisePropertyChanged(nameof(MyPlotModel));
+                    MyPlotModel?.InvalidatePlot(true);
+                }
             }
 
             _IS_DATA_AVAILABLE = false;
@@ -373,11 +401,12 @@ namespace VisualHFT.ViewModels
                 // Now safe to dispose UIUpdater
                 uiUpdater?.Dispose();
 
-                if (MyPlotModel.Series != null)
+                // CRITICAL: Lock the PlotModel to prevent rendering during cleanup
+                if (MyPlotModel != null)
                 {
-                    foreach (var s in MyPlotModel.Series)
+                    lock (MyPlotModel.SyncRoot)
                     {
-                        (s as OxyPlot.Series.LineSeries)?.Points.Clear();
+                        MyPlotModel.Series.Clear();
                     }
                 }
 
@@ -387,18 +416,19 @@ namespace VisualHFT.ViewModels
                     {
                         data.Value.Clear();
                         data.Value.Dispose();
-                        _dataByStudy[data.Key] = new AggregatedCollection<PlotInfo>(_settings.AggregationLevel, _MAX_ITEMS,
-                            x => x.Date, Aggregation);
                     }
+                    _dataByStudy.Clear();
                 }
                 if (_seriesByStudy != null)
                 {
-                    foreach (var s in _seriesByStudy)
-                    {
-                        s.Value.Points.Clear();
-                    }
+                    _seriesByStudy.Clear();
                 }
-                _seriesMarket?.Points.Clear();
+                _seriesMarket = null;
+
+                // Re-create series and data collections
+                _dataByStudy = new Dictionary<string, AggregatedCollection<PlotInfo>>();
+                _seriesByStudy = new Dictionary<string, LineSeries>();
+                CreateMarketSeries();
             }
 
             uiUpdater = new UIUpdater(uiUpdaterAction, _settings.AggregationLevel.ToTimeSpan().TotalMilliseconds);
@@ -488,37 +518,49 @@ namespace VisualHFT.ViewModels
                     // Dispose queue and data collections
                     _QUEUE?.Dispose();
 
-                    if (MyPlotModel?.Series != null)
+                    lock (_LOCK)
                     {
-                        foreach (var s in MyPlotModel.Series)
+                        if (MyPlotModel != null)
                         {
-                            (s as OxyPlot.Series.LineSeries)?.Points.Clear();
+                            lock (MyPlotModel.SyncRoot)
+                            {
+                                if (MyPlotModel?.Series != null)
+                                {
+                                    foreach (var s in MyPlotModel.Series)
+                                    {
+                                        (s as OxyPlot.Series.LineSeries)?.Points.Clear();
+                                    }
+                                    MyPlotModel.Series.Clear();
+                                }
+                            }
                         }
-                    }
 
-                    if (_dataByStudy != null)
-                    {
-                        foreach (var data in _dataByStudy)
+                        if (_dataByStudy != null)
                         {
-                            data.Value.Clear();
-                            data.Value.Dispose();
+                            foreach (var data in _dataByStudy)
+                            {
+                                data.Value.Clear();
+                                data.Value.Dispose();
+                            }
+                            _dataByStudy.Clear();
                         }
-                        _dataByStudy.Clear();
-                    }
-                    if (_seriesByStudy != null)
-                    {
-                        foreach (var s in _seriesByStudy)
+                        if (_seriesByStudy != null)
                         {
-                            s.Value.Points.Clear();
+                            foreach (var s in _seriesByStudy)
+                            {
+                                s.Value.Points.Clear();
+                            }
+                            _seriesByStudy.Clear();
                         }
-                        _seriesByStudy.Clear();
+                        _seriesMarket?.Points.Clear();
+                        _seriesMarket = null;
+                        MyPlotModel = null;
                     }
-                    _seriesMarket?.Points.Clear();
-                    MyPlotModel = null;
                 }
                 _disposed = true;
             }
         }
+
         public void Dispose()
         {
             Dispose(true);
