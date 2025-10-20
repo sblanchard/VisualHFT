@@ -9,6 +9,7 @@ using System.Linq;
 using System.Reflection;
 using System.Windows.Threading;
 using VisualHFT.Commons.Helpers;
+using VisualHFT.Commons.Pools;
 using VisualHFT.Helpers;
 using VisualHFT.Model;
 using DateTimeAxis = OxyPlot.Axes.DateTimeAxis;
@@ -38,6 +39,10 @@ namespace VisualHFT.ViewModel
 
         private readonly object _LOCK = new object();
         private UIUpdater uiUpdater;
+
+        // ✅ Object pool for PlotInfo to eliminate allocations
+        private static readonly CustomObjectPool<PlotInfo> _plotInfoPool =
+            new CustomObjectPool<PlotInfo>(maxPoolSize: _MAX_ITEMS * 10);
         public vmMultiVenuePrices()
         {
             _QUEUE = new HelperCustomQueue<Tuple<int, string, double>>($"<Tuple<int, string, double>>_vmMultiVenuePrices", QUEUE_onReadAction, QUEUE_onErrorAction);
@@ -56,11 +61,21 @@ namespace VisualHFT.ViewModel
                 AggregationLevels.Add(new Tuple<string, AggregationLevel>(HelperCommon.GetEnumDescription(level), level));
             }
             AggregationLevelSelection = AggregationLevel.Ms100;
-            uiUpdater = new UIUpdater(uiUpdaterAction, _aggregationLevelSelection.ToTimeSpan().TotalMilliseconds);
 
             _dataByProvider = new Dictionary<int, AggregatedCollection<PlotInfo>>();
             _seriesByProvider = new Dictionary<int, LineSeries>();
 
+            // ✅ Defer UIUpdater initialization to ensure OxyPlot is fully loaded
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                lock (_LOCK)
+                {
+                    if (!_disposed)
+                    {
+                        uiUpdater = new UIUpdater(uiUpdaterAction, _aggregationLevelSelection.ToTimeSpan().TotalMilliseconds);
+                    }
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
         ~vmMultiVenuePrices()
         {
@@ -154,18 +169,24 @@ namespace VisualHFT.ViewModel
                     CreateNewSerie(_providerID, _providerName);
                 }
 
-                //ADD CURRENT PROVIDER'S PRICE
-                var pointToAdd = new PlotInfo() { Date = HelperTimeProvider.Now, Value = _midPrice };
+                // ✅ Get PlotInfo from pool instead of allocating
+                var pointToAdd = _plotInfoPool.Get();
+                pointToAdd.Date = HelperTimeProvider.Now;
+                pointToAdd.Value = _midPrice;
+
                 isAddSuccess = _dataByProvider[_providerID].Add(pointToAdd);
+
                 //if is successfully added (according to its aggregation level), proceed with adding it into the series, and then all the other studies/series (to keep the same peace)
                 if (isAddSuccess)
                 {
+                    double oaDate = pointToAdd.Date.ToOADate();
+
                     foreach (var key in _dataByProvider.Keys)
                     {
                         var series = _seriesByProvider[key];
                         if (_providerID == key) //if the incoming item is the same as current series, add it
                         {
-                            series.Points.Add(new DataPoint(pointToAdd.Date.ToOADate(), pointToAdd.Value));
+                            series.Points.Add(new DataPoint(oaDate, pointToAdd.Value));
                             if (series.Points.Count > _MAX_ITEMS)
                                 series.Points.RemoveAt(0);
                         }
@@ -175,14 +196,23 @@ namespace VisualHFT.ViewModel
                             var lastPoint = _dataByProvider[key].LastOrDefault();
                             if (lastPoint != null)
                             {
-                                _dataByProvider[key].Add(lastPoint);
-                                series.Points.Add(new DataPoint(pointToAdd.Date.ToOADate(), lastPoint.Value));
+                                // ✅ Create NEW instance from pool (not same reference)
+                                var duplicatePoint = _plotInfoPool.Get();
+                                duplicatePoint.Date = lastPoint.Date;
+                                duplicatePoint.Value = lastPoint.Value;
+
+                                _dataByProvider[key].Add(duplicatePoint);
+                                series.Points.Add(new DataPoint(oaDate, duplicatePoint.Value));
                                 if (series.Points.Count > _MAX_ITEMS)
                                     series.Points.RemoveAt(0);
                             }
                         }
                     }
-
+                }
+                else
+                {
+                    // ✅ Return to pool if not added (was aggregated)
+                    _plotInfoPool.Return(pointToAdd);
                 }
 
                 if (!_DATA_IS_AVAILABLE)
@@ -312,8 +342,19 @@ namespace VisualHFT.ViewModel
             };
             MyPlotModel.Series.Add(series);
 
-            _dataByProvider.Add(providerId, new AggregatedCollection<PlotInfo>(_aggregationLevelSelection, _MAX_ITEMS, x => x.Date, Aggregation));
+            var aggregatedCollection = new AggregatedCollection<PlotInfo>(_aggregationLevelSelection, _MAX_ITEMS, x => x.Date, Aggregation);
+
+            // ✅ Subscribe to OnRemoving to return items to pool
+            aggregatedCollection.OnRemoving += dataByProvider_OnRemoving;
+
+            _dataByProvider.Add(providerId, aggregatedCollection);
             _seriesByProvider.Add(providerId, series);
+        }
+
+        // ✅ Event handler to return PlotInfo to pool when removed
+        private void dataByProvider_OnRemoving(object? sender, PlotInfo e)
+        {
+            _plotInfoPool.Return(e);
         }
         private void Clear()
         {
@@ -322,6 +363,10 @@ namespace VisualHFT.ViewModel
             lock (_LOCK)
             {
                 uiUpdater?.Stop();
+
+                // Give UI thread a moment to finish any pending timer events
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
                 uiUpdater?.Dispose();
 
 
@@ -337,10 +382,19 @@ namespace VisualHFT.ViewModel
                 {
                     foreach (var data in _dataByProvider)
                     {
+                        // ✅ Return all items to pool BEFORE clearing
+                        foreach (var item in data.Value.ToList())
+                        {
+                            _plotInfoPool.Return(item);
+                        }
+
                         data.Value.Clear();
                         data.Value.Dispose();
                         _dataByProvider[data.Key] = new AggregatedCollection<PlotInfo>(_aggregationLevelSelection,
                             _MAX_ITEMS, x => x.Date, Aggregation);
+
+                        // ✅ Re-subscribe to OnRemoving for new collection
+                        _dataByProvider[data.Key].OnRemoving += dataByProvider_OnRemoving;
                     }
                 }
                 if (_seriesByProvider != null)
@@ -352,7 +406,18 @@ namespace VisualHFT.ViewModel
                 }
             }
 
-            uiUpdater = new UIUpdater(uiUpdaterAction, _aggregationLevelSelection.ToTimeSpan().TotalMilliseconds);
+            // ✅ Defer UIUpdater recreation
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                lock (_LOCK)
+                {
+                    if (!_disposed)
+                    {
+                        uiUpdater = new UIUpdater(uiUpdaterAction, _aggregationLevelSelection.ToTimeSpan().TotalMilliseconds);
+                    }
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+
             Title = _selectedSymbol + " - Multi Venue Prices";
             RaisePropertyChanged(nameof(Title));
         }
@@ -366,12 +431,63 @@ namespace VisualHFT.ViewModel
                     HelperOrderBook.Instance.Unsubscribe(LIMITORDERBOOK_OnDataReceived);
                     HelperSymbol.Instance.OnCollectionChanged -= ALLSYMBOLS_CollectionChanged;
 
-                    Clear();
-                    _QUEUE?.Dispose();
-                    uiUpdater.Stop();
-                    uiUpdater.Dispose();
-                    MyPlotModel = null;
+                    // Stop queue processing BEFORE UI cleanup
+                    _QUEUE?.Stop();
+                    System.Threading.Thread.Sleep(100); // Allow queue to finish current item
+                    _QUEUE?.Clear();
 
+                    // Stop UIUpdater on UI thread
+                    try
+                    {
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                        {
+                            uiUpdater?.Stop();
+                            uiUpdater?.Dispose();
+                        }, System.Windows.Threading.DispatcherPriority.Send);
+                    }
+                    catch { }
+
+                    // Dispose queue
+                    _QUEUE?.Dispose();
+
+                    lock (_LOCK)
+                    {
+                        if (MyPlotModel?.Series != null)
+                        {
+                            foreach (var s in MyPlotModel.Series)
+                            {
+                                (s as OxyPlot.Series.LineSeries)?.Points.Clear();
+                            }
+                            MyPlotModel.Series.Clear();
+                        }
+
+                        if (_dataByProvider != null)
+                        {
+                            foreach (var data in _dataByProvider)
+                            {
+                                // ✅ Safety: Return items before clearing (defensive programming)
+                                foreach (var item in data.Value.ToList())
+                                {
+                                    _plotInfoPool.Return(item);
+                                }
+
+                                data.Value.Clear();
+                                data.Value.Dispose();
+                            }
+                            _dataByProvider.Clear();
+                        }
+
+                        if (_seriesByProvider != null)
+                        {
+                            foreach (var s in _seriesByProvider)
+                            {
+                                s.Value.Points.Clear();
+                            }
+                            _seriesByProvider.Clear();
+                        }
+
+                        MyPlotModel = null;
+                    }
                 }
                 _disposed = true;
             }

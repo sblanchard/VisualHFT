@@ -1,22 +1,24 @@
-﻿using VisualHFT.Model;
-using Prism.Mvvm;
-using VisualHFT.Helpers;
-using System;
-using System.Collections.Generic;
-using VisualHFT.Commons.Studies;
-using VisualHFT.UserSettings;
-using VisualHFT.ViewModel;
-using System.Windows.Input;
-using System.Linq;
-using System.Reflection;
-using OxyPlot;
+﻿using OxyPlot;
 using OxyPlot.Axes;
 using OxyPlot.Legends;
+using Prism.Mvvm;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Threading;
+using System.Windows.Input;
+using VisualHFT.Commons.Helpers;
+using VisualHFT.Commons.Pools;
+using VisualHFT.Commons.Studies;
+using VisualHFT.Helpers;
+using VisualHFT.Model;
+using VisualHFT.UserSettings;
+using VisualHFT.ViewModel;
 using DateTimeAxis = OxyPlot.Axes.DateTimeAxis;
 using Legend = OxyPlot.Legends.Legend;
 using LinearAxis = OxyPlot.Axes.LinearAxis;
 using LineSeries = OxyPlot.Series.LineSeries;
-using VisualHFT.Commons.Helpers;
 
 
 namespace VisualHFT.ViewModels
@@ -38,10 +40,13 @@ namespace VisualHFT.ViewModels
         private LinearAxis yAxe = null;
         private double _lastMarketMidPrice = 0;
 
-        private int _MAX_ITEMS = 1500;
+        private const int _MAX_ITEMS = 1500;
         private UIUpdater uiUpdater;
         private readonly object _LOCK = new object();
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+
+        private static readonly CustomObjectPool<PlotInfo> _plotInfoPool =
+            new CustomObjectPool<PlotInfo>(maxPoolSize: _MAX_ITEMS * 10);
 
         public vmChartStudy(IStudy study)
         {
@@ -55,6 +60,7 @@ namespace VisualHFT.ViewModels
             CreatePlotModel();
             InitializeData();
             RaisePropertyChanged(nameof(StudyAxisTitle));
+
             // Defer UIUpdater start to ensure OxyPlot has initialized
             System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
             {
@@ -82,6 +88,7 @@ namespace VisualHFT.ViewModels
             CreatePlotModel();
             InitializeData();
             RaisePropertyChanged(nameof(StudyAxisTitle));
+
             // Defer UIUpdater start to ensure OxyPlot has initialized
             System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
             {
@@ -93,6 +100,7 @@ namespace VisualHFT.ViewModels
                     }
                 }
             }), System.Windows.Threading.DispatcherPriority.Loaded);
+
         }
 
         ~vmChartStudy()
@@ -143,11 +151,9 @@ namespace VisualHFT.ViewModels
                         _lastMarketMidPrice = (double)item.MarketMidPrice;
 
                     // Reuse PlotInfo if possible (avoid allocation)
-                    var pointToAdd = new PlotInfo
-                    {
-                        Date = item.Timestamp,
-                        Value = (double)item.Value
-                    };
+                    var pointToAdd = _plotInfoPool.Get();
+                    pointToAdd.Date = item.Timestamp;
+                    pointToAdd.Value = (double)item.Value;
 
                     bool isAddSuccess = _dataByStudy[keyTitle].Add(pointToAdd);
 
@@ -178,8 +184,13 @@ namespace VisualHFT.ViewModels
                                 {
                                     // Use indexer instead of LastOrDefault() for O(1) access
                                     var lastPoint = dataCollection[colCount - 1];
-                                    dataCollection.Add(lastPoint);
-                                    series.Points.Add(new DataPoint(oaDate, lastPoint.Value));
+                                    // ✅ Create NEW instance from pool
+                                    var duplicatePoint = _plotInfoPool.Get();
+                                    duplicatePoint.Date = lastPoint.Date;
+                                    duplicatePoint.Value = lastPoint.Value;
+
+                                    dataCollection.Add(duplicatePoint);
+                                    series.Points.Add(new DataPoint(oaDate, duplicatePoint.Value));
                                     if (series.Points.Count > _MAX_ITEMS)
                                         series.Points.RemoveAt(0);
                                 }
@@ -195,6 +206,10 @@ namespace VisualHFT.ViewModels
                         }
 
                         _IS_DATA_AVAILABLE = true;
+                    }
+                    else
+                    {
+                        _plotInfoPool.Return(pointToAdd);
                     }
                 }
             }
@@ -212,6 +227,12 @@ namespace VisualHFT.ViewModels
             log.Error(_error, ex);
             HelperNotificationManager.Instance.AddNotification(this.StudyTitle, _error, HelprNorificationManagerTypes.ERROR, HelprNorificationManagerCategories.CORE);
         }
+
+        private void dataByStudy_OnRemoving(object? sender, PlotInfo e)
+        {
+            _plotInfoPool.Return(e);
+        }
+
         private void uiUpdaterAction()
         {
             if (!_IS_DATA_AVAILABLE)
@@ -363,8 +384,11 @@ namespace VisualHFT.ViewModels
             MyPlotModel.Series.Add(series);
 
             _dataByStudy.Add(title, new AggregatedCollection<PlotInfo>(_settings.AggregationLevel, _MAX_ITEMS, x => x.Date, Aggregation));
+            _dataByStudy[title].OnRemoving += dataByStudy_OnRemoving;
             _seriesByStudy.Add(title, series);
         }
+
+
         private void CreateMarketSeries()
         {
             //ADD The LINE SERIE
@@ -414,6 +438,11 @@ namespace VisualHFT.ViewModels
                 {
                     foreach (var data in _dataByStudy)
                     {
+                        // ✅ Manually return all items before clearing
+                        foreach (var item in data.Value.ToList())
+                        {
+                            _plotInfoPool.Return(item);
+                        }
                         data.Value.Clear();
                         data.Value.Dispose();
                     }
@@ -431,7 +460,21 @@ namespace VisualHFT.ViewModels
                 CreateMarketSeries();
             }
 
-            uiUpdater = new UIUpdater(uiUpdaterAction, _settings.AggregationLevel.ToTimeSpan().TotalMilliseconds);
+
+            // Defer UIUpdater start to ensure OxyPlot has initialized
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                lock (_LOCK)
+                {
+                    if (!_disposed)
+                    {
+                        uiUpdater = new UIUpdater(uiUpdaterAction, _settings.AggregationLevel.ToTimeSpan().TotalMilliseconds);
+                    }
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+
+
+
             RefreshSettingsUI();
             // Force cleanup of old objects after settings change
             GC.Collect(0, GCCollectionMode.Optimized);
@@ -500,22 +543,24 @@ namespace VisualHFT.ViewModels
                         }
                     }
 
-                    // Stop and dispose UIUpdater before disposing collections
-                    uiUpdater?.Stop();
+                    // Stop queue processing BEFORE UI cleanup
+                    _QUEUE?.Stop();
+                    Thread.Sleep(100); // Allow queue to finish current item
+                    _QUEUE?.Clear();
 
-                    // Ensure UI thread processes any pending timer events
+
+                    // Stop UIUpdater on UI thread
                     try
                     {
-                        System.Windows.Application.Current?.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                        {
+                            uiUpdater?.Stop();
+                            uiUpdater?.Dispose();
+                        }, System.Windows.Threading.DispatcherPriority.Send);
                     }
-                    catch
-                    {
-                        // Ignore dispatcher errors during shutdown
-                    }
+                    catch { }
 
-                    uiUpdater?.Dispose();
-
-                    // Dispose queue and data collections
+                    // Dispose queue
                     _QUEUE?.Dispose();
 
                     lock (_LOCK)
@@ -539,6 +584,11 @@ namespace VisualHFT.ViewModels
                         {
                             foreach (var data in _dataByStudy)
                             {
+                                // ✅ Safety: Return items before clearing
+                                foreach (var item in data.Value.ToList())
+                                {
+                                    _plotInfoPool.Return(item);
+                                }
                                 data.Value.Clear();
                                 data.Value.Dispose();
                             }
